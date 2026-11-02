@@ -1,6 +1,7 @@
 import { useCallback, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Ban } from "lucide-react";
+import { Ban, X } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { PaneBar } from "@/components/xpot/MasterDetail";
 import type { TagDetail } from "@shared/tagsApi";
 import { useXpotModules } from "@/components/ModuleSwitch";
@@ -20,6 +21,7 @@ import { useProductionAccess } from "./production-shared";
 import { NfcProvisioningCard } from "./pieces-NfcProvisioningCard";
 import { useT } from "@/i18n";
 import { shellMessages } from "@/i18n/messages/shell";
+import { commonMessages } from "@/i18n/messages/common";
 import { manageTagsPiecesMessages } from "@/i18n/messages/manageTagsPieces";
 import { adminTagsFlowMessages } from "@/i18n/messages/adminTagsFlow";
 import { isTagPieceQueue } from "@shared/tagQueues";
@@ -54,6 +56,7 @@ function Back({ go }: { go: Go }) {
 
 export function PieceDetail({ id, go, onClose }: { id: string; go: Go; /** Shown in Inventory's side pane. */ onClose?: () => void }) {
   const t = useT(manageTagsPiecesMessages);
+  const tc = useT(commonMessages);
   const { toast } = useToast();
   const access = useViewerAccess();
   const modules = useXpotModules();
@@ -74,15 +77,25 @@ export function PieceDetail({ id, go, onClose }: { id: string; go: Go; /** Shown
     [access.adminMode, access.isSuperAdmin, prints, modules, access.me?.rep.id],
   );
 
-  const top = onClose ? <PaneBar fullHref={`/admin/tags/pieces/${encodeURIComponent(id)}`} onClose={onClose} testId="admin-piece-pane" /> : <Back go={go} />;
+  // A piece that cannot be opened has no full page to open: only the way out.
+  const failed = !!error || !tag;
+  const top = onClose
+    ? failed
+      ? <div className="flex justify-end"><Button type="button" variant="ghost" size="icon" onClick={onClose} aria-label={tc("close")} title={tc("close")} className="-mr-2 text-white/45" data-testid="admin-piece-pane-close"><X aria-hidden="true" /></Button></div>
+      : <PaneBar fullHref={`/admin/tags/pieces/${encodeURIComponent(id)}`} onClose={onClose} testId="admin-piece-pane" />
+    : <Back go={go} />;
   if (isLoading) return onClose ? <div className="space-y-3">{top}<Loading rows={5} /></div> : <Loading rows={5} />;
   if (error || !tag) {
     const notFound = error instanceof AdminHttpError && error.status === 404;
+    // Another organization's piece: one sentence for a manager, who has no kit to look in.
+    const notYours = error instanceof AdminHttpError && error.status === 403;
     return (
       <div className="space-y-3">
         {top}
         {notFound ? (
           <EmptyState tone="tags" icon={Ban} title={t("notFound")} />
+        ) : notYours ? (
+          <EmptyState tone="tags" icon={Ban} title={t("notYoursManager")} />
         ) : (
           <LoadError what={t("whatThisPiece")} error={error} onRetry={() => void refetch()} />
         )}

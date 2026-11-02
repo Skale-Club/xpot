@@ -1,14 +1,14 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Link } from "wouter";
-import { ArrowLeft, ArrowRight, Check, ChevronDown, ClipboardPaste, Copy, Link2, Nfc, X, type LucideIcon } from "lucide-react";
-import { chipNeedsWriting, formatPhoneMask, isSocialNetwork, looksLikeLink, normalizeUrlInput, SOCIAL_NETWORKS, socialHandleOf, socialNetworkOf, socialUrl, type SocialNetwork } from "@shared/tagApp";
-import { stockBlock } from "@shared/tags";
+import { ArrowLeft, ArrowRight, Check, ChevronDown, ClipboardPaste, Copy, Link2, X, type LucideIcon } from "lucide-react";
+import { formatPhoneMask, isSocialNetwork, looksLikeLink, normalizeUrlInput, SOCIAL_NETWORKS, socialHandleOf, socialNetworkOf, socialUrl, type SocialNetwork } from "@shared/tagApp";
+import { PieceChipPill, PieceStatusPill } from "@/components/piece/PieceStatusPill";
 import { Button } from "@/components/ui/button";
 import { Loader2 } from "@/components/ui/loader";
 import { FIELD_CONTROL } from "@/components/xpot/Field";
 import { InlineAlert } from "@/components/xpot/InlineAlert";
 import { TagFaceIcon } from "@/components/xpot/TagFaceIcon";
-import { CHIP_STATUS_TONE, PIECE_STATUS_TONE, Pill, SOLD_TONE, STOCK_STATUS_TONE } from "@/components/xpot/StatusPill";
+import { Pill } from "@/components/xpot/StatusPill";
 import { ACCENT_SELECTED, EYEBROW as KIT_EYEBROW, GLASS_CLASS, MODULE_ACCENT, OVERLAY_CLASS, SURFACE_MODAL_CLASS } from "@/components/xpot/surface";
 import { useT } from "@/i18n";
 import { commonMessages } from "@/i18n/messages/common";
@@ -167,41 +167,16 @@ export { Pill, type PillTone } from "@/components/xpot/StatusPill";
 export { PIECE_STATUS_TONE as STATUS_TONE, CHIP_STATUS_TONE as CHIP_TONE, STOCK_STATUS_TONE as STOCK_TONE, SOLD_TONE } from "@/components/xpot/StatusPill";
 
 /**
- * A piece's state wherever it is listed: where it is in its life, a stock problem
- * that keeps it from being set up or sold (not received, damaged, lost), and sold.
+ * A piece's one status wherever it is listed: the same words and colour as the stock list, the pop-up and the page
+ * (components/piece/pieceStatus.ts).
  */
-export function PieceStatusPills({ tag }: { tag: { status: string; stockStatus: string; saleId: number | null } }) {
-  const t = useT(tagsMessages);
-  const stock = stockBlock(tag.stockStatus);
-  return (
-    <>
-      <Pill tone={PIECE_STATUS_TONE[tag.status] ?? "slate"}>{t(`status_${tag.status}` as "status_active")}</Pill>
-      {stock && <Pill tone={STOCK_STATUS_TONE[stock]}>{t(`stock_${stock}`)}</Pill>}
-      {tag.saleId && <Pill tone={SOLD_TONE}>{t("soldBadge")}</Pill>}
-    </>
-  );
+export function PieceStatusPills({ tag }: { tag: { status: string; stockStatus: string; nfcStatus: string; saleId: number | null; printJobStatus?: string | null } }) {
+  return <PieceStatusPill piece={tag} />;
 }
 
-/** The NFC chip of a listed piece: a red pill when it still needs writing, else a small coloured mark. */
+/** The NFC chip of a listed piece, only when it is something to do (not written, write failed, not tested); nothing otherwise. */
 export function ChipMark({ tag }: { tag: { status: string; nfcStatus: string } }) {
-  const t = useT(tagsMessages);
-  const label = t(`chip_${tag.nfcStatus}` as "chip_verified");
-  if (chipNeedsWriting(tag)) {
-    return (
-      <Pill tone="red" className="gap-1">
-        <Nfc className="h-3 w-3" aria-hidden="true" />
-        {label}
-      </Pill>
-    );
-  }
-  const tone = CHIP_STATUS_TONE[tag.nfcStatus] ?? "slate";
-  const color = tone === "green" ? "text-emerald-300/80" : tone === "amber" ? "text-amber-300/80" : tone === "red" ? "text-red-300/80" : "text-white/30";
-  return (
-    <span className={`inline-flex h-6 w-6 items-center justify-center ${color}`} title={label} data-chip={tag.nfcStatus}>
-      <Nfc className="h-3.5 w-3.5" aria-hidden="true" />
-      <span className="sr-only">{label}</span>
-    </span>
-  );
+  return <PieceChipPill piece={tag} quiet="none" />;
 }
 
 /**

@@ -123,6 +123,7 @@ export function FilterSearch({
   maxLength = 100,
   testId,
   shortcut = true,
+  onEnter,
 }: {
   value: string;
   onChange: (value: string) => void;
@@ -132,6 +133,8 @@ export function FilterSearch({
   testId?: string;
   /** Focus with the "/" desktop shortcut. */
   shortcut?: boolean;
+  /** Enter in the box, with what is typed (a code that opens its record, say). */
+  onEnter?: (value: string) => void;
 }) {
   const t = useT(filtersMessages);
   const [draft, setDraft] = useState(value);
@@ -167,6 +170,11 @@ export function FilterSearch({
         maxLength={maxLength}
         onChange={(event) => setDraft(event.target.value)}
         onKeyDown={(event) => {
+          if (event.key === "Enter" && onEnter && draft.trim()) {
+            event.preventDefault();
+            onEnter(draft.trim());
+            return;
+          }
           if (event.key === "Escape" && draft) {
             event.preventDefault();
             event.stopPropagation();

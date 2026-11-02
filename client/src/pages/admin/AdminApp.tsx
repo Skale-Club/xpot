@@ -63,14 +63,16 @@ export function AdminApp({ section }: { section: string }) {
   const current = groups.flatMap((group) => group.items).find((item) => item.match(location));
   const title = current?.label ?? panelName;
   const lookupAllowed = active === "tags" && !/^\/admin\/tags\/(?:production|batches)(?:\/|$)/.test(location);
+  // Stock has its own search, which takes a code or a scanned link: a second box for the same thing would only ask which to use.
+  const lookupBox = lookupAllowed && !/^\/admin\/tags\/pieces\/?$/.test(location);
   return <AppLayout title={title} size="wide" mobileMaxWidth="max-w-5xl" mobileColumnClassName="pb-10 pt-5"
-    topBarActions={lookupAllowed ? <CodeLookup onFound={(id) => navigate(`/admin/tags/pieces/${id}`)} /> : undefined}
+    topBarActions={lookupBox ? <CodeLookup onFound={(id) => navigate(`/admin/tags/pieces/${id}`)} /> : undefined}
     mobileHeader={<div className="mb-5 space-y-3">{active !== "home" && !(active === "tags" && !lookupAllowed) ? <PageHeader backHref="/admin" backLabel={tw("todayTitle")} title={title} /> : null}
       <Select aria-label={tw("chooseSection")} value={current?.href ?? ""} onChange={(event) => navigateGuarded(event.target.value, navigate)} data-testid="management-mobile-nav">
         {!current ? <option value="">{tw("chooseSection")}</option> : null}
         {groups.map((group, index) => <optgroup key={group.label || index} label={group.label || panelName}>{group.items.map((item) => <option key={item.href} value={item.href}>{item.label}</option>)}</optgroup>)}
       </Select>
-      {lookupAllowed ? <CodeLookup fill onFound={(id) => navigate(`/admin/tags/pieces/${id}`)} /> : null}
+      {lookupBox ? <CodeLookup fill onFound={(id) => navigate(`/admin/tags/pieces/${id}`)} /> : null}
     </div>}>
     {active === "home" && <AdminHome />}
     {active === "work" && <AdminWork />}

@@ -37,12 +37,15 @@ export function PerformanceSection() {
   const tm = useT(manageTagsPiecesMessages);
   const tp = useT(pieceScreenMessages);
   const [range, setRange] = useState<AnalyticsRange>({ preset: "30d" });
+  const hasScans = tag.qrInteractions + tag.nfcInteractions > 0;
   const url = withQuery(`/api/xpot/tags/${encodeURIComponent(tag.id)}/analytics`, rangeParams(range));
   const { data, isLoading, error, refetch } = useQuery<TagAnalytics>({
     queryKey: ["tags", "piece-analytics", url],
     queryFn: async () => (await apiRequest("GET", url)).json() as Promise<TagAnalytics>,
     staleTime: 30_000,
     refetchInterval: 60_000,
+    // Never scanned in its whole life: nothing to chart.
+    enabled: hasScans,
   });
   const series = useMemo(() => (data ? fillDailySeries(data.from, data.to, data.daily) : []), [data]);
 
@@ -52,6 +55,15 @@ export function PerformanceSection() {
       ? tp("periodRange", { from: range.from ? formatDate(`${range.from}T12:00:00Z`) : "…", to: range.to ? formatDate(`${range.to}T12:00:00Z`) : tp("periodToday") })
       : tp("periodLastDays", { count: PRESET_DAYS[range.preset] });
   const totals = data?.totals;
+
+  if (!hasScans) {
+    return (
+      <section className={`${CARD} min-w-0 p-4`} data-testid="piece-dashboard">
+        <h2 className={EYEBROW_MUTED}>{t("pieceAnalyticsTitle")}</h2>
+        <p className="mt-1 text-sm text-white/50" data-testid="piece-no-scans">{tp("noScansYet")}</p>
+      </section>
+    );
+  }
 
   return (
     <section className={`${CARD} min-w-0 overflow-hidden p-4`} data-testid="piece-dashboard">

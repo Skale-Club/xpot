@@ -82,7 +82,8 @@ export function PieceBody({ layout, desktopWriter }: { layout: "stack" | "column
   const main = receiveIsMain ? (
     <CustodyCard />
   ) : action ? (
-    <Button type="button" variant="brand" accent="tags" size="lg" onClick={run} className="w-full" data-testid="button-main-action" data-action={action.kind}>
+    // A piece that works needs nothing next: seeing how it does is one option among the others, not the brand button.
+    <Button type="button" variant={action.kind === "viewPerformance" ? "secondary" : "brand"} accent="tags" size="lg" onClick={run} className="w-full" data-testid="button-main-action" data-action={action.kind}>
       <ActionIcon kind={action.kind as keyof typeof ACTION_ICON} />
       {tp(`action${action.kind[0].toUpperCase()}${action.kind.slice(1)}` as "actionGoLive")}
     </Button>
@@ -93,9 +94,10 @@ export function PieceBody({ layout, desktopWriter }: { layout: "stack" | "column
     const customerOutside = !!tag.leadId || action?.kind === "configure";
     return (
       <div className="min-w-0 space-y-3" data-testid="piece-body">
-        {main}
+        {action?.kind === "viewPerformance" ? null : main}
         {hint}
         {customerOutside ? customer : null}
+        {action?.kind === "viewPerformance" ? main : null}
         <details
           open={detailsOpen}
           onToggle={(e) => setDetailsOpen(e.currentTarget.open)}

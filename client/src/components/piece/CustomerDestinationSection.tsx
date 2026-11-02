@@ -221,6 +221,8 @@ export function CustomerDestinationSection({ commands }: {
   const activatePlan = planTransition(tag, "activate");
   const canToggle = !retired && (live || (activatePlan.ok && (paused || tag.status === "assigned")));
   const canClearCustomer = !retired && !!tag.leadId && planTransition(tag, "unassign").ok;
+  // A sold piece keeps its customer until the sale is cancelled (the sentence at the end of the actions says so).
+  const canChangeCustomer = !retired && !!tag.leadId && tag.saleId === null;
   // The body's main button carries set-up and go-live, so this section does not repeat them.
   const mainAction = commands ? pieceSituation(tag, viewer).action?.kind : undefined;
   const showToggle = canToggle && mainAction !== "goLive" && mainAction !== "reactivate";
@@ -275,19 +277,8 @@ export function CustomerDestinationSection({ commands }: {
       </div>
 
       {tag.leadId ? (
-        // The customer's name is in the header above; this row is only the one change that can be made to it. A sold
-        // piece keeps its customer until the sale is cancelled (the sentence below says so).
-        <>
-          <span className="sr-only" data-testid="text-tag-lead">{tag.leadName ?? tm("customerNumber", { id: tag.leadId })}</span>
-          {!retired && tag.saleId === null ? (
-            <div className="mt-2 flex justify-end">
-              <Button type="button" variant="ghost" size="sm" onClick={() => openEditor(true)} className="min-h-10" data-testid="button-change-customer">
-                <UserRound />
-                {t("changeCustomerShort")}
-              </Button>
-            </div>
-          ) : null}
-        </>
+        // The customer's name is in the header above; the changes that can be made to it are with the other actions below.
+        <span className="sr-only" data-testid="text-tag-lead">{tag.leadName ?? tm("customerNumber", { id: tag.leadId })}</span>
       ) : dest ? (
         // Set up without a customer (made before the picker was required): Change customer links one.
         <p className="mt-2 flex items-center gap-2 text-sm text-white/45" data-testid="text-tag-lead">
@@ -306,7 +297,7 @@ export function CustomerDestinationSection({ commands }: {
               <p className="truncate text-lg font-bold text-white">{destDisplay}</p>
             ) : (
               <a href={dest} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1.5 text-lg font-bold text-white underline-offset-2 hover:underline active:underline" data-testid="link-destination">
-                <span className="truncate">{destDisplay}</span>
+                <span className="line-clamp-2 min-w-0 break-all">{destDisplay}</span>
                 <ExternalLink className="h-4 w-4 shrink-0 text-violet-300" />
               </a>
             )}
@@ -333,7 +324,7 @@ export function CustomerDestinationSection({ commands }: {
       )}
 
       {/* Live or not, and the customer: the same verbs on both screens. */}
-      {(showToggle || canClearCustomer || (tag.leadId && tag.saleId !== null)) && (
+      {(showToggle || canClearCustomer || canChangeCustomer || (tag.leadId && tag.saleId !== null)) && (
         <div className="mt-3 flex flex-col gap-2 border-t border-white/[0.08] pt-3 sm:flex-row sm:flex-wrap">
           {showToggle && (
             <Button type="button" variant="secondary" onClick={() => void toggle()} loading={toggling} disabled={toggling} className="w-full sm:w-auto" data-testid="button-toggle">
@@ -341,20 +332,30 @@ export function CustomerDestinationSection({ commands }: {
               {live ? t("switchOff") : paused ? t("switchOn") : tm("action_activate_confirm")}
             </Button>
           )}
-          {canClearCustomer && tag.saleId === null && (
-            <Button
-              type="button"
-              variant="ghost"
-              onClick={() => {
-                setActionError(null);
-                setConfirm("unassign");
-              }}
-              className="w-full sm:w-auto"
-              data-testid="button-unlink-piece"
-            >
-              <Unlink className="!size-4 text-red-400" />
-              {t("unlinkFromCustomer")}
-            </Button>
+          {(canChangeCustomer || (canClearCustomer && tag.saleId === null)) && (
+            <div className="flex gap-1">
+              {canChangeCustomer && (
+                <Button type="button" variant="ghost" onClick={() => openEditor(true)} className="min-w-0 flex-1 sm:flex-none" data-testid="button-change-customer">
+                  <UserRound className="!size-4" />
+                  {t("changeCustomerShort")}
+                </Button>
+              )}
+              {canClearCustomer && tag.saleId === null && (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  onClick={() => {
+                    setActionError(null);
+                    setConfirm("unassign");
+                  }}
+                  className="min-w-0 flex-1 sm:flex-none"
+                  data-testid="button-unlink-piece"
+                >
+                  <Unlink className="!size-4 text-red-400" />
+                  {t("unlinkFromCustomer")}
+                </Button>
+              )}
+            </div>
           )}
           {tag.leadId && tag.saleId !== null && <p className="text-xs text-white/40 sm:self-center" data-testid="admin-piece-clear-customer-sold">{tm("clearCustomerSold")}</p>}
         </div>

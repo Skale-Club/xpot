@@ -316,7 +316,7 @@ export function TagProductThumbnail({
         <TagFaceIcon face={face} size={plate ? s.plateFace : s.face} className="!shadow-none !ring-0" />
       </span>
       {/* The stand's foot. */}
-      {stand ? <span className={`bg-black ${s.base}`} /> : null}
+      {stand ? <span className={`bg-black ring-1 ring-white/25 ${s.base}`} /> : null}
     </span>
   );
 }

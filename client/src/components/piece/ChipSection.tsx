@@ -1,11 +1,12 @@
 import { useEffect, useState, type ReactNode } from "react";
-import { Eraser, Lock, Nfc, Smartphone } from "lucide-react";
+import { ChevronRight, Eraser, Lock, Nfc, Smartphone } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { InlineAlert } from "@/components/xpot/InlineAlert";
 import { useT } from "@/i18n";
 import { commonMessages } from "@/i18n/messages/common";
 import { tagsMessages } from "@/i18n/messages/tags";
 import { pieceCustodyMessages } from "@/i18n/messages/pieceCustody";
+import { manageTagsPiecesMessages } from "@/i18n/messages/manageTagsPieces";
 import WriteSheet, { manualSteps, manualTitle, type WriteResult } from "@/pages/tags/WriteSheet";
 import LockSheet from "@/pages/tags/LockSheet";
 import EraseSheet from "@/pages/tags/EraseSheet";
@@ -37,6 +38,7 @@ export function ChipSection({ desktopWriter, commands }: {
   const t = useT(tagsMessages);
   const tc = useT(commonMessages);
   const tcu = useT(pieceCustodyMessages);
+  const tm = useT(manageTagsPiecesMessages);
   const write = usePieceWrite();
   // A phone without Web NFC (iPhone): written with NFC Tools, confirmed by a real tap.
   // A computer or an iPad has no NFC: the write continues on the phone (a QR).
@@ -162,7 +164,16 @@ export function ChipSection({ desktopWriter, commands }: {
         </>
       )}
 
-      {desktopWriter && viewer.isAdmin && !idle ? <div className="mt-4">{desktopWriter}</div> : null}
+      {/* The desk writer is another way to write the same chip: inside this card, open when the chip is the next step. */}
+      {desktopWriter && viewer.isAdmin && !idle ? (
+        <details className="group mt-3 border-t border-white/10 pt-2" open={chipIsNextStep} data-testid="chip-desk-writer">
+          <summary className="flex min-h-10 cursor-pointer list-none items-center gap-1.5 text-sm font-semibold text-white/70 hover:text-white">
+            <ChevronRight className="h-4 w-4 transition-transform group-open:rotate-90" aria-hidden="true" />
+            {tm("nfcCardTitle")}
+          </summary>
+          <div className="mt-2">{desktopWriter}</div>
+        </details>
+      ) : null}
 
       <LockSheet
         open={lockOpen}

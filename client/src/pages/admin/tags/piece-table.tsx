@@ -123,8 +123,8 @@ export function PieceTable({
   const selectableCodes = selection ? pieces.filter(selection.canSelect).map((p) => p.publicCode) : [];
   const allOn = selectableCodes.length > 0 && selectableCodes.every((c) => selection?.selected.has(c));
   const none = <span className="text-white/30">—</span>;
-  /** The company's stock is where a piece in a box with no reseller is; a piece not in stock yet, sold or lost is not in anyone's. */
-  const heldBy = (p: TagListItem): string | null => p.repName ?? (pieceHasLocation(p) && p.repId === null ? tp("houseStock") : null);
+  /** The company's stock is where a piece in a box with no reseller is; one not in stock yet, sold, lost or already at its customer is not in anyone's. */
+  const heldBy = (p: TagListItem): string | null => p.repName ?? (pieceHasLocation(p) && p.repId === null && !p.leadName ? tp("houseStock") : null);
   const scansOf = (p: TagListItem) => p.qrInteractions + p.nfcInteractions;
   const day = (at: string | null) => formatDate(at, SHORT_DAY);
 

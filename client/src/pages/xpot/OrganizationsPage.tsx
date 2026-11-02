@@ -2,6 +2,7 @@ import { useMemo, useState, type ReactNode } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Building2, ChevronRight, Package, PackageOpen, Settings, ShieldCheck, ShoppingBag, UserPlus, Users } from "lucide-react";
 import { Link, Redirect, useLocation, useSearchParams } from "wouter";
+import { PieceStatusPill } from "@/components/piece/PieceStatusPill";
 import { Button } from "@/components/ui/button";
 import { AppLayout } from "@/components/xpot/AppLayout";
 import { ConfirmDialog } from "@/components/xpot/ConfirmDialog";
@@ -384,7 +385,7 @@ function OrganizationWorkspace({ organizationId }: { organizationId: number }) {
         {tab === "inventory" && (
           <RecordList query={inventory} empty={t("noPieces")} rowHref={(row) => (platformManager ? `/admin/tags/pieces/${row.id}` : `${managementReach(me) ? "/admin/work" : ""}/tags/pieces/${encodeURIComponent(row.publicCode)}`)}
             seeAll={platformManager ? { href: `/admin/tags/pieces?org=${organizationId}`, label: t("seeAllIn", { screen: ts("managePieces") }), testId: "organization-inventory-all" } : undefined}
-            render={(row) => <><span className="font-mono text-sm text-white">{row.publicCode}</span><span className="text-xs text-white/45">{lookup(tt, `product_${row.productType}`, String(row.productType ?? ""))} · {lookup(tt, `status_${row.status}`, String(row.status ?? ""))}</span></>} />
+            render={(row) => <><span className="font-mono text-sm text-white">{row.publicCode}</span><span className="flex items-center gap-2 text-xs text-white/45">{lookup(tt, `product_${row.productType}`, String(row.productType ?? ""))}<PieceStatusPill piece={row} /></span></>} />
         )}
         {tab === "kits" && (
           <RecordList query={kits} empty={t("noKits")} rowHref={(row) => (platformManager ? `/admin/tags/kits?view=kits&org=${organizationId}${row.repId ? `&kitRep=${row.repId}` : ""}` : `${managementReach(me) ? "/admin/work" : ""}/tags/pieces`)}

@@ -281,15 +281,13 @@ export default function PiecesScreen({ selectedCode = null }: { selectedCode?: s
                         {[tag.label, tag.destinationUrl && shortUrl(tag.destinationUrl)].filter(Boolean).join(" · ")}
                       </span>
                     )}
-                  </span>
-                  {/* At most half the row: with Live, Sold and "Chip not written" on one line the customer's name was cut to one letter on a phone; the pills wrap instead. */}
-                  <span className="flex max-w-[50%] shrink-0 flex-col items-end gap-1">
-                    <span className="flex flex-wrap justify-end gap-1">
+                    {/* The pills have their own line under the name, so the customer's name keeps the whole row. */}
+                    <span className="mt-1.5 flex flex-wrap items-center gap-1.5 pl-12">
                       <PieceStatusPills tag={tag} />
                       <ChipMark tag={tag} />
+                      {/* All-time scans, live or not: a switched-off piece keeps what it had. The same counts as the desktop table. */}
+                      {tag.qrInteractions + tag.nfcInteractions > 0 && <ScanCounts qr={tag.qrInteractions} nfc={tag.nfcInteractions} />}
                     </span>
-                    {/* All-time scans, live or not: a switched-off piece keeps what it had. The same counts as the desktop table. */}
-                    {tag.qrInteractions + tag.nfcInteractions > 0 && <ScanCounts qr={tag.qrInteractions} nfc={tag.nfcInteractions} />}
                   </span>
                   <ChevronRight className="h-4 w-4 shrink-0 text-white/25" />
                 </button>
@@ -365,7 +363,7 @@ function PiecesTable({ items, selectedCode, onSelect, onCustomer }: {
                       <span className="truncate group-hover:underline">{tag.leadName}</span>
                     </button>
                   ) : (
-                    <span className="text-white/35">{t("noCustomer")}</span>
+                    <span className="text-white/30">—</span>
                   )}
                   {tag.label && <div className="mt-0.5 truncate text-xs text-white/35">{tag.label}</div>}
                 </td>

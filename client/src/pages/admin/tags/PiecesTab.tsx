@@ -6,6 +6,7 @@ import { FilterBar, FilterChips, FilterSearch, FilterSelect, FilterToggle } from
 import { useUrlFilters } from "@/hooks/use-url-filters";
 import { ListPager, useOffsetPages } from "@/components/xpot/pagination";
 import { TAG_PRODUCT_TYPES } from "@shared/tags";
+import { parseTagIntakeScan } from "@shared/tagIntake";
 import type { TagDetail, TagListItem, TagOverview } from "@shared/tagsApi";
 import { TagFaceIcon } from "@/components/xpot/TagFaceIcon";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -121,7 +122,7 @@ function NewPieceDialog({ open, onOpenChange, onCreated }: { open: boolean; onOp
           <Field label={t("productType")}>
             <Select value={productType} onChange={(e) => setProductType(e.target.value)} options={labels.productOptions} data-testid="new-piece-product" />
           </Field>
-          <Field label={tb("fieldCatalogProduct")} hint={tb("catalogProductHint")}>
+          <Field label={t("newPieceProduct")} hint={t("newPieceProductHint")}>
             <Select value={salesProductId} onChange={(e) => setSalesProductId(e.target.value)} placeholder={tb("chooseCatalogProduct")} options={catalogOptions(catalog)} data-testid="new-piece-catalog" />
           </Field>
           <Field label={tg("printedOnPiece")} id="new-piece-face">
@@ -179,6 +180,16 @@ export function PiecesTab({ go }: { go: (path: string) => void }) {
     [setParams],
   );
   const openPiece = (id: string) => (isDesktop ? setPane(id) : go(`/pieces/${id}`));
+  // The one search box also takes a piece's code or what its QR / chip holds (a scanned link): Enter opens that piece.
+  const openByCode = async (typed: string) => {
+    const scan = parseTagIntakeScan(typed, [window.location.hostname]);
+    if (!scan.ok) return;
+    try {
+      openPiece((await getJson<{ id: string }>(`/api/xpot/tags/lookup/${scan.publicCode}`)).id);
+    } catch {
+      // Not a piece we know: the list below already shows that nothing matches.
+    }
+  };
   const closePiece = useCallback(() => setPane(null), [setPane]);
 
   const pieces = useOffsetPages<TagListItem>({
@@ -283,7 +294,7 @@ export function PiecesTab({ go }: { go: (path: string) => void }) {
       </div>
       <FilterBar
         testId="admin-pieces-filters"
-        search={<FilterSearch value={filters.search} onChange={(search) => set({ search })} placeholder={tm("searchPlaceholder")} debounceMs={350} testId="admin-pieces-search" />}
+        search={<FilterSearch value={filters.search} onChange={(search) => set({ search })} onEnter={(typed) => void openByCode(typed)} placeholder={tm("searchPlaceholder")} debounceMs={350} testId="admin-pieces-search" />}
         actions={
           isAdmin ? (
             // Quiet on purpose: a loose piece outside any production is the exception, not the way to add stock.

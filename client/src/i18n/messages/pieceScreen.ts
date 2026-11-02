@@ -39,6 +39,7 @@ const en = {
   keepSale: "Keep the sale",
 
   // Performance
+  noScansYet: "No scans yet.",
   periodToday: "Today",
   periodLastDays: "Last {count} days",
   periodRange: "{from} – {to}",
@@ -72,6 +73,8 @@ const en = {
   evDestinationSet: "Destination set",
   evDestinationChanged: "Destination changed",
   evDestinationCleared: "Destination removed",
+  evPutLive: "Put live",
+  evCreated: "Piece created",
   evSale: "Sold for {amount}",
   evSaleCancelled: "Sale #{id} cancelled",
   evBy: "by {name}",
@@ -170,6 +173,7 @@ export const pieceScreenMessages: Dictionary<typeof en> = {
     saleCancelled: "Venda cancelada. A peça voltou para o estoque.",
     keepSale: "Manter a venda",
 
+    noScansYet: "Nenhuma leitura ainda.",
     periodToday: "Hoje",
     periodLastDays: "Últimos {count} dias",
     periodRange: "{from} – {to}",
@@ -201,6 +205,8 @@ export const pieceScreenMessages: Dictionary<typeof en> = {
     evDestinationSet: "Destino definido",
     evDestinationChanged: "Destino alterado",
     evDestinationCleared: "Destino removido",
+    evPutLive: "Colocada no ar",
+    evCreated: "Peça criada",
     evSale: "Vendida por {amount}",
     evSaleCancelled: "Venda #{id} cancelada",
     evBy: "por {name}",
@@ -294,6 +300,7 @@ export const pieceScreenMessages: Dictionary<typeof en> = {
     saleCancelled: "Venta cancelada. La pieza volvió al stock.",
     keepSale: "Mantener la venta",
 
+    noScansYet: "Sin lecturas todavía.",
     periodToday: "Hoy",
     periodLastDays: "Últimos {count} días",
     periodRange: "{from} – {to}",
@@ -325,6 +332,8 @@ export const pieceScreenMessages: Dictionary<typeof en> = {
     evDestinationSet: "Destino definido",
     evDestinationChanged: "Destino cambiado",
     evDestinationCleared: "Destino quitado",
+    evPutLive: "Activada",
+    evCreated: "Pieza creada",
     evSale: "Vendida por {amount}",
     evSaleCancelled: "Venta #{id} cancelada",
     evBy: "por {name}",

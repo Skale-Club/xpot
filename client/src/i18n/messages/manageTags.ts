@@ -124,7 +124,6 @@ const en = {
   event_misconfigured_scan: "Scanned — destination invalid",
 
   // Shared by the screens below
-  scansTaps: "Scans (QR + NFC)",
   revoke: "Revoke",
   creating: "Creating…",
   saving: "Saving…",
@@ -133,11 +132,6 @@ const en = {
 
   // Overview
   whatOverview: "the overview",
-  ovToday: "Today",
-  ovLast7: "Last 7 days",
-  ovLast30: "Last 30 days",
-  ovApproxUnique: "Est. visitors (30d)",
-  ovApproxHint: "Per piece, per day; not people",
   ovDestCleared: "Destination cleared",
   ovDestClearedReason: "Destination cleared ({reason})",
 
@@ -427,7 +421,6 @@ export const manageTagsMessages: Dictionary<typeof en> = {
     event_disabled_scan: "Lida enquanto pausada",
     event_misconfigured_scan: "Lida — destino inválido",
 
-    scansTaps: "Leituras (QR + NFC)",
     revoke: "Revogar",
     creating: "Criando…",
     saving: "Salvando…",
@@ -435,11 +428,6 @@ export const manageTagsMessages: Dictionary<typeof en> = {
     lastUsedAt: "último uso {date}",
 
     whatOverview: "a visão geral",
-    ovToday: "Hoje",
-    ovLast7: "Últimos 7 dias",
-    ovLast30: "Últimos 30 dias",
-    ovApproxUnique: "Visitantes (estimativa, 30d)",
-    ovApproxHint: "Por peça, por dia; não são pessoas",
     ovDestCleared: "Destino removido",
     ovDestClearedReason: "Destino removido ({reason})",
 
@@ -720,7 +708,6 @@ export const manageTagsMessages: Dictionary<typeof en> = {
     event_disabled_scan: "Leída mientras estaba pausada",
     event_misconfigured_scan: "Leída — destino no válido",
 
-    scansTaps: "Lecturas (QR + NFC)",
     revoke: "Revocar",
     creating: "Creando…",
     saving: "Guardando…",
@@ -728,11 +715,6 @@ export const manageTagsMessages: Dictionary<typeof en> = {
     lastUsedAt: "último uso {date}",
 
     whatOverview: "el resumen",
-    ovToday: "Hoy",
-    ovLast7: "Últimos 7 días",
-    ovLast30: "Últimos 30 días",
-    ovApproxUnique: "Visitantes (estimación, 30 d)",
-    ovApproxHint: "Por pieza, por día; no son personas",
     ovDestCleared: "Destino eliminado",
     ovDestClearedReason: "Destino eliminado ({reason})",
 
