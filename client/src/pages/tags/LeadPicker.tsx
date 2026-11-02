@@ -28,7 +28,8 @@ export default function LeadPicker({ value, onChange, id }: {
     // Nothing until the person searches: the list is not a menu to scroll through.
     return query ? list.filter((lead) => lead.name.toLowerCase().includes(query)).slice(0, 6) : [];
   }, [data, query]);
-  const exact = (data ?? []).some((lead) => lead.name.toLowerCase() === query);
+  const exactLead = (data ?? []).find((lead) => lead.name.toLowerCase() === query);
+  const exact = !!exactLead;
 
   if (value) {
     return (
@@ -58,6 +59,13 @@ export default function LeadPicker({ value, onChange, id }: {
         type="text"
         value={text}
         onChange={(e) => setText(e.target.value)}
+        // Enter takes the business typed: the one already there, or a new one. No second tap on "Create".
+        onKeyDown={(e) => {
+          if (e.key !== "Enter" || !query || e.nativeEvent.isComposing) return;
+          e.preventDefault();
+          onChange(exactLead ? { leadId: exactLead.id, name: exactLead.name, placeId: exactLead.googlePlaceId ?? null } : { leadId: null, name: text.trim() });
+        }}
+        enterKeyHint="done"
         placeholder={isLoading ? t("leadsLoading") : t("leadSearch")}
         autoCapitalize="words"
         className={INPUT}

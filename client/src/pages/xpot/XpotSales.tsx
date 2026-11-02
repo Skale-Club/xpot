@@ -1,27 +1,27 @@
 import { useState, useRef, useEffect } from "react";
-import { useLocation } from "wouter";
+import { useLocation, useRouter } from "wouter";
 import { parseSalesPath, salesPath, type SalesTab } from "./salesPath";
 import { currentSearch } from "@/hooks/use-url-filters";
 import {
   Check,
-  ClipboardCheck,
   ChevronDown,
-  ListTodo,
   Plus,
   Search,
   Building2,
   TrendingUp,
 } from "lucide-react";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
+import { useToast } from "@/hooks/use-toast";
+import { useXpotShared } from "./hooks/useXpotShared";
+import { SheetDialog } from "./components/sales/ui";
 import { apiRequest } from "@/lib/queryClient";
 import { useLeads } from "./hooks/useLeads";
 import { useSales } from "./hooks/useSales";
 import { useVisits } from "./hooks/useVisits";
 import { useXpotQueries } from "./hooks/useXpotQueries";
-import { formatCents, formatDateTime } from "./utils";
+import { formatCents } from "./utils";
 import { SalesOverview } from "./components/sales/SalesOverview";
 import { SalesList, ConsignmentsList } from "./components/sales/SalesLists";
-import { NewTaskDialog } from "./components/leads/TaskForm";
 import type { EnrichedSalesOpportunity } from "./types";
 import { useT } from "@/i18n";
 import { salesMessages } from "@/i18n/messages/sales";
@@ -30,11 +30,11 @@ import { DotsLoader } from "@/components/ui/spinner";
 import { FIELD_CONTROL, Input, Select } from "@/components/xpot/Field";
 import { SectionCard } from "@/components/xpot/DashboardKit";
 import { EmptyState } from "@/components/xpot/EmptyState";
-import { InlineAlert } from "@/components/xpot/InlineAlert";
 import { ListSkeleton } from "@/components/xpot/ListSkeleton";
 import { PageHeader } from "@/components/xpot/PageHeader";
 import { RetryButton } from "@/components/xpot/RetryButton";
 import { Segmented } from "@/components/xpot/Segmented";
+import { Pill } from "@/components/xpot/StatusPill";
 import { GLASS_CLASS, SURFACE_MODAL_CLASS } from "@/components/xpot/surface";
 
 const SYNC_STATUS_KEYS: Record<string, "sync_pending" | "sync_synced" | "sync_failed" | "sync_needs_review"> = {
@@ -176,24 +176,29 @@ const SALES_TABS: { id: SalesTab; labelKey: "tabOverview" | "tabSales" | "tabSto
 export function XpotSales() {
   const t = useT(salesMessages);
   const [location, navigate] = useLocation();
+  // Inside the management panel the panel already names the screen and carries its switch.
+  const inPanel = useRouter().base.startsWith("/admin");
   const { tab, id } = parseSalesPath(location);
   const setTab = (next: SalesTab) => navigate(salesPath(next), { replace: true });
   // Moving between items and closing replace history; only the first open pushes,
   // so Back leaves the screen instead of replaying every row J/K visited.
   const select = (which: SalesTab) => (itemId: number | null) =>
     navigate(`${salesPath(which, itemId)}${currentSearch()}`, { replace: id != null });
+  // The Deals tab is for deals: with GoHighLevel off and none saved here it would be an empty tab.
+  const { xpotMeQuery } = useXpotQueries();
+  const dealsQuery = useQuery<unknown[]>({ queryKey: ["/api/xpot/opportunities"], enabled: xpotMeQuery.isSuccess });
+  const pipelinesQuery = useQuery<{ pipelines: GHLPipeline[]; _reason?: string }>({
+    queryKey: ["/api/xpot/opportunities/pipelines"],
+    queryFn: async () => (await apiRequest("GET", "/api/xpot/opportunities/pipelines")).json(),
+    enabled: xpotMeQuery.isSuccess,
+    staleTime: 5 * 60 * 1000,
+  });
+  const showDeals = tab === "pipeline" || (dealsQuery.data?.length ?? 0) > 0 || (pipelinesQuery.isSuccess && !pipelinesQuery.data?._reason);
 
   return (
     <div className="min-w-0 space-y-5 lg:space-y-6">
       <div className="space-y-4">
-        <PageHeader
-          safeArea={false}
-          className="!mb-0"
-          accent="visits"
-          eyebrow={t("pageEyebrow")}
-          title={t("pageTitle")}
-          description={t("pageSubtitle")}
-        />
+        {inPanel ? null : <PageHeader safeArea={false} className="!mb-0" accent="visits" title={t("pageTitle")} />}
         {/* The view switch of the Sales screen (Segmented, as its doc says). */}
         <Segmented
           ariaLabel={t("pageTitle")}
@@ -201,67 +206,114 @@ export function XpotSales() {
           itemClassName="min-h-10 px-1"
           value={tab}
           onChange={setTab}
-          items={SALES_TABS.map((item) => ({ id: item.id, label: t(item.labelKey) }))}
+          items={SALES_TABS.filter((item) => item.id !== "pipeline" || showDeals).map((item) => ({ id: item.id, label: t(item.labelKey) }))}
         />
       </div>
 
-      {tab === "overview" && <SalesOverview onGoToConsignments={() => setTab("consignments")} />}
+      {tab === "overview" && <SalesOverview onGoToConsignments={() => setTab("consignments")} onNewSale={() => navigate(`${salesPath("sales")}?new=1`)} />}
       {tab === "sales" && <SalesList selectedId={id} onSelect={select("sales")} />}
       {tab === "consignments" && <ConsignmentsList selectedId={id} onSelect={select("consignments")} />}
-      {tab === "pipeline" && <PipelineTab />}
+      {tab === "pipeline" && <DealsTab selectedId={id} onSelect={select("pipeline")} pipelines={pipelinesQuery.data?.pipelines ?? []} pipelinesLoading={pipelinesQuery.isLoading} connected={!pipelinesQuery.data?._reason} />}
     </div>
   );
 }
 
-// The original CRM pipeline (GoHighLevel opportunities + follow-up tasks),
-// moved into its own tab. Unchanged — its fate is a separate decision.
-function PipelineTab() {
-  const t = useT(salesMessages);
-  const { leadsQuery } = useLeads();
-  const { xpotMeQuery } = useXpotQueries();
-  const { activeVisit } = useVisits();
-  const {
-    opportunitiesQuery,
-    tasksQuery,
-    opportunityForm,
-    setOpportunityForm,
-    createOpportunityMutation,
-    updateTaskStatus,
-  } = useSales();
+const DEAL_STATUSES = ["open", "won", "lost"] as const;
 
-  // `_reason` is set when GoHighLevel (legacy) is not set up (opportunities.ts).
-  const pipelinesQuery = useQuery<{ pipelines: GHLPipeline[]; _reason?: string }>({
-    queryKey: ["/api/xpot/opportunities/pipelines"],
-    queryFn: async () => (await apiRequest("GET", "/api/xpot/opportunities/pipelines")).json(),
-    enabled: xpotMeQuery.isSuccess,
-    staleTime: 5 * 60 * 1000,
+/** One deal opened for editing: its value, stage and whether it was won or lost. */
+function DealDialog({ deal, pipelines, onClose }: { deal: EnrichedSalesOpportunity | null; pipelines: GHLPipeline[]; onClose: () => void }) {
+  const t = useT(salesMessages);
+  const { toast } = useToast();
+  const { invalidateXpotData } = useXpotShared();
+  const [title, setTitle] = useState("");
+  const [value, setValue] = useState("");
+  const [status, setStatus] = useState<string>("open");
+  const [pipelineKey, setPipelineKey] = useState("");
+  const [stageKey, setStageKey] = useState("");
+
+  useEffect(() => {
+    if (!deal) return;
+    setTitle(deal.title);
+    setValue(deal.value ? String(deal.value) : "");
+    setStatus(deal.status === "won" || deal.status === "lost" ? deal.status : "open");
+    setPipelineKey(deal.pipelineKey ?? "");
+    setStageKey(deal.stageKey ?? "");
+  }, [deal?.id]);
+
+  const save = useMutation({
+    mutationFn: async () => (await apiRequest("PATCH", `/api/xpot/opportunities/${deal!.id}`, {
+      title: title.trim(),
+      value: value.trim() ? Number(value) : 0,
+      status,
+      ...(pipelineKey ? { pipelineKey, stageKey: stageKey || null } : {}),
+    })).json(),
+    onSuccess: async () => {
+      toast({ title: t("dealSaved"), variant: "success" });
+      await invalidateXpotData();
+      onClose();
+    },
+    onError: (error: Error) => toast({ title: t("dealSaveFailed"), description: error.message, variant: "destructive" }),
   });
 
+  const valueOk = !value.trim() || Number.isFinite(Number(value));
+  return (
+    <SheetDialog open={deal !== null} onOpenChange={(open) => { if (!open) onClose(); }} title={deal?.lead?.name ?? t("deals")}>
+      <div className="space-y-3">
+        <Input value={title} onChange={(e) => setTitle(e.target.value)} placeholder={t("oppTitle")} aria-label={t("oppTitle")} />
+        <Input value={value} onChange={(e) => setValue(e.target.value)} placeholder={t("oppValue")} aria-label={t("oppValue")} inputMode="decimal" />
+        <Select
+          aria-label={t("dealStatus")}
+          value={status}
+          onChange={(e) => setStatus(e.target.value)}
+          options={DEAL_STATUSES.map((value) => ({ value, label: t(`dealStatus_${value}`) }))}
+        />
+        {pipelines.length > 0 ? (
+          <PipelinePicker pipelines={pipelines} pipelineId={pipelineKey} stageId={stageKey} onPipelineChange={setPipelineKey} onStageChange={setStageKey} />
+        ) : null}
+        <Button type="button" variant="brand" className="w-full" disabled={!title.trim() || !valueOk} loading={save.isPending} onClick={() => save.mutate()}>
+          {t("saveDeal")}
+        </Button>
+        {!title.trim() ? <p className="text-xs text-white/45">{t("dealNeedsTitle")}</p> : !valueOk ? <p className="text-xs text-white/45">{t("dealNeedsNumber")}</p> : null}
+      </div>
+    </SheetDialog>
+  );
+}
+
+// Open deals: what a company might still buy, with its value. They live in Xpot; with GoHighLevel connected
+// they also sync there, which is only worth saying when it fails.
+function DealsTab({ pipelines, pipelinesLoading, connected, selectedId, onSelect }: {
+  pipelines: GHLPipeline[]; pipelinesLoading: boolean; connected: boolean;
+  /** The deal in the address (/sales/pipeline/12): its dialog is open. */
+  selectedId: number | null; onSelect: (id: number | null) => void;
+}) {
+  const t = useT(salesMessages);
+  const { leadsQuery } = useLeads();
+  const { opportunitiesQuery, opportunityForm, setOpportunityForm, createOpportunityMutation } = useSales();
   const [oppExpanded, setOppExpanded] = useState(false);
-  const [taskOpen, setTaskOpen] = useState(false);
-  // The task being marked done, so only its button shows the loader.
-  const [completingId, setCompletingId] = useState<number | null>(null);
-
-  const pipelines = pipelinesQuery.data?.pipelines ?? [];
-  const ghlOff = Boolean(pipelinesQuery.data?._reason);
-
-  const count = (n: number | undefined) => <span className="ml-1.5 rounded-full bg-white/[0.06] px-2 py-0.5 text-[10px] tabular-nums text-white/45">{n ?? 0}</span>;
+  // The list opens on what is still to win; won and lost deals are one chip away, with their status on the card.
+  const [show, setShow] = useState<(typeof DEAL_STATUSES)[number]>("open");
+  const everyDeal = opportunitiesQuery.data ?? [];
+  const statusOf = (opp: EnrichedSalesOpportunity) => (opp.status === "won" || opp.status === "lost" ? opp.status : "open");
+  const deals = everyDeal.filter((opp) => statusOf(opp) === show);
+  const editing = selectedId == null ? null : everyDeal.find((opp) => opp.id === selectedId) ?? null;
 
   return (
-    <div className="grid min-w-0 gap-4 lg:grid-cols-2 lg:items-start">
-      {ghlOff && (
-        <InlineAlert tone="info" title={t("ghlOffTitle")} className="lg:col-span-2">
-          <span data-testid="pipeline-ghl-off">{t("ghlOffBody")}</span>
-        </InlineAlert>
-      )}
-
+    <div className="grid min-w-0 gap-4">
+      <Segmented
+        ariaLabel={t("dealStatus")}
+        className="w-full lg:max-w-md"
+        itemClassName="min-h-10 px-1"
+        value={show}
+        onChange={setShow}
+        items={DEAL_STATUSES.map((status) => ({ id: status, label: t(`dealStatus_${status}`), count: everyDeal.filter((opp) => statusOf(opp) === status).length }))}
+      />
       <SectionCard
-        title={<span className="flex items-center">{t("opportunities")}{count(opportunitiesQuery.data?.length)}</span>}
+        title={<span className="flex items-center">{show === "open" ? t("openDeals") : t("deals")}<span className="ml-1.5 rounded-full bg-white/[0.06] px-2 py-0.5 text-[10px] tabular-nums text-white/45">{deals.length}</span></span>}
         icon={TrendingUp}
         bodyClassName="space-y-3 p-4"
         actions={(
-          <Button type="button" variant="ghost" size="icon" onClick={() => setOppExpanded((v) => !v)} aria-label={t("newOpp")} title={t("newOpp")} aria-expanded={oppExpanded} className="text-white/55">
-            <Plus aria-hidden="true" />
+          <Button type="button" variant="brand" size="sm" onClick={() => setOppExpanded((v) => !v)} aria-expanded={oppExpanded}>
+            <Plus aria-hidden="true" /> {t("newOpp")}
           </Button>
         )}
       >
@@ -285,7 +337,7 @@ function PipelineTab() {
               aria-label={t("oppValue")}
               inputMode="decimal"
             />
-            {pipelinesQuery.isLoading ? (
+            {pipelinesLoading ? (
               <div className="flex items-center gap-2 text-xs text-white/40">
                 <DotsLoader size="xs" tone="muted" />
                 {t("loadingPipelines")}
@@ -298,9 +350,7 @@ function PipelineTab() {
                 onPipelineChange={(pipelineKey) => setOpportunityForm((prev) => ({ ...prev, pipelineKey }))}
                 onStageChange={(stageKey) => setOpportunityForm((prev) => ({ ...prev, stageKey }))}
               />
-            ) : (
-              <div className="px-0.5 text-xs text-white/40">{t("noPipelines")}</div>
-            )}
+            ) : null}
             {/* The form stays until the server answers, so the loader is seen and a failure keeps what was typed. */}
             <Button
               type="button"
@@ -312,99 +362,50 @@ function PipelineTab() {
             >
               {t("createOpp")}
             </Button>
+            {!opportunityForm.leadId ? <p className="text-xs text-white/45">{t("dealNeedsCompany")}</p> : !opportunityForm.title.trim() ? <p className="text-xs text-white/45">{t("dealNeedsTitle")}</p> : null}
           </div>
         )}
 
-        {/* Opportunities list; loading and failure come before "No opportunities yet". */}
+        {/* The list; loading and failure come before "No deals yet". */}
         {opportunitiesQuery.isLoading ? (
           <ListSkeleton rows={2} />
         ) : opportunitiesQuery.isError ? (
           <EmptyState compact dense tone="red" icon={TrendingUp} title={t("listLoadFailed")}>
             <RetryButton onRetry={() => void opportunitiesQuery.refetch()} busy={opportunitiesQuery.isFetching} />
           </EmptyState>
-        ) : opportunitiesQuery.data?.length ? (
+        ) : deals.length ? (
           <div className="space-y-2">
-            {opportunitiesQuery.data.map((opp: EnrichedSalesOpportunity) => (
-              <div key={opp.id} className={`rounded-2xl p-4 ${GLASS_CLASS}`}>
-                <div className="flex items-start justify-between gap-3">
-                  <div className="min-w-0 flex-1">
-                    <div className="truncate text-sm font-semibold text-white">{opp.title}</div>
-                    <div className="truncate text-xs text-white/45">{opp.lead?.name || t("leadNumber", { id: opp.leadId })}</div>
-                    {opp.pipelineKey && (
-                      <div className="mt-1 truncate text-[11px] text-white/40">
-                        {pipelines.find((p) => p.id === opp.pipelineKey)?.name ?? opp.pipelineKey}
-                        {opp.stageKey ? ` · ${pipelines.find((p) => p.id === opp.pipelineKey)?.stages?.find((s) => s.id === opp.stageKey)?.name ?? opp.stageKey}` : ""}
-                      </div>
-                    )}
-                  </div>
-                  <div className="shrink-0 text-right">
-                    {/* Same money format as every sale: two decimals in the opportunity's currency. */}
-                    <div className="text-base font-bold tabular-nums text-emerald-300">{formatCents(Math.round((opp.value || 0) * 100), opp.currency)}</div>
-                    <div className="mt-0.5 text-[11px] text-white/40">{SYNC_STATUS_KEYS[opp.syncStatus] ? t(SYNC_STATUS_KEYS[opp.syncStatus]) : opp.syncStatus}</div>
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-        ) : !oppExpanded ? (
-          <EmptyState compact dense icon={TrendingUp} title={t("noOpps")} cardStyle={SECTION_EMPTY} />
-        ) : null}
-      </SectionCard>
-
-      <SectionCard
-        title={<span className="flex items-center">{t("followUpTasks")}{count(tasksQuery.data?.length)}</span>}
-        icon={ClipboardCheck}
-        bodyClassName="space-y-3 p-4"
-        actions={(
-          <Button type="button" variant="ghost" size="icon" onClick={() => setTaskOpen(true)} aria-label={t("newTask")} title={t("newTask")} className="text-white/55">
-            <Plus aria-hidden="true" />
-          </Button>
-        )}
-      >
-        {tasksQuery.isLoading ? (
-          <ListSkeleton rows={2} />
-        ) : tasksQuery.isError ? (
-          <EmptyState compact dense tone="red" icon={ListTodo} title={t("listLoadFailed")}>
-            <RetryButton onRetry={() => void tasksQuery.refetch()} busy={tasksQuery.isFetching} />
-          </EmptyState>
-        ) : tasksQuery.data?.length ? (
-          <div className="space-y-2">
-            {tasksQuery.data.map((task) => {
-              const done = task.status === "completed";
+            {deals.map((opp: EnrichedSalesOpportunity) => {
+              // Stage names only when they can be told in words; the stored keys are internal.
+              const pipeline = pipelines.find((p) => p.id === opp.pipelineKey);
+              const stageName = pipeline?.stages?.find((s) => s.id === opp.stageKey)?.name;
+              const where = [pipeline?.name, stageName].filter(Boolean).join(" · ");
+              const syncLabel = connected && SYNC_STATUS_KEYS[opp.syncStatus] && opp.syncStatus !== "synced" ? t(SYNC_STATUS_KEYS[opp.syncStatus]) : null;
               return (
-                <div key={task.id} className={`flex items-center gap-3 rounded-2xl p-4 transition-opacity ${GLASS_CLASS} ${done ? "opacity-50" : ""}`}>
-                  <div className="min-w-0 flex-1">
-                    <div className={`text-sm font-medium text-white ${done ? "line-through" : ""}`}>{task.title}</div>
-                    <div className="mt-0.5 flex items-center gap-1.5">
-                      <ListTodo className="h-3 w-3 text-white/30" aria-hidden="true" />
-                      <span className="text-xs text-white/40">{task.dueAt ? formatDateTime(task.dueAt) : t("noDueDate")}</span>
+                <button key={opp.id} type="button" onClick={() => onSelect(opp.id)} className={`block w-full rounded-2xl p-4 text-left transition-colors hover:bg-white/[0.06] ${GLASS_CLASS}`} data-testid={`deal-${opp.id}`}>
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0 flex-1">
+                      <div className="truncate text-sm font-semibold text-white">{opp.title}</div>
+                      <div className="truncate text-xs text-white/45">{opp.lead?.name || t("leadNumber", { id: opp.leadId })}</div>
+                      {where ? <div className="mt-1 truncate text-[11px] text-white/40">{where}</div> : null}
+                    </div>
+                    <div className="shrink-0 text-right">
+                      {/* Same money format as every sale: two decimals in the opportunity's currency. Green is for what can still be won. */}
+                      <div className={`text-base font-bold tabular-nums ${statusOf(opp) === "open" ? "text-emerald-300" : statusOf(opp) === "won" ? "text-white" : "text-white/35"}`}>{formatCents(Math.round((opp.value || 0) * 100), opp.currency)}</div>
+                      {statusOf(opp) === "won" ? <Pill tone="green" className="mt-1">{t("dealStatus_won")}</Pill> : statusOf(opp) === "lost" ? <Pill tone="slate" className="mt-1">{t("dealStatus_lost")}</Pill> : null}
+                      {syncLabel ? <div className="mt-0.5 text-[11px] text-amber-300">{syncLabel}</div> : null}
                     </div>
                   </div>
-                  {!done && (
-                    <Button
-                      type="button"
-                      variant="secondary"
-                      size="icon"
-                      onClick={async () => { setCompletingId(task.id); try { await updateTaskStatus(task.id, "completed"); } finally { setCompletingId(null); } }}
-                      loading={completingId === task.id}
-                      aria-label={t("markTaskDone")}
-                      title={t("markTaskDone")}
-                      className="h-10 w-10 text-emerald-300"
-                    >
-                      <Check aria-hidden="true" />
-                    </Button>
-                  )}
-                </div>
+                </button>
               );
             })}
           </div>
-        ) : (
-          <EmptyState compact dense icon={ListTodo} title={t("noTasks")} cardStyle={SECTION_EMPTY} />
-        )}
+        ) : !oppExpanded ? (
+          <EmptyState compact dense icon={TrendingUp} title={everyDeal.length === 0 ? t("noOpps") : t("noDealsOfStatus")} cardStyle={SECTION_EMPTY} />
+        ) : null}
       </SectionCard>
 
-      {/* The same task form as the company page and the Tasks screen. */}
-      <NewTaskDialog open={taskOpen} onOpenChange={setTaskOpen} leads={leadsQuery.data ?? []} visitId={activeVisit?.id ?? null} />
+      <DealDialog deal={editing} pipelines={pipelines} onClose={() => onSelect(null)} />
     </div>
   );
 }

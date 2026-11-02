@@ -41,14 +41,29 @@ export function canMarkStep(step: StageStep, batchStage: string): boolean {
   return batchStage === "issued" || batchStage === "built" || batchStage === "printed";
 }
 
-/** The tabs of a batch page. A batch from a house print (it points at its print order) only has the summary; a supplier batch keeps Print and Receive. */
-export function batchTabsFor(batch: { printJobId: string | null }): readonly ("summary" | "print" | "receive")[] {
-  return batch.printJobId ? ["summary"] : ["summary", "print", "receive"];
+/**
+ * The tabs of a batch page. A batch from a house print (it points at its print job) only has the summary; a supplier
+ * batch has Print (the files to send) and Receive; a scanned one has pieces that already carry their codes: nothing to
+ * print, only Receive.
+ */
+export function batchTabsFor(batch: { printJobId: string | null; codeSource?: string }): readonly ("summary" | "print" | "receive")[] {
+  if (batch.printJobId) return ["summary"];
+  return batch.codeSource === "scanned" ? ["summary", "receive"] : ["summary", "print", "receive"];
 }
 
-/** The batches behind the "Batches awaiting pieces" count (server/tags/repository.ts queues): pieces still pending, not cancelled. */
-export function pendingBatches<B extends { status: string; pendingCount: number }>(batches: readonly B[]): B[] {
-  return batches.filter((batch) => batch.status !== "cancelled" && batch.pendingCount > 0);
+/**
+ * The batches behind the "Batches awaiting pieces" count (server/tags/repository.ts queues): pieces still pending, not
+ * cancelled, and not from a print job that was cancelled (no piece will come out of it).
+ */
+export function pendingBatches<B extends { status: string; pendingCount: number; printJobStatus?: string | null }>(batches: readonly B[]): B[] {
+  return batches.filter((batch) => batch.status !== "cancelled" && batch.printJobStatus !== "cancelled" && batch.pendingCount > 0);
+}
+
+/** A print batch's name without how it was ordered ("Stand Large · Google Review · White · v1 · plate 1/2 · 4 of x4" → the piece and "print job 1/2"). */
+export function parseBatchName(name: string): { title: string; plate: { number: number; total: number } | null } {
+  const match = /^(.*?)(?: · v\d+)?(?: · (?:plate|print job) (\d+)\/(\d+))?(?: · \d+ of \S+)?$/.exec(name);
+  if (!match) return { title: name, plate: null };
+  return { title: match[1] || name, plate: match[2] ? { number: Number(match[2]), total: Number(match[3]) } : null };
 }
 
 // ─── Intake station ───────────────────────────────────────────────────────────

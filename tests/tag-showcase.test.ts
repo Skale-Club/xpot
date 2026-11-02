@@ -2,7 +2,7 @@
 // the links are the contract with Stuscle: the reseller's own wholesale code, and for a kit the SKUs to put in the
 // cart (never a price).
 import { describe, expect, it } from "vitest";
-import { showcaseAddsToCart, showcaseUrl, tagShowcaseInputSchema, tagShowcasePatchSchema } from "../shared/tagShowcase";
+import { showcaseAddsToCart, showcaseInLanguage, showcaseUrl, tagShowcaseInputSchema, tagShowcasePatchSchema } from "../shared/tagShowcase";
 import { stuscleKitUrl, wholesaleUrl } from "../shared/wholesale";
 
 const CODE = "XPABCD1234";
@@ -58,5 +58,26 @@ describe("tagShowcaseInputSchema", () => {
   });
   it("a patch keeps untouched fields undefined instead of resetting them to the defaults", () => {
     expect(tagShowcasePatchSchema.parse({ title: "New title" })).toEqual({ title: "New title" });
+  });
+});
+describe("showcaseInLanguage", () => {
+  const entry = {
+    title: "Large Stand",
+    description: "The counter stand customers tap.",
+    includes: ["Large Stand", "NFC chip"],
+    translations: { pt: { title: "Expositor grande", includes: ["Expositor grande", "Chip NFC"] } },
+  };
+  it("reads the language's own words where the admin wrote them, and the main text field by field where not", () => {
+    expect(showcaseInLanguage(entry, "pt")).toMatchObject({ title: "Expositor grande", description: "The counter stand customers tap.", includes: ["Expositor grande", "Chip NFC"] });
+  });
+  it("leaves English, a language with nothing typed and anything unknown on the main text", () => {
+    for (const lang of ["en", "es", "fr", "", null, undefined]) expect(showcaseInLanguage(entry, lang)).toBe(entry);
+  });
+  it("accepts translations on an entry, and nothing else in them", () => {
+    const base = { kind: "model" as const, title: "Stand" };
+    expect(tagShowcaseInputSchema.parse({ ...base, translations: { pt: { title: " Expositor " } } }).translations).toEqual({ pt: { title: "Expositor" } });
+    expect(tagShowcaseInputSchema.parse(base).translations).toEqual({});
+    expect(tagShowcaseInputSchema.safeParse({ ...base, translations: { fr: { title: "x" } } }).success).toBe(false);
+    expect(tagShowcaseInputSchema.safeParse({ ...base, translations: { pt: { price: 1 } } }).success).toBe(false);
   });
 });

@@ -1,25 +1,28 @@
 import { useEffect, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Building2, Check, Contact, ExternalLink, Link2, Mail, Pencil, Phone, Power, Settings2, Unlink, UserRound } from "lucide-react";
+import { Building2, Check, ChevronDown, Contact, ExternalLink, Link2, Mail, Pencil, Phone, Power, Settings2, Unlink, UserRound } from "lucide-react";
 import { defaultUtmEnabled, planTransition, stockBlock, TAG_DESTINATION_TYPES, type TagDestinationType } from "@shared/tags";
 import { contentKindOf, contentSummary, validateChipContent, type ChipContentKind } from "@shared/chipContent";
-import { guessDestinationType, normalizeUrlInput } from "@shared/tagApp";
+import { destinationNotPrinted } from "@shared/tagFace";
+import { chipNeedsWriting, guessDestinationType, normalizeUrlInput } from "@shared/tagApp";
 import { buildReviewUrl } from "@shared/reviewLink";
-import type { FullSalesLead } from "@/pages/xpot/types";
+import type { FullSalesLead, XpotMeResponse } from "@/pages/xpot/types";
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/xpot/ConfirmDialog";
 import { Field, Input } from "@/components/xpot/Field";
 import { InlineAlert } from "@/components/xpot/InlineAlert";
 import { SwitchRow } from "@/components/xpot/SwitchRow";
-import { apiRequest } from "@/lib/queryClient";
+import { ApiError, apiRequest } from "@/lib/queryClient";
 import { useT } from "@/i18n";
 import { commonMessages } from "@/i18n/messages/common";
 import { tagsMessages } from "@/i18n/messages/tags";
+import { pieceScreenMessages } from "@/i18n/messages/pieceScreen";
 import { manageTagsPiecesMessages } from "@/i18n/messages/manageTagsPieces";
 import LeadPicker, { leadPayload, type LeadChoice } from "@/pages/tags/LeadPicker";
 import { GenerateReviewButton, ReviewLinkAssist } from "@/pages/tags/ReviewLinkSheet";
 import { ContentEditor, type ContentState } from "@/pages/tags/ContentEditor";
 import { errorText, getSellTo, haptic, shortUrl } from "@/pages/tags/lib";
+import { suggestedCustomer } from "@/pages/tags/suggestedCustomer";
 import { BottomSheet, CARD_ACCENT, CopyButton, EYEBROW, FieldLabel, INPUT_ACCENT, LinkInput, SheetActions } from "@/pages/tags/ui";
 import { usePiece, usePieceWrite, type PieceCommandsRef } from "./PieceContext";
 import { pieceActionUrl, pieceSituation, type PieceAction } from "./pieceView";
@@ -45,10 +48,12 @@ export function CustomerDestinationSection({ commands }: {
   const t = useT(tagsMessages);
   const tc = useT(commonMessages);
   const tm = useT(manageTagsPiecesMessages);
+  const tp = useT(pieceScreenMessages);
   const qc = useQueryClient();
   const write = usePieceWrite();
   const manage = viewer.surface === "admin";
   const { data: leads } = useQuery<FullSalesLead[]>({ queryKey: ["/api/xpot/leads"], staleTime: 60_000 });
+  const { data: me } = useQuery<XpotMeResponse>({ queryKey: ["/api/xpot/me"], retry: false });
 
   // The editor (a pop-up), seeded from the piece each time it opens.
   const [editing, setEditing] = useState(false);
@@ -90,6 +95,9 @@ export function CustomerDestinationSection({ commands }: {
     setLead(null);
     // Another company: the old one's link must not carry over to the new one.
     seed(changeCustomer);
+    // A piece with no customer offers the one being visited right now (the X takes it off), so nobody types the name of where they stand.
+    const offered = !manage && !tag.leadId && !changeCustomer ? suggestedCustomer({ sellTo: getSellTo(), visitLead: me?.activeVisit?.lead }) : null;
+    if (offered) setLead(offered);
     setEditing(true);
   };
 
@@ -118,6 +126,8 @@ export function CustomerDestinationSection({ commands }: {
   const paused = tag.status === "disabled";
   const retired = tag.status === "retired" || tag.stockStatus === "damaged";
   const stock = stockBlock(tag.stockStatus);
+  // Reserved and internal-use stock is held back: the piece screen offers no set-up for it, so neither does this card.
+  const HELD_STOCK = ["reserved", "internal_use"];
   // The server refuses moving a live piece to another customer (pause it first).
   const blockedByLive = live && changingCustomer && !!tag.leadId;
 
@@ -127,6 +137,18 @@ export function CustomerDestinationSection({ commands }: {
   const value = check?.ok ? check.value : null;
   const destinationType = value ? (kind === "url" ? guessDestinationType(value) : kind) : null;
   const utm = utmTouched ? utmEnabled : destinationType && destinationType !== tag.destinationType ? defaultUtmEnabled(destinationType) : utmEnabled;
+
+  // The link in the form, or the saved one, against what is printed on the piece: a warning, never a block.
+  const wrongKind = (url: string | null) => {
+    const opens = destinationNotPrinted(tag.face, url);
+    return opens && tag.face ? t("printedForOther", { printed: t(`face_${tag.face}` as "face_none"), opens: t(`dest_${opens}` as "dest_website") }) : null;
+  };
+
+  // A disabled Save says what is missing, in the order the form asks for it.
+  const saveBlocker = saving || blockedByLive ? null
+    : needsLead && !lead ? t("chooseCustomer")
+    : !value ? (kind !== "url" ? content.error : link.trim() ? t("invalidLink") : t("saveNeedsLink"))
+    : null;
 
   const save = async () => {
     if (!value || !destinationType) return notify({ tone: "error", text: kind === "url" ? t("invalidLink") : content.error ?? t("invalidLink") });
@@ -154,11 +176,19 @@ export function CustomerDestinationSection({ commands }: {
           ...(needsLead ? leadPayload(lead) : {}),
         });
         haptic([40, 30, 40]);
-        notify({ tone: "ok", text: t("savedLive") });
+        // The chip is part of putting a piece on the air: a tap opens nothing until it is written.
+        notify({ tone: "ok", text: chipNeedsWriting({ status: "active", nfcStatus: tag.nfcStatus }) ? t("savedLiveWriteChip") : t("savedLive") });
       }
       if (lead && !lead.leadId) void qc.invalidateQueries({ queryKey: ["/api/xpot/leads"] });
       closeEditor();
     } catch (err) {
+      // Another device put this piece live while this form was open: do not keep the half-typed form over a
+      // piece that is no longer the one it was opened for; show the piece as it is now, and say so.
+      if (err instanceof ApiError && err.code === "tag_pause_before_move") {
+        closeEditor();
+        refresh();
+        return notify({ tone: "error", text: t("pieceChangedElsewhere") });
+      }
       notify({ tone: "error", text: errorText(err, tc("requestFailed")) });
       // A customer may have been saved before the destination failed.
       refresh();
@@ -221,6 +251,8 @@ export function CustomerDestinationSection({ commands }: {
   const activatePlan = planTransition(tag, "activate");
   const canToggle = !retired && (live || (activatePlan.ok && (paused || tag.status === "assigned")));
   const canClearCustomer = !retired && !!tag.leadId && planTransition(tag, "unassign").ok;
+  // A sold piece keeps its customer until the sale is cancelled (the sentence at the end of the actions says so).
+  const canChangeCustomer = !retired && !!tag.leadId && tag.saleId === null;
   // The body's main button carries set-up and go-live, so this section does not repeat them.
   const mainAction = commands ? pieceSituation(tag, viewer).action?.kind : undefined;
   const showToggle = canToggle && mainAction !== "goLive" && mainAction !== "reactivate";
@@ -249,42 +281,19 @@ export function CustomerDestinationSection({ commands }: {
       {bare ? null : (<>
       <div className="flex items-center justify-between gap-2">
         <p className={EYEBROW}>{t("setupTitle")}</p>
-        {dest && !retired && (
-          <Button type="button" variant="outline" size="sm" onClick={() => openEditor(false)} data-testid="button-change-destination">
-            <Pencil />
-            {t("changeDestination")}
-          </Button>
-        )}
+        <div className="flex items-center gap-1">
+          {dest && !retired && (
+            <Button type="button" variant="outline" size="sm" onClick={() => openEditor(false)} data-testid="button-change-destination">
+              <Pencil />
+              {t("changeDestination")}
+            </Button>
+          )}
+        </div>
       </div>
 
       {tag.leadId ? (
-        <div className="mt-2 flex items-center gap-1">
-          <Building2 className="h-4 w-4 shrink-0 text-white/40" />
-          <p className="ml-1 min-w-0 flex-1 truncate text-sm font-semibold text-white/80" data-testid="text-tag-lead">
-            {tag.leadName ?? tm("customerNumber", { id: tag.leadId })}
-          </p>
-          {!retired && (
-            <>
-              <button
-                type="button"
-                onClick={() => {
-                  setNewName(tag.leadName ?? "");
-                  setRenameOpen(true);
-                }}
-                aria-label={t("renameCustomer")}
-                title={t("renameCustomer")}
-                className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-white/45 hover:bg-white/10 hover:text-white active:bg-white/10"
-                data-testid="button-edit-customer"
-              >
-                <Pencil className="h-4 w-4" />
-              </button>
-              <Button type="button" variant="ghost" size="sm" onClick={() => openEditor(true)} className="min-h-10" data-testid="button-change-customer">
-                <UserRound />
-                {t("changeCustomerShort")}
-              </Button>
-            </>
-          )}
-        </div>
+        // The customer's name is in the header above; the changes that can be made to it are with the other actions below.
+        <span className="sr-only" data-testid="text-tag-lead">{tag.leadName ?? tm("customerNumber", { id: tag.leadId })}</span>
       ) : dest ? (
         // Set up without a customer (made before the picker was required): Change customer links one.
         <p className="mt-2 flex items-center gap-2 text-sm text-white/45" data-testid="text-tag-lead">
@@ -294,6 +303,7 @@ export function CustomerDestinationSection({ commands }: {
       ) : null}
 
       {dest ? (
+        <>
         <div className="mt-2 flex items-center gap-3">
           <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-violet-500/20 text-violet-200">
             <KindIcon className="h-5 w-5" />
@@ -303,7 +313,7 @@ export function CustomerDestinationSection({ commands }: {
               <p className="truncate text-lg font-bold text-white">{destDisplay}</p>
             ) : (
               <a href={dest} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1.5 text-lg font-bold text-white underline-offset-2 hover:underline active:underline" data-testid="link-destination">
-                <span className="truncate">{destDisplay}</span>
+                <span className="line-clamp-2 min-w-0 break-all">{destDisplay}</span>
                 <ExternalLink className="h-4 w-4 shrink-0 text-violet-300" />
               </a>
             )}
@@ -311,16 +321,18 @@ export function CustomerDestinationSection({ commands }: {
           </div>
           {destKind !== "vcard" && <CopyButton text={dest} label={t("copyLink")} />}
         </div>
+        {wrongKind(dest) ? <div className="mt-2" data-testid="printed-for-other-saved"><InlineAlert tone="warning">{wrongKind(dest)}</InlineAlert></div> : null}
+        </>
       ) : (
         <>
           <p className="mt-2 text-lg font-bold text-white/55">{t("notYetWritten")}</p>
           {/* A piece not in stock yet says so in the header: no warning here, and no button that cannot work. */}
           {stock && stock !== "pending" && (
             <div className="mt-2" data-testid="text-stock-blocked">
-              <InlineAlert tone="warning">{t(`stockBlocked_${stock}`)}</InlineAlert>
+              <InlineAlert tone="warning">{t(`stockBlocked_${stock}`)}{viewer.canManage ? "" : ` ${t("stockBlockedAsk")}`}</InlineAlert>
             </div>
           )}
-          {!retired && !stock && mainAction !== "configure" && (
+          {!retired && !stock && mainAction !== "configure" && !HELD_STOCK.includes(tag.stockStatus) && (
             <Button type="button" variant="brand" accent="tags" size="lg" onClick={() => openEditor(false)} className="mt-3 w-full" data-testid="button-setup-piece">
               <Settings2 className="!size-5" />
               {t("configurePiece")}
@@ -330,7 +342,7 @@ export function CustomerDestinationSection({ commands }: {
       )}
 
       {/* Live or not, and the customer: the same verbs on both screens. */}
-      {(showToggle || canClearCustomer || (tag.leadId && tag.saleId !== null)) && (
+      {(showToggle || canChangeCustomer || (tag.leadId && tag.saleId !== null)) && (
         <div className="mt-3 flex flex-col gap-2 border-t border-white/[0.08] pt-3 sm:flex-row sm:flex-wrap">
           {showToggle && (
             <Button type="button" variant="secondary" onClick={() => void toggle()} loading={toggling} disabled={toggling} className="w-full sm:w-auto" data-testid="button-toggle">
@@ -338,24 +350,51 @@ export function CustomerDestinationSection({ commands }: {
               {live ? t("switchOff") : paused ? t("switchOn") : tm("action_activate_confirm")}
             </Button>
           )}
-          {canClearCustomer && tag.saleId === null && (
-            <Button
-              type="button"
-              variant="secondary"
-              onClick={() => {
-                setActionError(null);
-                setConfirm("unassign");
-              }}
-              className="w-full sm:w-auto"
-              data-testid="button-unlink-piece"
-            >
-              <Unlink className="!size-4 text-red-400" />
-              {t("unlinkFromCustomer")}
+          {canChangeCustomer && (
+            <Button type="button" variant="ghost" onClick={() => openEditor(true)} className="min-w-0 sm:flex-none" data-testid="button-change-customer">
+              <UserRound className="!size-4" />
+              {t("changeCustomerShort")}
             </Button>
           )}
           {tag.leadId && tag.saleId !== null && <p className="text-xs text-white/40 sm:self-center" data-testid="admin-piece-clear-customer-sold">{tm("clearCustomerSold")}</p>}
         </div>
       )}
+      {tag.leadId && !retired ? (
+        <details className="group mt-2 text-sm" data-testid="customer-more-details">
+          <summary className="flex min-h-9 cursor-pointer list-none items-center gap-1.5 text-white/50 hover:text-white [&::-webkit-details-marker]:hidden">
+            {tp("moreCustomer")}
+            <ChevronDown className="h-4 w-4 transition-transform group-open:rotate-180" aria-hidden="true" />
+          </summary>
+          <div className="flex flex-col gap-1 pt-1 sm:flex-row sm:flex-wrap">
+            <Button
+              type="button"
+              variant="ghost"
+              onClick={() => {
+                setNewName(tag.leadName ?? "");
+                setRenameOpen(true);
+              }}
+              data-testid="button-edit-customer"
+            >
+              <Pencil className="!size-4" />
+              {t("renameCustomer")}
+            </Button>
+            {canClearCustomer && tag.saleId === null && (
+              <Button
+                type="button"
+                variant="ghost"
+                onClick={() => {
+                  setActionError(null);
+                  setConfirm("unassign");
+                }}
+                data-testid="button-unlink-piece"
+              >
+                <Unlink className="!size-4 text-red-400" />
+                {t("unlinkFromCustomer")}
+              </Button>
+            )}
+          </div>
+        </details>
+      ) : null}
       {live && <p className="mt-2 text-xs text-emerald-400/90">{tm("liveExplain")}</p>}
       {!live && !retired && tag.status !== "inventory" && !activatePlan.ok && tag.status !== "disabled" ? (
         <p className="mt-2 text-xs text-white/40">{tm(!tag.leadId ? "activateNeedsCustomer" : !tag.destinationUrl ? "activateNeedsUrl" : "activateNeedsType")}</p>
@@ -381,7 +420,7 @@ export function CustomerDestinationSection({ commands }: {
           )}
           {blockedByLive && <InlineAlert tone="warning">{tm("disableBeforeMove")}</InlineAlert>}
           {/* Only where a review link makes sense: a Google review piece, or a customer matched to their Google place. */}
-          {(needsLead ? lead : tag.leadId) && leadPlaceName && (leadPlace || tag.face === "google_review") && (
+          {kind === "url" && (needsLead ? lead : tag.leadId) && leadPlaceName && (leadPlace || tag.face === "google_review") && (
             <GenerateReviewButton
               name={leadPlaceName}
               placeId={leadPlace}
@@ -402,6 +441,7 @@ export function CustomerDestinationSection({ commands }: {
               <div>
                 <FieldLabel>{t("linkField")}</FieldLabel>
                 <LinkInput value={link} onChange={setLink} face={tag.face} placeholder={t("linkPlaceholder")} onPasteFailed={() => notify({ tone: "error", text: tc("pasteFailed") })} />
+                {kind === "url" && wrongKind(value) ? <div className="mt-2" data-testid="printed-for-other"><InlineAlert tone="warning">{wrongKind(value)}</InlineAlert></div> : null}
                 <ReviewLinkAssist
                   link={link}
                   onPick={(place) => {
@@ -416,7 +456,8 @@ export function CustomerDestinationSection({ commands }: {
             <Input value={label} onChange={(e) => setLabel(e.target.value)} placeholder={t("labelPlaceholder")} maxLength={120} className={INPUT_ACCENT} />
           </Field>
           {manage && kind === "url" && (
-            <div className="space-y-2">
+            <details className="group space-y-2" data-testid="destination-technical">
+              <summary className="flex min-h-10 cursor-pointer list-none items-center text-sm font-semibold text-white/60 hover:text-white">{tm("technicalDetails")}</summary>
               <SwitchRow
                 checked={utm}
                 onCheckedChange={(v) => {
@@ -429,12 +470,13 @@ export function CustomerDestinationSection({ commands }: {
               {utm && (
                 <Input value={utmCampaign} onChange={(e) => setUtmCampaign(e.target.value)} placeholder={tm("utmCampaignPlaceholder")} aria-label={tm("utmCampaignPlaceholder")} maxLength={80} className={INPUT_ACCENT} />
               )}
-            </div>
+            </details>
           )}
           {manage && tag.destinationUrl && (
             <Input value={reason} onChange={(e) => setReason(e.target.value)} placeholder={tm("changeReasonPlaceholder")} aria-label={tm("changeReasonPlaceholder")} maxLength={300} className={INPUT_ACCENT} />
           )}
           <SheetActions>
+            {saveBlocker && <p className="text-center text-xs text-white/55" data-testid="save-blocker">{saveBlocker}</p>}
             <Button
               type="button"
               variant="brand"

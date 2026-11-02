@@ -6,6 +6,7 @@ import { commonMessages } from "@/i18n/messages/common";
 import { tagsMessages } from "@/i18n/messages/tags";
 import QrScanner from "./QrScanner";
 import { TagsDashboard } from "./TagsDashboard";
+import { TagsTodo } from "./TagsTodo";
 import {
   APP_BASE,
   classify,
@@ -20,18 +21,20 @@ import {
   useBanner,
 } from "./lib";
 import { Button } from "@/components/ui/button";
+import { InlineAlert } from "@/components/xpot/InlineAlert";
 import {
   ActionTile,
   Banner,
   BottomSheet,
   CARD,
   INPUT,
-  SheetActions,
   TAGS_FILL,
   TapAnimation,
 } from "./ui";
 import { mapNfcError, nfcMode, scanOnce } from "./webNfc";
 import { useIsComputer, useIsDesktop } from "@/hooks/use-is-desktop";
+import { useViewerAccess } from "@/lib/adminMode";
+import { TAG_CODE_LENGTH } from "@shared/tags";
 
 // "read" is the chooser behind the single Read button: QR, chip or typed code.
 type Sheet = { kind: "read" } | { kind: "empty" } | { kind: "nfc" } | null;
@@ -54,6 +57,8 @@ export default function HomeScreen() {
   const [qrOpen, setQrOpen] = useState(false);
   const [sheet, setSheet] = useState<Sheet>(null);
   const [code, setCode] = useState("");
+  // A chip that could not be read is said inside the sheet that is reading it, with a way to read again.
+  const [nfcError, setNfcError] = useState<string | null>(null);
   const [sellTo, setSellToState] = useState(getSellTo);
   const nfcAbort = useRef<AbortController | null>(null);
   // Only Chrome on Android reads a chip in the app. An iPhone's own NFC opens the chip's
@@ -65,6 +70,7 @@ export default function HomeScreen() {
   const isDesktop = useIsDesktop();
   // A tablet at desktop width still has a camera and maybe NFC.
   const isComputer = useIsComputer();
+  const fleet = useViewerAccess().adminMode;
 
   const openCode = useCallback(
     async (tagCode: string) => {
@@ -121,6 +127,7 @@ export default function HomeScreen() {
     stopNfc();
     const ctrl = new AbortController();
     nfcAbort.current = ctrl;
+    setNfcError(null);
     setSheet({ kind: "nfc" });
     try {
       const reading = await scanOnce(ctrl.signal);
@@ -134,10 +141,17 @@ export default function HomeScreen() {
       if (ctrl.signal.aborted) return;
       const e = mapNfcError(err);
       if (e.silent) return;
-      setSheet(null);
-      show({ tone: "error", text: t(e.code) });
+      setNfcError(t(e.code));
     }
   };
+
+  // On a phone a code is whole at its 8th character: open the piece then, without a tap on the arrow.
+  useEffect(() => {
+    if (isDesktop || (sheet?.kind !== "read" && sheet?.kind !== "empty")) return;
+    const typed = classify(code);
+    if (typed.kind === "xpot" && code.replace(/[s-]/g, "").length === TAG_CODE_LENGTH) void openCode(typed.code);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [code]);
 
   const submitCode = () => {
     if (isDesktop) {
@@ -162,6 +176,8 @@ export default function HomeScreen() {
         submitCode();
       }}
     >
+      {/* The same name as the phone's button, so the screen is one thing on every device. */}
+      {isComputer && <h2 className="mb-3 text-lg font-bold tracking-tight text-white">{t("readPiece")}</h2>}
       <label htmlFor="tag-code" className="mb-1.5 block text-xs font-semibold text-white/60">
         {isComputer ? t("typeCode") : t("orTypeCode")}
       </label>
@@ -196,6 +212,8 @@ export default function HomeScreen() {
         </Button>
       </div>
       {isDesktop && <p className="mt-2 text-xs text-white/35">{t("scannerHint")}</p>}
+      {/* The arrow stays off until the code is whole; say what a whole one is. */}
+      {!isDesktop && code.trim().length > 0 && code.trim().length < 8 && <p className="mt-2 text-xs text-white/50" data-testid="code-hint">{t("invalidCode")}</p>}
     </form>
   );
 
@@ -246,12 +264,16 @@ export default function HomeScreen() {
 
       {isComputer && codeForm}
 
-      {/* Real activity: scans over time, recent scans, top pieces and customers. */}
-      <TagsDashboard />
+      {/* A reseller: what is waiting for them, and the results one link away. A manager in a panel's work view: the whole fleet's numbers. */}
+      {fleet ? <TagsDashboard /> : <TagsTodo />}
 
       {qrOpen && (
         <QrScanner
           onClose={() => setQrOpen(false)}
+          onTypeCode={() => {
+            setQrOpen(false);
+            setSheet({ kind: "read" });
+          }}
           onResult={(text) => {
             setQrOpen(false);
             void handleScan(text);
@@ -306,7 +328,7 @@ export default function HomeScreen() {
           )}
         </div>
         <div className="mt-5 border-t border-white/10 pt-4">{codeForm}</div>
-        <Button type="button" variant="ghost" size="lg" onClick={() => setSheet(null)} className="mt-4 w-full">
+        <Button type="button" variant="ghost" size="lg" onClick={() => setSheet(null)} className="mt-1 w-full">
           {tc("cancel")}
         </Button>
       </BottomSheet>
@@ -319,7 +341,19 @@ export default function HomeScreen() {
         }}
         title={t("readPiece")}
       >
-        <TapAnimation identity="xpot" icon={Nfc} label={t("readingTitle")} sub={t("readingSub")} />
+        {nfcError ? (
+          <div className="mb-3" data-testid="nfc-read-error">
+            <InlineAlert tone="error">{nfcError}</InlineAlert>
+          </div>
+        ) : null}
+        {nfcError ? (
+          <Button type="button" variant="brand" accent="tags" size="lg" onClick={() => void startNfc()} className="mb-2 w-full" data-testid="button-read-again">
+            <Nfc className="!size-5" />
+            {tc("retry")}
+          </Button>
+        ) : (
+          <TapAnimation identity="xpot" icon={Nfc} label={t("readingTitle")} sub={t("readingSub")} />
+        )}
         <Button
           type="button"
           variant="ghost"
@@ -335,15 +369,21 @@ export default function HomeScreen() {
       </BottomSheet>
 
       <BottomSheet open={sheet?.kind === "empty"} onClose={() => setSheet(null)} title={t("chipEmpty")}>
-        <SheetActions className="mt-2">
-          <Button type="button" variant="brand" accent="tags" size="lg" onClick={() => navigate(directPath())} className="w-full">
-            <Link2 className="!size-5" />
-            {t("openDirect")}
-          </Button>
-          <Button type="button" variant="ghost" size="lg" onClick={() => setSheet(null)} className="w-full">
-            {tc("close")}
-          </Button>
-        </SheetActions>
+        <p className="mb-3 text-sm text-white/70">{t("chipEmptyHint")}</p>
+        {codeForm}
+        {/* Rare, so a small link: a chip that is to hold the customer's own link, with no piece behind it. */}
+        <button
+          type="button"
+          onClick={() => navigate(directPath())}
+          className="mt-3 flex min-h-10 w-full items-center justify-center gap-1.5 text-sm text-white/50 underline underline-offset-2 hover:text-white/80"
+          data-testid="link-write-direct"
+        >
+          <Link2 className="h-4 w-4" />
+          {t("navDirect")}
+        </button>
+        <Button type="button" variant="ghost" size="lg" onClick={() => setSheet(null)} className="mt-1 w-full">
+          {tc("close")}
+        </Button>
       </BottomSheet>
     </div>
   );

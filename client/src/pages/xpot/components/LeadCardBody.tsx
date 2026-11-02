@@ -48,10 +48,13 @@ export function LeadCardBody({
   lead,
   subtitle,
   right,
+  compact,
 }: {
   lead: LeadLike;
   subtitle?: React.ReactNode;
   right?: React.ReactNode;
+  /** The list card: name, city and state, what was sold. Phone, website and the route belong to the company's own page. */
+  compact?: boolean;
 }) {
   const t = useT(salesModuleMessages);
   const tl = useT(leadsMessages);
@@ -70,7 +73,7 @@ export function LeadCardBody({
             <Building2 className="h-7 w-7 text-white/40" aria-hidden="true" />
           </div>
         )}
-        {routeUrl && (
+        {routeUrl && !compact && (
           <a
             href={routeUrl}
             target="_blank"
@@ -92,13 +95,17 @@ export function LeadCardBody({
           {lead.ghlContactId && <Pill tone="slate" className="shrink-0">GHL</Pill>}
         </div>
         <div className="mt-0.5 space-y-0.5">
-          {loc?.addressLine1 && (
+          {compact ? (
+            (loc?.city || loc?.state) && (
+              <div className="truncate text-[11px] font-medium text-white/40">{[loc.city, loc.state].filter(Boolean).join(", ")}</div>
+            )
+          ) : loc?.addressLine1 && (
             <div className="truncate text-[11px] font-medium text-white/40">
               {loc.addressLine1}
               {loc.city ? `, ${loc.city}` : ""}
             </div>
           )}
-          <div className="flex flex-wrap items-center gap-x-2 gap-y-0 text-[11px] font-medium text-white/35">
+          <div className={`${compact ? "hidden " : ""}flex flex-wrap items-center gap-x-2 gap-y-0 text-[11px] font-medium text-white/35`}>
             {lead.phone && <span>{displayPhone(lead.phone)}</span>}
             {lead.phone && lead.website && <span className="text-white/15">·</span>}
             {lead.website && (

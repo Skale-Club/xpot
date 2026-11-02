@@ -1,7 +1,9 @@
 // The Sales and Consignments sub-tabs: browse what was sold and what is out
 // on other people's shelves.
 
-import { useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { apiRequest } from "@/lib/queryClient";
 import { MousePointerClick, Package, PackagePlus, Tag, X, XCircle } from "lucide-react";
 import { useIsDesktop } from "@/hooks/use-is-desktop";
 import { MasterDetail } from "@/components/xpot/MasterDetail";
@@ -13,6 +15,7 @@ import { EYEBROW, GLASS_CLASS } from "@/components/xpot/surface";
 import { salesMessages } from "@/i18n/messages/sales";
 import { formatCents } from "../../utils";
 import { useLeads } from "../../hooks/useLeads";
+import { useShowProfit } from "../../hooks/useShowProfit";
 import {
   useConsignments, useConsignmentDetail, useSalesMutations,
   usePaymentOptions, type ConsignmentWithRefs, type PaymentMethod, type PaymentStatus, type SaleWithItems,
@@ -91,18 +94,20 @@ export function SalesList({ selectedId = null, onSelect }: {
   const t = useT(salesModuleMessages);
   const tc = useT(commonMessages);
   const ts = useT(salesMessages);
-  // ?period=30|90|all&origin=tags
-  const filters = useUrlFilters({ period: "90", origin: "" });
-  const period = (["30", "90", "all"] as const).find((value) => value === filters.values.period) ?? "90";
+  // ?period=7|30|90|all&origin=tags&status=cancelled (the same 7, 30 and 90 days as the overview, 30 by default)
+  const filters = useUrlFilters({ period: "30", origin: "", status: "" });
+  const period = (["7", "30", "90", "all"] as const).find((value) => value === filters.values.period) ?? "30";
   const days = period === "all" ? undefined : Number(period);
   const source = filters.values.origin === "tags" ? "tags" : "";
+  const cancelledOnly = filters.values.status === "cancelled";
   // 50 sales at a time; older ones load as you reach the end of the list.
   const salesPages = useOffsetPages<SaleWithItems>({
-    queryKey: ["/api/xpot/sales", "list", { days, source }],
+    queryKey: ["/api/xpot/sales", "list", { days, source, cancelledOnly }],
     url: (offset, limit) => {
       const params = new URLSearchParams({ limit: String(limit), offset: String(offset) });
       if (days) params.set("days", String(days));
       if (source) params.set("source", source);
+      if (cancelledOnly) params.set("status", "cancelled");
       return `/api/xpot/sales?${params}`;
     },
   });
@@ -112,8 +117,27 @@ export function SalesList({ selectedId = null, onSelect }: {
   const salesPager = <ListPager shown={salesPages.items.length} hasMore={salesPages.hasMore} onMore={salesPages.loadMore} loading={salesPages.loadingMore} />;
   const [detail, setDetail] = useState<SaleWithItems | null>(null);
   const isDesktop = useIsDesktop() && Boolean(onSelect);
-  const selected = selectedId != null ? query.data?.find((r) => r.sale.id === selectedId) ?? null : null;
-  const [pickerOpen, setPickerOpen] = useState(false);
+  // A link opens its sale by id, whatever the filters and the loaded pages: a cancelled or older sale is not "missing".
+  const inList = selectedId != null ? query.data?.find((r) => r.sale.id === selectedId) ?? null : null;
+  const byId = useQuery<SaleWithItems>({
+    queryKey: ["/api/xpot/sales", "one", selectedId],
+    queryFn: async () => (await apiRequest("GET", `/api/xpot/sales/${selectedId}`)).json(),
+    enabled: selectedId != null && !inList,
+    retry: false,
+  });
+  const selected = inList ?? byId.data ?? null;
+  // On a phone the same id opens the sale in a sheet.
+  const sheetRow = !isDesktop && selectedId != null ? selected : detail;
+  const closeSheet = () => { if (selectedId != null && onSelect) onSelect(null); else setDetail(null); };
+  // The empty overview sends the rep here (?new=1) with the company picker already open.
+  const [pickerOpen, setPickerOpen] = useState(() => typeof window !== "undefined" && new URLSearchParams(window.location.search).get("new") === "1");
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("new") !== "1") return;
+    params.delete("new");
+    const rest = params.toString();
+    window.history.replaceState(window.history.state, "", `${window.location.pathname}${rest ? `?${rest}` : ""}`);
+  }, []);
   const [target, setTarget] = useState<{ id: number; name: string } | null>(null);
 
   return (
@@ -121,6 +145,13 @@ export function SalesList({ selectedId = null, onSelect }: {
       <FilterBar
         testId="sales-filters"
         controls={
+          <>
+          <FilterSelect
+            value={cancelledOnly ? "cancelled" : ""}
+            onChange={(status) => filters.set({ status })}
+            placeholder={t("allStatuses")}
+            options={[{ value: "cancelled", label: t("chipCancelled") }]}
+          />
           <FilterSelect
             value={source}
             onChange={(origin) => filters.set({ origin })}
@@ -128,17 +159,19 @@ export function SalesList({ selectedId = null, onSelect }: {
             icon={Tag}
             options={[{ value: "tags", label: t("tagsOrigin") }]}
           />
+          </>
         }
         actions={
-          <Button type="button" variant="money" onClick={() => setPickerOpen(true)}>
-            <Package aria-hidden="true" /> {t("newShort")}
+          <Button type="button" variant="brand" onClick={() => setPickerOpen(true)}>
+            <Package aria-hidden="true" /> {t("newSale")}
           </Button>
         }
         secondary={
           <FilterChips
             items={[
-              { id: "30", label: t("daysShort", { days: 30 }) },
-              { id: "90", label: t("daysShort", { days: 90 }) },
+              { id: "7", label: t("rangeDays", { days: 7 }) },
+              { id: "30", label: t("rangeDays", { days: 30 }) },
+              { id: "90", label: t("rangeDays", { days: 90 }) },
               { id: "all", label: t("rangeAll") },
             ]}
             value={period}
@@ -153,7 +186,9 @@ export function SalesList({ selectedId = null, onSelect }: {
       {failed && <ErrorState message={ts("listLoadFailed")} onRetry={() => void salesPages.refetch()} />}
 
       {query.data?.length === 0 && !query.isLoading && !(isDesktop && selectedId != null) && (
-        <EmptyState compact icon={Package} title={t("noSalesYet")} />
+        <EmptyState compact icon={Package} title={t("noSalesYet")}>
+          <Button type="button" variant="brand" size="sm" onClick={() => setPickerOpen(true)}>{t("newSale")}</Button>
+        </EmptyState>
       )}
 
       {isDesktop ? (
@@ -173,7 +208,7 @@ export function SalesList({ selectedId = null, onSelect }: {
               <DetailCard title={selected.lead?.name ?? t("saleFallback")} onClose={() => onSelect!(null)}>
                 <SaleDetailBody key={selected.sale.id} row={selected} onDone={() => onSelect!(null)} />
               </DetailCard>
-            ) : query.isLoading ? null : (
+            ) : query.isLoading || byId.isLoading ? null : (
               <EmptyState compact icon={Package} title={t("saleNotInList")} />
             )}
             placeholder={<PickPlaceholder what="sale" />}
@@ -181,7 +216,7 @@ export function SalesList({ selectedId = null, onSelect }: {
         )
       ) : (
         <div className="space-y-2">
-          {query.data?.map((row) => <SaleCard key={row.sale.id} row={row} onOpen={() => setDetail(row)} />)}
+          {query.data?.map((row) => <SaleCard key={row.sale.id} row={row} onOpen={() => (onSelect ? onSelect(row.sale.id) : setDetail(row))} />)}
           {salesPager}
         </div>
       )}
@@ -190,7 +225,7 @@ export function SalesList({ selectedId = null, onSelect }: {
       {target && (
         <SaleDialog open onOpenChange={(o) => { if (!o) setTarget(null); }} leadId={target.id} leadName={target.name} />
       )}
-      <SaleDetailDialog row={detail} onClose={() => setDetail(null)} />
+      <SaleDetailDialog row={sheetRow} onClose={closeSheet} />
     </div>
   );
 }
@@ -211,6 +246,7 @@ function SaleDetailBody({ row, onDone }: { row: SaleWithItems; onDone: () => voi
   const t = useT(salesModuleMessages);
   const { statusOptions, methodOptions } = usePaymentOptions();
   const { cancelSale, updatePayment } = useSalesMutations();
+  const showProfit = useShowProfit();
   const [editing, setEditing] = useState(false);
   const [paymentStatus, setPaymentStatus] = useState<PaymentStatus>("paid");
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod | "">("");
@@ -245,7 +281,7 @@ function SaleDetailBody({ row, onDone }: { row: SaleWithItems; onDone: () => voi
           open={confirmCancel}
           onOpenChange={setConfirmCancel}
           title={t("cancelSaleTitle")}
-          description={t("cancelSaleDesc")}
+          description={showProfit ? t("cancelSaleDesc") : t("cancelSaleDescMember")}
           confirmLabel={t("cancelSale")}
           cancelLabel={t("keepSale")}
           destructive
@@ -304,9 +340,20 @@ export function ConsignmentsList({ selectedId = null, onSelect }: {
   const filters = useUrlFilters({ state: "active" });
   const status = filters.values.state === "closed" ? "closed" : "active";
   const query = useConsignments({ status });
+  // A link to a finished agreement shows it: the list switches to Closed instead of saying nothing is out.
+  const linked = useConsignmentDetail(selectedId);
+  const linkedStatus = linked.data?.consignment.status;
+  useEffect(() => {
+    if (linkedStatus === "closed" && status === "active") filters.set({ state: "closed" });
+  }, [linkedStatus]);
   const [settleRow, setSettleRow] = useState<ConsignmentWithRefs | null>(null);
+  const [correct, setCorrect] = useState<{ row: ConsignmentWithRefs; delta: number } | null>(null);
   const [returnRow, setReturnRow] = useState<ConsignmentWithRefs | null>(null);
   const [detailId, setDetailId] = useState<number | null>(null);
+  // On a phone the id in the link opens the same sheet as a tap.
+  const sheetId = !isDesktop && selectedId != null ? selectedId : detailId;
+  const closeSheet = () => { if (selectedId != null && onSelect) onSelect(null); else setDetailId(null); };
+  const openSheet = (id: number) => (onSelect ? onSelect(id) : setDetailId(id));
   const [pickerOpen, setPickerOpen] = useState(false);
   const [depositTarget, setDepositTarget] = useState<{ id: number; name: string } | null>(null);
 
@@ -359,6 +406,7 @@ export function ConsignmentsList({ selectedId = null, onSelect }: {
 
       {isDesktop && (rows.length > 0 || selectedId != null) && (
         <MasterDetail
+          bareWhenEmpty
           closeLabel={tc("close")}
           onClose={() => onSelect!(null)}
           list={rows.length === 0 ? (
@@ -394,7 +442,7 @@ export function ConsignmentsList({ selectedId = null, onSelect }: {
               onSettle={() => setSettleRow(row)}
               onRestock={() => setDepositTarget({ id: row.consignment.leadId, name: row.lead?.name ?? "" })}
               onReturn={() => setReturnRow(row)}
-              onOpen={() => setDetailId(row.consignment.id)} />
+              onOpen={() => openSheet(row.consignment.id)} />
           ))}
         </div>
       )}
@@ -405,7 +453,7 @@ export function ConsignmentsList({ selectedId = null, onSelect }: {
             onSettle={status === "active" ? () => setSettleRow(row) : undefined}
             onRestock={status === "active" ? () => setDepositTarget({ id: row.consignment.leadId, name: row.lead?.name ?? "" }) : undefined}
             onReturn={status === "active" ? () => setReturnRow(row) : undefined}
-            onOpen={() => setDetailId(row.consignment.id)} />
+            onOpen={() => openSheet(row.consignment.id)} />
         ))}
         {!isDesktop && <ListPager shown={pagedRest.shown} total={pagedRest.total} hasMore={pagedRest.hasMore} onMore={pagedRest.showMore} />}
       </div>
@@ -416,9 +464,11 @@ export function ConsignmentsList({ selectedId = null, onSelect }: {
           leadId={depositTarget.id} leadName={depositTarget.name}
           existing={rows.filter((r) => r.consignment.leadId === depositTarget.id)} />
       )}
-      <SettleDialog open={Boolean(settleRow)} onOpenChange={(o) => !o && setSettleRow(null)} row={settleRow} />
+      <SettleDialog open={Boolean(settleRow)} onOpenChange={(o) => !o && setSettleRow(null)} row={settleRow}
+        onCorrectStock={(row, delta) => { setSettleRow(null); setCorrect({ row, delta }); }} />
+      <AdjustDialog open={Boolean(correct)} onOpenChange={(o) => !o && setCorrect(null)} row={correct?.row ?? null} initialDelta={correct?.delta} onDone={() => query.refetch()} />
       <ReturnDialog open={Boolean(returnRow)} onOpenChange={(o) => !o && setReturnRow(null)} row={returnRow} />
-      <ConsignmentDetailDialog id={detailId} onClose={() => setDetailId(null)} />
+      <ConsignmentDetailDialog id={sheetId} onClose={closeSheet} />
     </div>
   );
 }

@@ -4,7 +4,7 @@
 import { describe, expect, it } from "vitest";
 import { TAG_STATUSES, TAG_STOCK_STATUSES } from "../shared/tags";
 import { matchesStockMetric, TAG_STOCK_METRIC_NAMES, type StockMetricPiece } from "../shared/tagMetrics";
-import { isWhere, pieceWhere, WHERE_CHIPS, WHERE_OPTIONS, whereQuery, whereSelection } from "../client/src/pages/admin/tags/where-model";
+import { houseFilterQuery, isWhere, pieceWhere, WHERE_CHIPS, WHERE_OPTIONS, whereQuery, whereSelection } from "../client/src/pages/admin/tags/where-model";
 
 const url = (where: string, status = "", stock = "") => ({ where, status, stock });
 const piece = (p: Partial<StockMetricPiece>): StockMetricPiece => ({ repId: null, status: "inventory", stockStatus: "available", saleId: null, ...p });
@@ -122,5 +122,21 @@ describe("pieceWhere", () => {
     for (const p of pieces.filter((x) => matchesStockMetric(x, "sold"))) expect(pieceWhere(p).place).toBe("sold");
     for (const p of pieces.filter((x) => matchesStockMetric(x, "live"))) expect(pieceWhere(p).live).toBe(true);
     for (const p of pieces.filter((x) => !matchesStockMetric(x, "live"))) expect(pieceWhere(p).live).toBe(false);
+  });
+});
+
+describe("houseFilterQuery: the reseller filter's Company stock opens what the In company stock chip opens", () => {
+  it("is the house number on its own, so the list and the chip count the same pieces", () => {
+    expect(houseFilterQuery({}, "house")).toEqual({ metric: "house" });
+    expect(houseFilterQuery(whereQuery({ where: "house", status: "", stock: "" }), "house")).toEqual({ metric: "house" });
+  });
+  it("only means no reseller beside another place, so Sold or Damaged are not emptied", () => {
+    expect(houseFilterQuery({ metric: "sold" }, "house")).toEqual({ metric: "sold", house: true });
+    expect(houseFilterQuery({ metric: "damaged" }, "house")).toEqual({ metric: "damaged", house: true });
+    expect(houseFilterQuery({ stockStatus: "lost" }, "house")).toEqual({ metric: undefined, house: true });
+  });
+  it("leaves any other reseller alone", () => {
+    expect(houseFilterQuery({ metric: "live" }, "")).toEqual({ metric: "live" });
+    expect(houseFilterQuery({}, "7")).toEqual({ metric: undefined });
   });
 });

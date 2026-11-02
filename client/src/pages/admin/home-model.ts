@@ -1,8 +1,10 @@
 // Panel home ("Today"): the rows of what needs the person, each a count, a one-line description and the list behind
 // it, by profile (shared/profiles.ts). Rows at zero are left out, so an empty list means "Nothing waiting". Pure,
 // unit-tested (tests/admin-home.test.ts).
-//   platform  block Platform: people waiting for approval, Stuscle orders to separate;
-//             block My company: plates to print, files stuck, failed prints, then the Tags queues of the company.
+//   platform  three blocks by what the work is: People and orders (approvals, Stuscle orders to separate), Production
+//             (plates to print, files stuck, failed prints, batches awaiting pieces) and Pieces (the Tags queues of
+//             every organization: a count here is what the list it opens shows, and that list holds every organization's
+//             pieces too).
 //   partner   the same as My company, for their organization.
 //   owner     team purchases still to arrive, then chips to write, scanned but not live, no product.
 
@@ -26,10 +28,12 @@ export interface TodayRow {
   /** The row's words live in the Panel (workspaces) or the Tags flow dictionary. */
   label: { dict: "home"; key: HomeKey } | { dict: "flow"; key: FlowKey };
   hint: { dict: "home"; key: HomeKey } | { dict: "flow"; key: FlowKey };
+  /** Something broke: it goes first in its block, in red. The routine rows are what is simply next in line. */
+  urgent?: boolean;
 }
 
-/** The platform's home has two blocks, with headings; everyone else's is a single list. */
-export type TodayBlockId = "platform" | "company" | "organization";
+/** The platform's home has three blocks, with headings; everyone else's is a single list. */
+export type TodayBlockId = "people" | "production" | "pieces" | "organization";
 export interface TodayBlock {
   id: TodayBlockId;
   rows: TodayRow[];
@@ -72,7 +76,7 @@ export interface TodayInput {
   profile: Profile;
   /** All the print requests (platform and partner only); undefined while loading or when not allowed. */
   requests?: PrintRequestItem[];
-  /** The Tags overview queues: the company's for the platform, the organization's for anyone else; undefined while loading or without Tags access. */
+  /** The Tags overview queues: every organization's for the platform, the organization's for anyone else; undefined while loading or without Tags access. */
   queues?: TagQueueCounts;
   /** Platform: wholesale orders still pending, to separate. */
   pendingOrders?: number;
@@ -93,16 +97,19 @@ export function todayFailure(error: unknown): unknown {
 
 const home = (key: HomeKey) => ({ dict: "home", key }) as const;
 
-/** The production rows (plates, files, failures, batches) and the Tags queues of one organization's pieces. */
-function productionRows({ profile, requests, queues, now }: TodayInput): TodayRow[] {
+/** The production rows (plates, files, failures) of the company's print jobs. */
+function plateRows({ requests, now }: TodayInput): TodayRow[] {
   const plates = plateCounts(requests, now);
-  const rows: TodayRow[] = [
+  return [
     { id: "platesToPrint", count: plates.toPrint, href: `${TAGS}/production/queue`, label: home("todayPlatesToPrint"), hint: home("todayPlatesToPrintHint") },
-    { id: "filesStuck", count: plates.stuck, href: `${TAGS}/production/queue`, label: home("todayFilesStuck"), hint: home("todayFilesStuckHint") },
-    { id: "printsFailed", count: plates.failed, href: `${TAGS}/production/queue`, label: home("todayPrintsFailed"), hint: home("todayPrintsFailedHint") },
+    { id: "filesStuck", count: plates.stuck, href: `${TAGS}/production/queue`, label: home("todayFilesStuck"), hint: home("todayFilesStuckHint"), urgent: true },
+    { id: "printsFailed", count: plates.failed, href: `${TAGS}/production/queue`, label: home("todayPrintsFailed"), hint: home("todayPrintsFailedHint"), urgent: true },
   ];
-  rows.push(...queueRows(profile, queues, ["stuscleOrders"]));
-  return rows;
+}
+
+/** The production rows and the Tags queues of one organization's pieces (a partner's). */
+function productionRows(input: TodayInput): TodayRow[] {
+  return [...plateRows(input), ...queueRows(input.profile, input.queues, ["stuscleOrders"])];
 }
 
 /** The overview's queue cards the profile can open (batches are production's), except the ones listed in `skip`. */
@@ -118,12 +125,15 @@ export function todayBlocks(input: TodayInput): TodayBlock[] {
   const { profile } = input;
   const blocks: TodayBlock[] = [];
   if (profile === "platform") {
-    blocks.push({ id: "platform", rows: [
+    const queues = queueRows(profile, input.queues, ["stuscleOrders"]);
+    blocks.push({ id: "people", rows: [
       { id: "peopleWaiting", count: input.pendingPeople ?? 0, href: "/admin/reps?status=pending", label: home("todayPeopleWaiting"), hint: home("todayPeopleWaitingHint") },
       // The wholesale orders come from their own list, so the overview's identical queue is not counted twice.
       { id: "stuscleOrders", count: input.pendingOrders ?? 0, href: `${TAGS}/kits?view=orders`, label: { dict: "flow", key: "queueStuscleOrders" }, hint: { dict: "flow", key: "queueStuscleOrdersHint" } },
     ] });
-    blocks.push({ id: "company", rows: productionRows(input) });
+    // Batches waiting for their pieces are production's, next to the plates; the other queues are about the pieces themselves.
+    blocks.push({ id: "production", rows: [...plateRows(input), ...queues.filter((row) => row.id === "batchesNotReceived")] });
+    blocks.push({ id: "pieces", rows: queues.filter((row) => row.id !== "batchesNotReceived") });
   } else if (profile === "partner") {
     blocks.push({ id: "organization", rows: productionRows(input) });
   } else if (profile === "owner") {
@@ -132,7 +142,9 @@ export function todayBlocks(input: TodayInput): TodayBlock[] {
       ...queueRows(profile, input.queues, ["stuscleOrders"]),
     ] });
   }
-  return blocks.map((block) => ({ ...block, rows: block.rows.filter((row) => row.count > 0) })).filter((block) => block.rows.length > 0);
+  // What is broken first (a stable sort: the rest keeps the order it is worked in).
+  const urgentFirst = (rows: TodayRow[]) => [...rows.filter((row) => row.urgent), ...rows.filter((row) => !row.urgent)];
+  return blocks.map((block) => ({ ...block, rows: urgentFirst(block.rows.filter((row) => row.count > 0)) })).filter((block) => block.rows.length > 0);
 }
 
 /** Every row of every block, in order. */

@@ -34,6 +34,17 @@ const WHERE_QUERY: Record<Where, WhereQuery> = {
   retired: { status: "retired" },
 };
 
+/**
+ * The reseller filter's "Company stock" (`rep=house`) next to a place. Alone it asks what the "In company stock" chip asks (the
+ * shared house number), so both open the same pieces. Beside another place (Sold, Damaged, a status) it only means no reseller.
+ */
+export function houseFilterQuery(place: WhereQuery, rep: string): { metric?: TagStockMetric; house?: true } {
+  if (rep !== "house") return { metric: place.metric };
+  const alone = !place.metric && !place.status && !place.stockStatus;
+  if (alone) return { metric: "house" };
+  return place.metric === "house" ? { metric: "house" } : { metric: place.metric, house: true };
+}
+
 export const isWhere = (v: string): v is Where => (WHERE_OPTIONS as readonly string[]).includes(v);
 
 /** Old URLs: `?stock=` (house|reps|sold|<stock status>) and `?status=` (<status>) said the same thing as one bucket. */

@@ -10,6 +10,7 @@ import { createSyncRouter } from "./sync.js";
 import { createPlaceSearchRouter } from "./place-search.js";
 import { createMapRouter } from "./map.js";
 import { createAdminRouter } from "./admin.js";
+import { createTeamResultsRouter } from "./teamActivity.js";
 import { createAdminIntegrationsRouter } from "./admin-integrations.js";
 import { createBrandingPublicRouter, createBrandingAdminRouter } from "./branding.js";
 import { createLandingContentAdminRouter, createLandingContentPublicRouter } from "./landing-content.js";
@@ -19,6 +20,7 @@ import { createSalesRouter } from "./sales.js";
 import { createConsignmentsRouter } from "./consignments.js";
 import { createVisitActionsRouter } from "./visit-actions.js";
 import { requireVisitsModule, VISITS_ONLY_PATHS } from "./middleware.js";
+import { hideProfitFromMembers } from "./profitVisibility.js";
 import { createFilesRouter } from "./files.js";
 import { createProspectingRouter } from "./prospecting.js";
 import { createOrganizationsRouter } from "./organizations.js";
@@ -45,12 +47,14 @@ export function registerXpotRoutes(app: Express) {
   app.use("/api/xpot", createPlaceSearchRouter());
   app.use("/api/xpot", createMapRouter());
   app.use("/api/xpot", createProspectingRouter());
+  app.use("/api/xpot", createTeamResultsRouter());
   app.use("/api/xpot", createAdminRouter());
   app.use("/api/xpot", createAdminIntegrationsRouter());
   app.use("/api/xpot", createSystemHealthRouter());
   app.use("/api/xpot", createBrandingAdminRouter());
   app.use("/api/xpot", createLandingContentAdminRouter());
-  // Sales module: catalog, direct sales, consigned stock.
+  // Sales module: catalog, direct sales, consigned stock. A member never receives cost or profit.
+  app.use(["/api/xpot/products", "/api/xpot/sales", "/api/xpot/consignments"], hideProfitFromMembers);
   app.use("/api/xpot", createProductsRouter());
   app.use("/api/xpot", createSalesRouter());
   app.use("/api/xpot", createConsignmentsRouter());

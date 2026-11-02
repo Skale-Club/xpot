@@ -1,14 +1,17 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { Link } from "wouter";
-import { ArrowLeft, ArrowRight, Check, ChevronDown, ClipboardPaste, Copy, Link2, Nfc, X, type LucideIcon } from "lucide-react";
-import { chipNeedsWriting, formatPhoneMask, isSocialNetwork, looksLikeLink, normalizeUrlInput, SOCIAL_NETWORKS, socialHandleOf, socialNetworkOf, socialUrl, type SocialNetwork } from "@shared/tagApp";
-import { stockBlock } from "@shared/tags";
+import { createPortal } from "react-dom";
+import { Link, useLocation } from "wouter";
+import { ArrowLeft, ArrowRight, Check, ChevronDown, ClipboardPaste, Copy, Link2, X, type LucideIcon } from "lucide-react";
+import { formatPhoneMask, isSocialNetwork, looksLikeLink, normalizeUrlInput, SOCIAL_NETWORKS, socialHandleOf, socialNetworkOf, socialUrl, type SocialNetwork } from "@shared/tagApp";
+import { PieceChipPill, PieceStatusPill } from "@/components/piece/PieceStatusPill";
 import { Button } from "@/components/ui/button";
 import { Loader2 } from "@/components/ui/loader";
+import { useOnline } from "@/components/xpot/AccountMenu";
+import { phoneBarHidden } from "@/components/xpot/moduleNav";
 import { FIELD_CONTROL } from "@/components/xpot/Field";
 import { InlineAlert } from "@/components/xpot/InlineAlert";
 import { TagFaceIcon } from "@/components/xpot/TagFaceIcon";
-import { CHIP_STATUS_TONE, PIECE_STATUS_TONE, Pill, SOLD_TONE, STOCK_STATUS_TONE } from "@/components/xpot/StatusPill";
+import { Pill } from "@/components/xpot/StatusPill";
 import { ACCENT_SELECTED, EYEBROW as KIT_EYEBROW, GLASS_CLASS, MODULE_ACCENT, OVERLAY_CLASS, SURFACE_MODAL_CLASS } from "@/components/xpot/surface";
 import { useT } from "@/i18n";
 import { commonMessages } from "@/i18n/messages/common";
@@ -74,29 +77,36 @@ export function TopBar({
   titleClassName?: string;
 }) {
   const t = useT(commonMessages);
+  const tt = useT(tagsMessages);
+  const online = useOnline();
+  const [path] = useLocation();
   // Back, title and the right-hand slot share one row: a row of its own for the
   // back arrow left a tall empty band above every screen.
   return (
-    <header className="mb-4 flex items-start gap-2">
-      {back && (
-        <Link
-          href={back}
-          onClick={onBack ? (e) => { e.preventDefault(); onBack(); } : undefined}
-          aria-label={t("back")}
-          className="-ml-2 mt-0.5 flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-white/80 active:bg-white/10"
-        >
-          <ArrowLeft className="h-5 w-5" />
-        </Link>
-      )}
-      <div className="min-w-0 flex-1">
-        {eyebrow && <p className={identity === "direct" ? EYEBROW_MUTED : EYEBROW}>{eyebrow}</p>}
-        <h1 className={`mt-0.5 break-words text-[26px] font-extrabold leading-tight tracking-tight text-white ${titleClassName}`}>{title}</h1>
-        {sub && <div className="mt-1.5">{sub}</div>}
-      </div>
-      {/* Top-aligned with the title: the piece's picture, not a floating badge. */}
-      {picture && <div className="mt-1 shrink-0 self-start">{picture}</div>}
-      {right && <div className="shrink-0">{right}</div>}
-    </header>
+    <>
+      {/* The phone bar shows this on the screens you start from; the ones inside something (a piece) have none, so this bar does. */}
+      {!online && phoneBarHidden(path) && <p className="mb-3 rounded-2xl border border-red-500/20 bg-red-500/10 px-4 py-3 text-sm text-red-300 lg:hidden" role="status" data-testid="offline-strip">{tt("offlineNotice")}</p>}
+      <header className="mb-4 flex items-start gap-2">
+        {back && (
+          <Link
+            href={back}
+            onClick={onBack ? (e) => { e.preventDefault(); onBack(); } : undefined}
+            aria-label={t("back")}
+            className="-ml-2 mt-0.5 flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-white/80 active:bg-white/10"
+          >
+            <ArrowLeft className="h-5 w-5" />
+          </Link>
+        )}
+        <div className="min-w-0 flex-1">
+          {eyebrow && <p className={identity === "direct" ? EYEBROW_MUTED : EYEBROW}>{eyebrow}</p>}
+          <h1 className={`mt-0.5 break-words text-[26px] font-extrabold leading-tight tracking-tight text-white ${titleClassName}`}>{title}</h1>
+          {sub && <div className="mt-1.5">{sub}</div>}
+        </div>
+        {/* Top-aligned with the title: the piece's picture, not a floating badge. */}
+        {picture && <div className="mt-1 shrink-0 self-start">{picture}</div>}
+        {right && <div className="shrink-0">{right}</div>}
+      </header>
+    </>
   );
 }
 
@@ -167,41 +177,16 @@ export { Pill, type PillTone } from "@/components/xpot/StatusPill";
 export { PIECE_STATUS_TONE as STATUS_TONE, CHIP_STATUS_TONE as CHIP_TONE, STOCK_STATUS_TONE as STOCK_TONE, SOLD_TONE } from "@/components/xpot/StatusPill";
 
 /**
- * A piece's state wherever it is listed: where it is in its life, a stock problem
- * that keeps it from being set up or sold (not received, damaged, lost), and sold.
+ * A piece's one status wherever it is listed: the same words and colour as the stock list, the pop-up and the page
+ * (components/piece/pieceStatus.ts).
  */
-export function PieceStatusPills({ tag }: { tag: { status: string; stockStatus: string; saleId: number | null } }) {
-  const t = useT(tagsMessages);
-  const stock = stockBlock(tag.stockStatus);
-  return (
-    <>
-      <Pill tone={PIECE_STATUS_TONE[tag.status] ?? "slate"}>{t(`status_${tag.status}` as "status_active")}</Pill>
-      {stock && <Pill tone={STOCK_STATUS_TONE[stock]}>{t(`stock_${stock}`)}</Pill>}
-      {tag.saleId && <Pill tone={SOLD_TONE}>{t("soldBadge")}</Pill>}
-    </>
-  );
+export function PieceStatusPills({ tag }: { tag: { status: string; stockStatus: string; nfcStatus: string; saleId: number | null; printJobStatus?: string | null } }) {
+  return <PieceStatusPill piece={tag} />;
 }
 
-/** The NFC chip of a listed piece: a red pill when it still needs writing, else a small coloured mark. */
+/** The NFC chip of a listed piece, only when it is something to do (not written, write failed, not tested); nothing otherwise. */
 export function ChipMark({ tag }: { tag: { status: string; nfcStatus: string } }) {
-  const t = useT(tagsMessages);
-  const label = t(`chip_${tag.nfcStatus}` as "chip_verified");
-  if (chipNeedsWriting(tag)) {
-    return (
-      <Pill tone="red" className="gap-1">
-        <Nfc className="h-3 w-3" aria-hidden="true" />
-        {label}
-      </Pill>
-    );
-  }
-  const tone = CHIP_STATUS_TONE[tag.nfcStatus] ?? "slate";
-  const color = tone === "green" ? "text-emerald-300/80" : tone === "amber" ? "text-amber-300/80" : tone === "red" ? "text-red-300/80" : "text-white/30";
-  return (
-    <span className={`inline-flex h-6 w-6 items-center justify-center ${color}`} title={label} data-chip={tag.nfcStatus}>
-      <Nfc className="h-3.5 w-3.5" aria-hidden="true" />
-      <span className="sr-only">{label}</span>
-    </span>
-  );
+  return <PieceChipPill piece={tag} quiet="none" />;
 }
 
 /**
@@ -517,6 +502,8 @@ const FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]), selec
 
 /**
  * A pop-up, centered on phone and desktop. (Named for when it slid up from the bottom.)
+ * It is a portal on the page: inside a pane that is itself a pop-up (the piece on a computer) a `fixed`
+ * element is measured by that pane, not the screen, and its content would be cut off.
  * The kit's modal shell: SURFACE_MODAL, OVERLAY_CLASS and the sheet radius (rounded-3xl).
  * With a `title` it draws the title row and its X; `banner` repeats the screen's
  * message inside, since the page banner sits behind the pop-up. Escape closes it,
@@ -576,7 +563,7 @@ export function BottomSheet({ open, onClose, children, title, icon, banner, clos
     };
   }, [open]);
   if (!open) return null;
-  return (
+  return createPortal(
     // Centered on every screen (the owner found bottom sheets awkward on the phone),
     // in the part the keyboard leaves visible (xpot-visible-area, index.css).
     <div
@@ -614,7 +601,8 @@ export function BottomSheet({ open, onClose, children, title, icon, banner, clos
         {banner ? <Banner banner={banner} /> : null}
         {children}
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
 

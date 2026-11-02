@@ -5,6 +5,7 @@ import type { SalesVisitStatus } from "#shared/schema/sales.js";
 import { getDistanceMeters, syncTaskToGhl, syncVisitToGhl, syncVisitToXphere } from "./helpers.js";
 import { xpotCheckInSchema, xpotCheckOutSchema, xpotVisitNoteUpsertSchema, xpotVisitSummarySchema } from "#shared/xpot.js";
 import { salesStorage } from "../../storage-sales.js";
+import { teamMembers } from "../../organizations/service.js";
 import { activeStore, discardFiles, parseAudioDataUrl, putPrivateFile } from "../../lib/files.js";
 import { finishVisitTransaction, startVisitTransaction } from "../../visit-workflow.js";
 import { saveVisitSummaryTransaction } from "../../visit-summary.js";
@@ -28,13 +29,21 @@ export function createVisitsRouter() {
     const requested = Number.isInteger(repFilter) && repFilter > 0 ? repFilter : undefined;
     const scope = await listScope(req, actor as XpotActor);
     const teammate = scope.kind === "organizations" && requested && requested !== actor!.rep.id ? requested : undefined;
+    // A Rep Admin in management mode who names nobody gets the whole team's history, the list Team results counts:
+    // visits by the organizations' members at the organizations' companies. Their own list is "My work".
+    const wholeTeam = scope.kind === "organizations" && !requested;
     const listed = await storage.listSalesVisits({
-      repId: scope.kind === "everyone" ? requested : teammate ?? actor!.rep.id,
+      repId: scope.kind === "everyone" ? requested : wholeTeam ? undefined : teammate ?? actor!.rep.id,
       leadId,
     });
-    const visits = teammate && scope.kind === "organizations"
-      ? visitsInOrganizations(listed, await storage.getSalesLeadsByIds(Array.from(new Set(listed.map((visit) => visit.leadId)))), scope.organizationIds)
-      : listed;
+    let visits = listed;
+    if (scope.kind === "organizations" && (teammate || wholeTeam)) {
+      visits = visitsInOrganizations(listed, await storage.getSalesLeadsByIds(Array.from(new Set(listed.map((visit) => visit.leadId)))), scope.organizationIds);
+      if (wholeTeam) {
+        const members = await teamMembers(scope.organizationIds);
+        visits = visits.filter((visit) => members.has(visit.repId));
+      }
+    }
     // Four queries for the whole list. This used to read the lead, its
     // locations and the note one visit at a time: three round trips per visit,
     // thousands for a rep with a long history.
@@ -60,7 +69,7 @@ export function createVisitsRouter() {
         ...visit,
         lead: lead ? { ...lead, locations: locationsByLead.get(visit.leadId) ?? [] } : undefined,
         note: noteByVisit.get(visit.id),
-        visitSales: visitSalesById.get(visit.id) ?? { transactions: 0, pieces: 0, totalCents: 0 },
+        visitSales: visitSalesById.get(visit.id) ?? { transactions: 0, pieces: 0, items: 0, totalCents: 0 },
       };
     }));
   });
@@ -233,6 +242,11 @@ export function createVisitsRouter() {
       return res.status(404).json({ code: "visit_not_found", message: "Visit not found" });
     }
     const { status } = req.body as { status?: SalesVisitStatus };
+    // A result belongs to a finished visit: set on one still open it would end up with no
+    // check-out time, no duration and nothing sent to the CRM. Finishing goes through check-out.
+    if (status && !visit.checkedOutAt) {
+      return res.status(409).json({ code: "visit_not_finished", message: "Finish the visit before setting its result" });
+    }
     const updated = await storage.updateSalesVisit(visitId, { ...(status ? { status } : {}) });
     res.json(updated);
 

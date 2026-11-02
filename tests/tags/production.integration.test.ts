@@ -475,7 +475,7 @@ describe("print requests", () => {
     const partial = (await request(app, "GET", `/api/xpot/admin/print-jobs/${asked.body.plates[2].id}`)).body;
     expect(partial.pieces.map((p: any) => [p.serialNumber, p.position])).toEqual([[1, "front-left"], [2, "front-right"]]);
     const batch = (await request(app, "GET", "/api/xpot/admin/tag-batches")).body.find((b: any) => b.id === partial.batchId);
-    expect(batch.name).toBe("Plate Large · Menu · White · v1 · plate 3/3 · 2 of x4");
+    expect(batch.name).toBe("Plate Large · Menu · White · print job 3/3");
 
     const bench = await pairDevice(app, "Bench PC", ["print"]);
     const tickets = [];
@@ -1116,6 +1116,49 @@ describe("consistency of the piece creation", () => {
     expect(made.redoneBy).toBeNull();
     const again = await request(app, "POST", `/api/xpot/admin/print-jobs/${order.id}/redo`);
     expect(again).toMatchObject({ status: 409, body: { code: "print_job_redone" } });
+  });
+
+  it("asks for the damaged pieces of a printed plate again once, even when asked twice at the same moment", async () => {
+    const app = admin();
+    await createSerializedModel(app);
+    const order = await firstPlate(app, { model: "plate-large-menu-white" });
+    const again = (id: string) => request(app, "POST", `/api/xpot/admin/print-jobs/${id}/reprint-damaged`);
+    // Not printed yet: nothing to ask for.
+    expect((await again(order.id)).body.code).toBe("print_job_state");
+    await request(app, "POST", `/api/xpot/admin/print-jobs/${order.id}/files?filename=plate.3mf`, bytes("3mf"));
+    await request(app, "POST", `/api/xpot/admin/print-jobs/${order.id}/transition`, { action: "complete" });
+    await request(app, "POST", `/api/xpot/admin/print-jobs/${order.id}/transition`, { action: "printed", badPieces: [order.pieces[1].publicCode, order.pieces[2].publicCode] });
+
+    const [one, two] = await Promise.all([again(order.id), again(order.id)]);
+    expect([one.status, two.status].sort()).toEqual([201, 409]);
+    const made = one.status === 201 ? one.body : two.body;
+    expect((one.status === 409 ? one.body : two.body).code).toBe("print_job_reprinted");
+    // One request for the two damaged pieces, counted by the server and tied to the plate it replaces.
+    expect(made.quantity).toBe(2);
+    expect(await q("SELECT quantity, replaces_job_id FROM print_requests WHERE replaces_job_id = $1", [order.id])).toEqual([{ quantity: 2, replaces_job_id: order.id }]);
+    expect((await q("SELECT count(*)::int AS n FROM print_requests"))[0].n).toBe(2);
+
+    // Each side says which one it is: the old plate points to the new one, the new one to the old.
+    const old = (await request(app, "GET", `/api/xpot/admin/print-jobs/${order.id}`)).body;
+    expect(old.reprintedBy).toMatchObject({ id: made.plates[0].id, batchCode: made.plates[0].batchCode });
+    expect((await request(app, "GET", `/api/xpot/admin/print-jobs/${made.plates[0].id}`)).body.replaces).toMatchObject({ id: order.id, batchCode: order.batchCode });
+    expect(await again(order.id)).toMatchObject({ status: 409, body: { code: "print_job_reprinted" } });
+
+    // A replacement cancelled whole leaves the damaged pieces free to be asked for again.
+    await request(app, "POST", `/api/xpot/admin/print-jobs/${made.plates[0].id}/transition`, { action: "cancel" });
+    expect((await request(app, "GET", `/api/xpot/admin/print-jobs/${order.id}`)).body.reprintedBy).toBeNull();
+    expect((await again(order.id)).status).toBe(201);
+  });
+
+  it("refuses to ask for damaged pieces again when none came out damaged", async () => {
+    const app = admin();
+    await createSerializedModel(app);
+    const order = await firstPlate(app, { model: "plate-large-menu-white" });
+    await request(app, "POST", `/api/xpot/admin/print-jobs/${order.id}/files?filename=plate.3mf`, bytes("3mf"));
+    await request(app, "POST", `/api/xpot/admin/print-jobs/${order.id}/transition`, { action: "complete" });
+    await request(app, "POST", `/api/xpot/admin/print-jobs/${order.id}/transition`, { action: "printed" });
+    expect(await request(app, "POST", `/api/xpot/admin/print-jobs/${order.id}/reprint-damaged`)).toMatchObject({ status: 409, body: { code: "print_job_no_damaged" } });
+    expect((await q("SELECT count(*)::int AS n FROM print_requests"))[0].n).toBe(1);
   });
 
   it("closes a failed plate that will not be printed again with cancel", async () => {

@@ -38,7 +38,7 @@ export const CAUSE_ANCHOR: Record<StatusCause, string> = {
   sync: "status-sync",
 };
 
-const RANK: Record<HealthVerdict, number> = { idle: 0, healthy: 1, slow: 2, stalled: 3, down: 4 };
+const RANK: Record<HealthVerdict, number> = { idle: 0, healthy: 1, off: 2, slow: 3, stalled: 4, down: 5 };
 
 /**
  * The overall verdict of the Status page and what causes it, worst first: the

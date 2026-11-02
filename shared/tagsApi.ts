@@ -35,9 +35,13 @@ export interface TagListItem {
   /** The business it was sold to (an Xpot lead). */
   leadId: number | null;
   leadName: string | null;
+  /** The company the piece belongs to (platform management reads it as a column; everyone else sees one company). */
+  organizationId: number | null;
   /** The reseller holding / credited with the piece. */
   repId: number | null;
   repName: string | null;
+  /** Its name: a list that spans several organizations shows it. */
+  organizationName?: string | null;
   kitId: string | null;
   /** "K-0001" (shared/tagKits.ts kitCode) when the piece is in a kit. */
   kitCode: string | null;
@@ -50,6 +54,10 @@ export interface TagListItem {
   soldAt: string | null;
   saleId: number | null;
   soldPriceCents: number | null;
+  /** The status of the print order of the piece's batch (print_jobs.status); null with no print order. */
+  printJobStatus: string | null;
+  /** The last stock-intake scan of the piece; read only by the "Scanned, not live" list (`?queue=scannedNotLive`), null elsewhere. */
+  lastInventoryScanAt: string | null;
   createdAt: string;
 }
 
@@ -61,6 +69,8 @@ export interface TagHistoryEntry {
   newDestinationType: string | null;
   changedByUserId: string | null;
   changedByEmail: string | null;
+  /** Who changed it, by name; screens show this, never the email. */
+  changedByName: string | null;
   reason: string | null;
   createdAt: string;
 }
@@ -149,6 +159,8 @@ export interface TagStockMovementItem {
   referenceId: string | null;
   reason: string | null;
   actorEmail: string | null;
+  /** Who did it, by name (their rep profile); null for the system or someone without one. Screens show this, never the email. */
+  actorName: string | null;
   createdAt: string;
 }
 
@@ -224,6 +236,8 @@ export interface TagOverview {
     productType: string;
     face: string | null;
     batchCode: string | null;
+    /** The customer the piece is set up for now, so a row names the business, not only the code. */
+    leadName: string | null;
   }>;
 }
 
@@ -255,6 +269,10 @@ export interface TagBatchItem {
   codeSource: string;
   /** The Tags › Production print order that issued it, when there is one. */
   printJobId: string | null;
+  /** That print order's status and, when it failed, why: the batch has no stage of its own. */
+  printJobStatus: string | null;
+  printJobError: string | null;
+  organizationName: string | null;
   /** Whose batch it is (its pieces start there): the company's, or a branch that prints its own. */
   organizationId: number;
   /** Derived production stage (shared/tags.ts `batchStage`). */
@@ -311,6 +329,8 @@ export interface TagKitItem {
   soldCount: number;
   acquisitionSource: string | null;
   unitCostCents: number | null;
+  /** Whose stock "Take back unsold" puts this kit's pieces into (shared/tagKits.ts takeBackDestination). */
+  takeBackTo: { organizationId: number; name: string; company: boolean };
 }
 
 /** One piece a kit handed out (GET /api/xpot/admin/tag-kits/:id/items): the packing list, with where it is now. */
@@ -347,8 +367,10 @@ export interface TagDashboard {
   scans: { qr: number; nfc: number };
   /** Distinct visitors per day, summed (a person scanning twice in a day counts once). */
   visitors: number;
-  /** Assigned or live pieces whose NFC chip holds nothing (or failed): QR only. */
+  /** Assigned or live pieces whose NFC chip holds nothing (or failed). */
   chipsMissing: number;
+  /** Of those, the live ones: already with the customer, so a tap opens nothing now. */
+  chipsMissingLive: number;
   daily: Array<{ day: string; qr: number; nfc: number }>;
   topPieces: Array<{
     id: string;

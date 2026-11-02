@@ -1,7 +1,7 @@
 import { useEffect } from "react";
 import { Redirect, Route, Switch, useLocation } from "wouter";
 import { useQuery } from "@tanstack/react-query";
-import { ModuleSwitch, rememberModule, useXpotModules } from "@/components/ModuleSwitch";
+import { rememberModule, useXpotModules } from "@/components/ModuleSwitch";
 import { useT } from "@/i18n";
 import { tagsMessages } from "@/i18n/messages/tags";
 import type { XpotMeResponse } from "@/pages/xpot/types";
@@ -11,13 +11,13 @@ import CustomerScreen from "./CustomerScreen";
 import HomeScreen from "./HomeScreen";
 import PiecesScreen from "./PiecesScreen";
 import ShopScreen from "./ShopScreen";
+import TagsResults from "./TagsResults";
 import TagScreen from "./TagScreen";
 import { APP_BASE, tagPath } from "./lib";
 import { useIsDesktop } from "@/hooks/use-is-desktop";
 import { AppLayout, MODULE_COLUMN } from "@/components/xpot/AppLayout";
 import { TAGS_NAV, TagsTabBar, activeTagsTab } from "./TagsTabBar";
-import { ShellHeader } from "@/components/xpot/ShellHeader";
-import { XpotLogo } from "@/components/xpot/XpotLogo";
+import { phoneBarHidden } from "@/components/xpot/moduleNav";
 import { MODULE_HOME, rememberModuleRoute } from "@/lib/xpot";
 import { SessionGate } from "@/components/xpot/SessionGate";
 
@@ -39,7 +39,7 @@ export function TagsApp() {
     rememberModuleRoute("tags", `${location.split("?")[0]}${search}`);
   }, [allowed, location]);
 
-  if (!meQuery.data) return <SessionGate failed={meQuery.isError} />;
+  if (!meQuery.data) return <SessionGate error={meQuery.error} />;
 
   // Tags switched off for this rep: back to Visits (the server refuses the API anyway).
   if (!allowed) return <Redirect to={MODULE_HOME.visits} />;
@@ -54,21 +54,10 @@ export function TagsApp() {
 
   return (
     <AppLayout
-      title={pieceCode ?? (location.startsWith(`${APP_BASE}/direct`) ? t("navDirect") : t(currentNav.key))}
+      title={pieceCode ?? (location.startsWith(`${APP_BASE}/direct`) ? t("navDirect") : location.startsWith(`${APP_BASE}/results`) ? t("resultsTitle") : t(currentNav.key))}
       wide={wide}
       mobileColumnClassName={MODULE_COLUMN}
-      mobileHeader={
-        <>
-          <ShellHeader module="tags" />
-          <div className="mb-4">
-            {modules.length > 1 ? (
-              <ModuleSwitch current="tags" />
-            ) : (
-              <XpotLogo className="h-7 w-auto" />
-            )}
-          </div>
-        </>
-      }
+      phoneBar={!phoneBarHidden(location)}
       mobileNav={<TagsTabBar />}
     >
       <Switch>
@@ -92,6 +81,7 @@ export function TagsApp() {
         </Route>
         <Route path={`${APP_BASE}/shop`} component={ShopScreen} />
         <Route path={`${APP_BASE}/direct`} component={DirectScreen} />
+        <Route path={`${APP_BASE}/results`} component={TagsResults} />
         <Route path={APP_BASE} component={HomeScreen} />
         <Route>
           <Redirect to={APP_BASE} />

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { clampGeofenceRadiusInput, companyStage, followUpDueTime, isWorkedCompany, needsFollowUp, visitLocationException } from "../client/src/pages/xpot/visitRules";
+import { clampGeofenceRadiusInput, companyStage, companyStateLabel, defaultCheckoutStatus, followUpDueTime, isOpenVisit, isWorkedCompany, needsFollowUp, visitLocationException } from "../client/src/pages/xpot/visitRules";
 
 describe("clampGeofenceRadiusInput", () => {
   it("keeps typed values in the 10-5000 range the server accepts", () => {
@@ -77,5 +77,47 @@ describe("isWorkedCompany", () => {
     expect(isWorkedCompany({ id: 2, status: "prospect" }, checkedIn)).toBe(true);
     expect(isWorkedCompany({ id: 3, status: "lead" }, checkedIn)).toBe(true);
     expect(isWorkedCompany({ id: 4, status: "customer" }, checkedIn)).toBe(true);
+  });
+});
+
+describe("defaultCheckoutStatus", () => {
+  it("starts a visit that sold as \"Sale made\", so sliding to check out does not file it as a plain visit", () => {
+    expect(defaultCheckoutStatus(null, true)).toBe("sale_made");
+  });
+
+  it("keeps what the rep or a voice note already chose", () => {
+    expect(defaultCheckoutStatus("follow_up", true)).toBe("follow_up");
+    expect(defaultCheckoutStatus("not_interested", true)).toBe("not_interested");
+    // "Talked" picked by the rep is a choice, not a default.
+    expect(defaultCheckoutStatus("completed", true)).toBe("completed");
+  });
+
+  it("marks nothing for a visit that did not sell: the rep says how it went", () => {
+    expect(defaultCheckoutStatus(null, false)).toBeNull();
+    expect(defaultCheckoutStatus("completed", false)).toBe("completed");
+  });
+});
+
+describe("isOpenVisit", () => {
+  it("is a visit checked in and not out yet", () => {
+    expect(isOpenVisit({ status: "in_progress", checkedOutAt: null })).toBe(true);
+    expect(isOpenVisit({ status: "in_progress" })).toBe(true);
+    expect(isOpenVisit({ status: "in_progress", checkedOutAt: "2026-11-01T10:00:00Z" })).toBe(false);
+    expect(isOpenVisit({ status: "completed", checkedOutAt: "2026-11-01T10:00:00Z" })).toBe(false);
+    expect(isOpenVisit({ status: "planned" })).toBe(false);
+  });
+});
+
+describe("companyStateLabel", () => {
+  it("never calls a visited prospect a prospect: it is in talks, like a lead", () => {
+    expect(companyStateLabel("prospect", true)).toBe("inTalks");
+    expect(companyStateLabel("lead", false)).toBe("inTalks");
+    expect(companyStateLabel("prospect", false)).toBe("prospect");
+  });
+
+  it("keeps customers (the older \"active\" too) and inactive companies as they are", () => {
+    expect(companyStateLabel("customer", true)).toBe("customer");
+    expect(companyStateLabel("active", true)).toBe("customer");
+    expect(companyStateLabel("inactive", true)).toBe("inactive");
   });
 });

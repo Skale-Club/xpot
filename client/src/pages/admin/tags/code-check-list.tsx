@@ -1,5 +1,6 @@
 import { useQuery, keepPreviousData } from "@tanstack/react-query";
 import { ListChecks, X } from "lucide-react";
+import type { AcquisitionCheck } from "@shared/tagAcquisition";
 import type { DistributionCheck, DistributionCheckItem } from "@shared/tagDistribution";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/xpot/EmptyState";
@@ -11,6 +12,7 @@ import { adminTagsFlowMessages } from "@/i18n/messages/adminTagsFlow";
 import { ADMIN_TAGS_KEY, errorMessage, sendJson } from "./api";
 import { reasonKey } from "./distribution-model";
 import { useTagLabels } from "./labels";
+import { useStockLabel } from "./take-back-destination";
 
 // The code list Hand out and Take back build: every code with the server's dry-run answer (can it go / come back,
 // and why not), newest first, each removable. The dry run moves nothing (POST …/tag-kits/check, …/return/check).
@@ -27,6 +29,17 @@ export function useCodeCheck(kind: CheckKind, codes: readonly string[]) {
   return useQuery<DistributionCheck>({
     queryKey: [ADMIN_TAGS_KEY, "code-check", kind, codes.join(",")],
     queryFn: () => sendJson("POST", CHECK_URL[kind], { codes }),
+    enabled: codes.length > 0,
+    placeholderData: keepPreviousData,
+    staleTime: 5_000,
+  });
+}
+
+/** The dry run of a wholesale order's list: Hand out's answer, plus whether each piece belongs to the order. */
+export function useOrderCheck(orderId: string, codes: readonly string[]) {
+  return useQuery<AcquisitionCheck>({
+    queryKey: [ADMIN_TAGS_KEY, "code-check", "order", orderId, codes.join(",")],
+    queryFn: () => sendJson("POST", `/api/xpot/admin/tag-acquisitions/${orderId}/check`, { codes }),
     enabled: codes.length > 0,
     placeholderData: keepPreviousData,
     staleTime: 5_000,
@@ -61,6 +74,7 @@ export function CodeCheckList({
 }) {
   const t = useT(adminTagsFlowMessages);
   const labels = useTagLabels();
+  const stockLabel = useStockLabel();
   if (codes.length === 0) {
     return <EmptyState compact dense tone="tags" icon={ListChecks} title={t(kind === "handOut" ? "listEmptyHandOut" : "listEmptyTakeBack")} cardStyle={{}} />;
   }
@@ -91,26 +105,35 @@ export function CodeCheckList({
         {codes.map((code, index) => ({ code, index, item: answered[index] })).reverse().map(({ code, index, item }) => {
           const key = item ? reasonKey(kind, item.reason) : null;
           const where = item?.repName ? [item.repName, item.kitCode].filter(Boolean).join(" · ") : null;
+          // Taking a piece back is by who has it and what it is: the batch and kit codes are not what anyone returns it by.
+          const product = item?.productType ? labels.product(item.productType) : null;
+          const takeBackLine = [item?.repName, product].filter(Boolean).join(" · ");
           return (
             <li key={code} className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1 px-3 py-2" data-testid={`code-row-${code}`}>
               <span className="w-6 shrink-0 text-right text-xs tabular-nums text-white/30">{index + 1}</span>
               <div className="min-w-0 flex-1">
                 <p className="truncate font-mono text-sm text-white">{code}</p>
-                <p className="truncate text-xs text-white/40">
-                  {item?.batchCode ? `${item.batchCode}${item.serialNumber ? ` #${item.serialNumber}` : ""}` : null}
-                  {item?.productType ? ` · ${labels.product(item.productType)}` : null}
-                  {where ? ` · ${where}` : null}
-                </p>
+                {kind === "takeBack" ? (
+                  <p className="truncate text-xs text-white/40">{takeBackLine}</p>
+                ) : (
+                  <p className="truncate text-xs text-white/40">
+                    {item?.batchCode ? `${item.batchCode}${item.serialNumber ? ` #${item.serialNumber}` : ""}` : null}
+                    {item?.productType ? ` · ${labels.product(item.productType)}` : null}
+                    {where ? ` · ${where}` : null}
+                  </p>
+                )}
               </div>
               {/* On phones the answer takes its own line under the code, so a long reason never overflows. */}
               <span className="order-last w-full pl-9 sm:order-none sm:w-auto sm:pl-0">
                 {!item ? (
                   <Pill tone="muted">{t("listChecking")}</Pill>
                 ) : item.ok ? (
-                  <Pill tone="violet">{t(kind === "handOut" ? "statusReady" : "statusCanComeBack")}</Pill>
+                  <Pill tone="violet" className="!whitespace-normal text-left">
+                    {kind === "handOut" ? t("statusReady") : item.goesTo ? t("statusBackTo", { stock: stockLabel(item.goesTo) }) : t("statusCanComeBack")}
+                  </Pill>
                 ) : (
                   <Pill tone={item.reason === "unknown" ? "red" : "amber"} className="!whitespace-normal text-left">
-                    {key ? t(key, { name: item.repName ?? "" }) : item.reason}
+                    {key ? t(key, { name: item.repName ?? "", product: labels.product(item.productType) }) : item.reason}
                   </Pill>
                 )}
               </span>

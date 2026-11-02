@@ -2,7 +2,6 @@ import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "wouter";
 import { Ban, DollarSign, ExternalLink, Link2 } from "lucide-react";
-import { stockBlock } from "@shared/tags";
 import type { LinkableSaleItem } from "@shared/tagsApi";
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/xpot/ConfirmDialog";
@@ -43,7 +42,6 @@ export function SaleSection() {
   const [cancelError, setCancelError] = useState<string | null>(null);
   const { data: activity } = usePieceActivity(tag.id, tag.updatedAt);
 
-  const stock = stockBlock(tag.stockStatus);
   const sellable = tag.stockStatus === "available" && tag.status !== "retired";
   const sale = tag.saleId !== null ? activity?.sales.find((s) => s.saleId === tag.saleId && s.status === "active") : undefined;
   const seller = sale?.sellerName ?? tag.repName ?? (tag.repId !== null ? tm("resellerNumber", { id: tag.repId }) : null);
@@ -86,6 +84,9 @@ export function SaleSection() {
     }
   };
 
+  // Nothing to sell and nothing sold: the status already says why (lost, not in stock yet, deactivated).
+  if (tag.saleId === null && !sellable) return null;
+
   if (tag.saleId === null) {
     return (
       <section className={`${CARD} p-4`} data-testid="piece-sale">
@@ -116,13 +117,10 @@ export function SaleSection() {
             </Button>
           </div>
         ) : (
-          <Button type="button" variant="money" size="lg" onClick={() => setSaleOpen(true)} disabled={!sellable} className="mt-3 w-full" data-testid="button-sell-this-piece">
+          // Neutral: the brand colour belongs to the piece's next step, and selling is one among the optional ones.
+          <Button type="button" variant="secondary" size="lg" onClick={() => setSaleOpen(true)} className="mt-3 w-full" data-testid="button-sell-this-piece">
             <DollarSign className="!size-5" /> {t("sellThisPiece")}
           </Button>
-        )}
-        {/* Only stock in hand sells (server/tags/sales.ts). */}
-        {!sellable && (
-          <p className="mt-2 px-1 text-sm text-white/50" data-testid="text-sell-blocked">{stock ? t(`stockBlocked_${stock}`) : t("stockNotForSale")}</p>
         )}
         <TagSaleDialog
           open={saleOpen}

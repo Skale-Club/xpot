@@ -1,3 +1,5 @@
+> Substituído por `docs/SIMPLICITY_PLAN_2.md`, feito usando o sistema. Este fica como histórico.
+
 # Auditoria de simplicidade do Xpot
 
 **Data:** 2026-11-01 · **Base:** `c2d1e39` (main) · **Rev. 2**, revisada por inteiro · **Tipo:** só leitura, nenhuma tela alterada.

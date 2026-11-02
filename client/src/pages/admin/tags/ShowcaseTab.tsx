@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { ExternalLink, ImageOff, Pencil, Plus, ShoppingBag, Trash2 } from "lucide-react";
-import { TAG_SHOWCASE_MAX_QUANTITY, type TagShowcaseInput, type TagShowcaseItem } from "@shared/tagShowcase";
+import { TAG_SHOWCASE_LANGS, TAG_SHOWCASE_MAX_QUANTITY, type TagShowcaseInput, type TagShowcaseItem, type TagShowcaseLang } from "@shared/tagShowcase";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { ConfirmDialog } from "@/components/xpot/ConfirmDialog";
@@ -11,6 +11,7 @@ import { Pill } from "@/components/xpot/StatusPill";
 import { SwitchRow } from "@/components/xpot/SwitchRow";
 import { useToast } from "@/hooks/use-toast";
 import { formatMoney } from "@/lib/format";
+import { MemberMenu } from "@/pages/xpot/components/MemberMenu";
 import { useT } from "@/i18n";
 import { commonMessages } from "@/i18n/messages/common";
 import { manageTagsMessages } from "@/i18n/messages/manageTags";
@@ -23,6 +24,9 @@ import { Loading, LoadError } from "./pieces-shared";
 
 const SHOWCASE_KEY = [ADMIN_TAGS_KEY, "showcase"] as const;
 
+/** One other language's words: what the Portuguese or Spanish reader sees in place of the main text. */
+type Words = { title: string; description: string; includes: string };
+
 type Form = {
   kind: "model" | "kit";
   title: string;
@@ -33,9 +37,19 @@ type Form = {
   price: string;
   sortOrder: string;
   isPublished: boolean;
+  translations: Record<TagShowcaseLang, Words>;
 };
 
-const EMPTY: Form = { kind: "kit", title: "", description: "", includes: "", imageUrl: "", items: "", price: "", sortOrder: "0", isPublished: false };
+const NO_WORDS: Words = { title: "", description: "", includes: "" };
+const EMPTY: Form = {
+  kind: "kit", title: "", description: "", includes: "", imageUrl: "", items: "", price: "", sortOrder: "0", isPublished: false,
+  translations: { pt: NO_WORDS, es: NO_WORDS },
+};
+
+const wordsOf = (item: TagShowcaseItem, lang: TagShowcaseLang): Words => {
+  const t = item.translations?.[lang];
+  return { title: t?.title ?? "", description: t?.description ?? "", includes: (t?.includes ?? []).join("\n") };
+};
 
 function toForm(item: TagShowcaseItem): Form {
   return {
@@ -48,6 +62,7 @@ function toForm(item: TagShowcaseItem): Form {
     price: item.referencePriceCents === null ? "" : (item.referencePriceCents / 100).toFixed(2),
     sortOrder: String(item.sortOrder),
     isPublished: item.isPublished,
+    translations: { pt: wordsOf(item, "pt"), es: wordsOf(item, "es") },
   };
 }
 
@@ -79,6 +94,14 @@ function toPayload(form: Form): TagShowcaseInput | null {
     referencePriceCents: cents,
     sortOrder: Number.parseInt(form.sortOrder, 10) || 0,
     isPublished: form.isPublished,
+    translations: Object.fromEntries(
+      TAG_SHOWCASE_LANGS.flatMap((lang) => {
+        const w = form.translations[lang];
+        const includes = w.includes.split("\n").map((line) => line.trim()).filter(Boolean);
+        const words = { ...(w.title.trim() ? { title: w.title.trim() } : {}), ...(w.description.trim() ? { description: w.description.trim() } : {}), ...(includes.length ? { includes } : {}) };
+        return Object.keys(words).length ? [[lang, words]] : [];
+      }),
+    ),
   };
 }
 
@@ -103,12 +126,12 @@ function ShowcaseDialog({ item, open, onOpenChange }: { item: TagShowcaseItem | 
   const ready = form.title.trim().length > 0 && payload !== null && (!kit || payload.items.length > 0);
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-xl">
-        <DialogHeader>
+      <DialogContent className="flex max-h-[min(92dvh,760px)] max-w-xl flex-col gap-0 overflow-hidden p-0">
+        <DialogHeader className="shrink-0 border-b border-white/[0.08] px-5 py-4 pr-14">
           <DialogTitle>{item ? t("shopEdit") : t("shopNew")}</DialogTitle>
-          <DialogDescription>{t("shopDialogDesc")}</DialogDescription>
+          <DialogDescription className="sr-only">{t("shopDialogDesc")}</DialogDescription>
         </DialogHeader>
-        <div className="space-y-3">
+        <div className="min-h-0 flex-1 space-y-3 overflow-y-auto p-5">
           <div className="grid gap-3 sm:grid-cols-2">
             <Field label={t("shopFieldKind")}>
               <Select
@@ -134,6 +157,23 @@ function ShowcaseDialog({ item, open, onOpenChange }: { item: TagShowcaseItem | 
           <Field label={t("shopFieldIncludes")} hint={t("shopFieldIncludesHint")}>
             <Textarea value={form.includes} rows={4} onChange={(e) => setForm({ ...form, includes: e.target.value })} />
           </Field>
+          {/* The same three texts for the Portuguese and Spanish reader; whatever stays empty is read in the main text above. */}
+          <details className="rounded-xl border border-white/[0.08] bg-white/[0.02] px-3 py-2" data-testid="showcase-translations">
+            <summary className="cursor-pointer text-sm font-semibold text-white/80">{t("shopTranslations")}</summary>
+            <p className="mt-2 text-xs text-white/45">{t("shopTranslationsHint")}</p>
+            {TAG_SHOWCASE_LANGS.map((lang) => {
+              const words = form.translations[lang];
+              const set = (patch: Partial<Words>) => setForm({ ...form, translations: { ...form.translations, [lang]: { ...words, ...patch } } });
+              return (
+                <div key={lang} className="mt-3 space-y-2 border-t border-white/[0.06] pt-3">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-white/50">{lang === "pt" ? t("shopLangPt") : t("shopLangEs")}</p>
+                  <Input value={words.title} maxLength={120} placeholder={t("shopFieldTitle")} aria-label={`${t("shopFieldTitle")} (${lang})`} onChange={(e) => set({ title: e.target.value })} data-testid={`showcase-title-${lang}`} />
+                  <Textarea value={words.description} maxLength={1000} rows={2} placeholder={t("shopFieldDescription")} aria-label={`${t("shopFieldDescription")} (${lang})`} onChange={(e) => set({ description: e.target.value })} />
+                  <Textarea value={words.includes} rows={3} placeholder={t("shopFieldIncludes")} aria-label={`${t("shopFieldIncludes")} (${lang})`} onChange={(e) => set({ includes: e.target.value })} />
+                </div>
+              );
+            })}
+          </details>
           <Field label={t("shopFieldImage")} hint={t("shopFieldImageHint")}>
             <Input type="url" inputMode="url" value={form.imageUrl} placeholder="https://" onChange={(e) => setForm({ ...form, imageUrl: e.target.value })} />
           </Field>
@@ -159,7 +199,7 @@ function ShowcaseDialog({ item, open, onOpenChange }: { item: TagShowcaseItem | 
             testId="showcase-published"
           />
         </div>
-        <DialogFooter className="gap-2">
+        <DialogFooter className="shrink-0 gap-2 border-t border-white/[0.08] px-5 py-3">
           <Button type="button" variant="ghost" onClick={() => onOpenChange(false)}>
             {tc("cancel")}
           </Button>
@@ -221,20 +261,19 @@ export function ShowcaseTab() {
                 {item.imageUrl ? <img src={item.imageUrl} alt="" loading="lazy" decoding="async" className="h-full w-full object-cover" /> : <ImageOff className="h-5 w-5 text-white/20" aria-hidden="true" />}
               </span>
               <span className="min-w-0 flex-1">
-                <span className="block truncate text-sm font-semibold text-white">{item.title}</span>
+                <span className="block break-words text-sm font-semibold leading-snug text-white">{item.title}</span>
                 <span className="mt-1 flex flex-wrap items-center gap-1.5 text-xs text-white/45">
                   <Pill tone={item.kind === "kit" ? "violet" : "slate"}>{item.kind === "kit" ? t("shopKindKit") : t("shopKindModel")}</Pill>
                   <Pill tone={item.isPublished ? "green" : "muted"}>{item.isPublished ? t("shopPublished") : t("shopDraft")}</Pill>
-                  {item.items.length > 0 ? <span>{t("shopSkuCount", { count: item.items.length })}</span> : <span>{t("shopNoSku")}</span>}
-                  {item.referencePriceCents !== null && <span>{formatMoney(item.referencePriceCents, item.currency)}</span>}
+                  {item.items.length > 0 ? <span>{t.plural("shopItemsToCart", item.items.length)}</span> : <span>{t("shopNoSku")}</span>}
+                  {item.referencePriceCents !== null && <span>{t("shopPriceLine", { price: formatMoney(item.referencePriceCents, item.currency) })}</span>}
                 </span>
               </span>
-              <Button type="button" variant="ghost" size="icon" aria-label={t("shopEdit")} onClick={() => setEditing(item)} data-testid="showcase-edit">
-                <Pencil />
-              </Button>
-              <Button type="button" variant="ghost" size="icon" aria-label={t("shopDelete")} onClick={() => setDeleting(item)}>
-                <Trash2 />
-              </Button>
+              {/* Two icons with no words took 110px of a phone row: one menu, with the words. */}
+              <MemberMenu label={t("shopEdit")} testId="showcase-menu" items={[
+                { key: "edit", label: t("shopEdit"), onSelect: () => setEditing(item) },
+                { key: "delete", label: t("shopDelete"), danger: true, onSelect: () => setDeleting(item) },
+              ]} />
             </li>
           ))}
         </ul>

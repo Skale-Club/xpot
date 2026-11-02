@@ -17,7 +17,7 @@ import { ContentEditor, type ContentState } from "./ContentEditor";
 import { ContentQr } from "./ContentQr";
 import LockSheet from "./LockSheet";
 import WriteSheet, { type WriteResult } from "./WriteSheet";
-import { ageOf, errorText, pushRecent, shortUrl, tagsGet, tagsPost, useBanner, directPath } from "./lib";
+import { ageOf, APP_BASE, errorText, pushRecent, shortUrl, tagsGet, tagsPost, useBanner, directPath } from "./lib";
 import { Banner, CARD, CHIP_TONE, CopyButton, EYEBROW_MUTED, FieldLabel, ICON_BLOCK_DIRECT, INPUT_ACCENT, LinkInput, Pill, SheetActions, TopBar } from "./ui";
 
 const WRITES_KEY = ["/api/xpot/tag-direct-writes"];
@@ -110,7 +110,7 @@ export default function DirectScreen() {
     <>
       {/* The desktop top bar already names the screen. */}
       <div className="lg:hidden">
-        <TopBar title={t("directTitle")} eyebrow={t("directEyebrow")} identity="direct" />
+        <TopBar title={t("directTitle")} back={APP_BASE} identity="direct" />
       </div>
       <Banner banner={banner} />
 
@@ -145,7 +145,7 @@ export default function DirectScreen() {
               <FieldLabel>{t("customerOptional")}</FieldLabel>
               <LeadPicker value={lead} onChange={setLead} />
               {/* A direct write has no printed face to go by: offer it only for a customer matched to their Google place. */}
-              {lead?.placeId && (
+              {kind === "url" && lead?.placeId && (
                 <GenerateReviewButton
                   name={lead.name}
                   placeId={lead.placeId}
@@ -193,6 +193,8 @@ export default function DirectScreen() {
                 {t("showQr")}
               </Button>
             </SheetActions>
+            {/* Two buttons look dead when nothing says what they wait for. */}
+            {!ready && <p className="text-center text-xs text-white/50" data-testid="direct-needs">{t(`directNeed_${kind}` as "directNeed_url")}</p>}
           </section>
         </div>
 

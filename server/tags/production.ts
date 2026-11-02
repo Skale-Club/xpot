@@ -642,12 +642,13 @@ export async function currentPreview(modelRef: string): Promise<{ body: Uint8Arr
 interface JobRow {
   id: string; model_id: string; model_slug: string; model_title: string; model_kind: string; version_id: string;
   version_number: number; bed_label: string; plates: number; quantity: number; status: string; batch_id: string | null;
-  batch_code: string | null; piece_count: number | null; received_count: number | null; pending_count: number | null; device_name: string | null;
+  batch_code: string | null; piece_count: number | null; received_count: number | null; pending_count: number | null; damaged_count: number | null; device_name: string | null;
   notes: string | null; error_code: string | null; error_message: string | null; report: Record<string, unknown> | null; created_at: Date | string;
   built_at: Date | string | null; printed_at: Date | string | null; updated_at: Date | string; last_event_at: Date | string | null;
   request_id: string | null; plate_number: number; plate_count: number; request_quantity: number;
   request_created_at: Date | string; downloads: Array<{ id: string; kind: string; filename: string }> | null;
   organization_id: number; organization_name: string; redone_by: string | null;
+  reprinted_by: { id: string; batchCode: string | null } | null; replaces: { id: string; batchCode: string | null } | null;
 }
 
 /** The attempt that took a plate's place: a later plate of the same request with the same number (redoJob). */
@@ -657,6 +658,13 @@ const REDONE_BY = sql`
     AND j3.id <> j.id AND j3.created_at > j.created_at
   ORDER BY j3.created_at LIMIT 1`;
 
+/** The live plate (not cancelled) of a request that replaces this printed plate's damaged pieces (reprintDamaged). */
+const REPRINTED_BY = sql`
+  SELECT json_build_object('id', j4.id, 'batchCode', b4.batch_code)
+  FROM print_requests r4 JOIN print_jobs j4 ON j4.request_id = r4.id LEFT JOIN tag_batches b4 ON b4.id = j4.batch_id
+  WHERE r4.replaces_job_id = j.id AND j4.status <> 'cancelled'
+  ORDER BY r4.created_at, j4.plate_number LIMIT 1`;
+
 const JOB_SELECT = sql`
   SELECT j.id, j.model_id, m.slug AS model_slug, m.title AS model_title, m.kind AS model_kind, j.version_id,
     v.version AS version_number, j.bed_label, j.plates, j.quantity, j.status, j.batch_id, b.batch_code,
@@ -665,6 +673,8 @@ const JOB_SELECT = sql`
       ELSE (SELECT count(*)::int FROM tags t WHERE t.batch_id = j.batch_id AND t.stock_status NOT IN ('pending', 'damaged')) END AS received_count,
     CASE WHEN j.batch_id IS NULL THEN NULL
       ELSE (SELECT count(*)::int FROM tags t WHERE t.batch_id = j.batch_id AND t.stock_status = 'pending') END AS pending_count,
+    CASE WHEN j.batch_id IS NULL THEN NULL
+      ELSE (SELECT count(*)::int FROM tags t WHERE t.batch_id = j.batch_id AND t.stock_status = 'damaged') END AS damaged_count,
     d.device_name, j.notes, j.error_code, j.error_message, j.report, j.created_at, j.built_at, j.printed_at, j.updated_at, j.last_event_at,
     j.request_id, COALESCE(j.plate_number, 1) AS plate_number,
     CASE WHEN j.request_id IS NULL THEN 1
@@ -673,7 +683,10 @@ const JOB_SELECT = sql`
     (SELECT json_agg(json_build_object('id', f.id, 'kind', f.kind, 'filename', f.filename) ORDER BY f.created_at DESC)
       FROM print_job_files f WHERE f.job_id = j.id AND f.kind IN ('3mf', 'gcode_3mf')) AS downloads,
     j.organization_id, o.name AS organization_name,
-    (${REDONE_BY}) AS redone_by
+    (${REDONE_BY}) AS redone_by,
+    (${REPRINTED_BY}) AS reprinted_by,
+    (SELECT json_build_object('id', rj.id, 'batchCode', rb.batch_code)
+      FROM print_jobs rj LEFT JOIN tag_batches rb ON rb.id = rj.batch_id WHERE rj.id = r.replaces_job_id) AS replaces
   FROM print_jobs j
   JOIN organizations o ON o.id = j.organization_id
   JOIN print_models m ON m.id = j.model_id
@@ -701,6 +714,7 @@ function jobItem(j: JobRow, now = Date.now()): PrintJobItem {
     receivedCount: j.received_count === null ? null : Number(j.received_count),
     pendingCount: j.pending_count === null ? null : Number(j.pending_count),
     pieceCount: j.piece_count === null ? null : Number(j.piece_count),
+    damagedCount: j.damaged_count === null ? null : Number(j.damaged_count),
     deviceName: j.device_name,
     notes: j.notes,
     errorCode: j.error_code,
@@ -712,6 +726,8 @@ function jobItem(j: JobRow, now = Date.now()): PrintJobItem {
     updatedAt: iso(j.updated_at)!,
     stale: j.status === "building" && now - new Date(lastNews).getTime() > PRINT_JOB_STALE_MS,
     redoneBy: j.redone_by,
+    reprintedBy: j.reprinted_by,
+    replaces: j.replaces,
     requestId: j.request_id,
     plateNumber: Number(j.plate_number),
     plateCount: Number(j.plate_count),
@@ -803,8 +819,8 @@ async function loadJob(id: string, scope: ProductionScope): Promise<PrintJobRow>
 }
 
 async function jobPieces(batchId: string, bed: PrintBed | null): Promise<PrintJobPiece[]> {
-  const list = await rows<{ serial_number: number | null; public_code: string; stock_status: string }>(sql`
-    SELECT serial_number, public_code, stock_status FROM tags WHERE batch_id = ${batchId} ORDER BY serial_number NULLS LAST, public_code`);
+  const list = await rows<{ serial_number: number | null; public_code: string; stock_status: string; nfc_provisioning_status: string }>(sql`
+    SELECT serial_number, public_code, stock_status, nfc_provisioning_status FROM tags WHERE batch_id = ${batchId} ORDER BY serial_number NULLS LAST, public_code`);
   const base = tagBaseUrl();
   return list.map((t) => {
     const urls = buildTagUrls(base, t.public_code);
@@ -815,6 +831,7 @@ async function jobPieces(batchId: string, bed: PrintBed | null): Promise<PrintJo
       qrUrl: urls.qrUrl,
       nfcUrl: urls.nfcUrl,
       stockStatus: t.stock_status,
+      chipWritten: t.nfc_provisioning_status !== "not_programmed",
     };
   });
 }
@@ -988,19 +1005,21 @@ async function createSerializedPlate(model: PrintModelRow, version: Pick<Version
     throw new TagError("This model needs a product, a sales product and a batch prefix before printing", 409, "print_model_incomplete");
   }
   const year = new Date().getUTCFullYear();
-  const plate = ctx.plateCount > 1 ? ` · plate ${ctx.plateNumber}/${ctx.plateCount}` : "";
+  const plate = ctx.plateCount > 1 ? ` · print job ${ctx.plateNumber}/${ctx.plateCount}` : "";
+  // The maker named on the batch is whoever prints it: a branch's batch never reads as the company's.
+  const [maker] = await ctx.within.tx.select({ name: organizations.name }).from(organizations).where(eq(organizations.id, ctx.organizationId)).limit(1);
   for (let attempt = 1; ; attempt++) {
     // Read in the transaction: the batches of the request's earlier plates are not committed yet.
     const batchCode = nextPrintBatchCode(model.batchPrefix, year, await existingCodes(model.batchPrefix, year, ctx.within.tx));
     let jobId: string | null = null;
     try {
       await createBatch({
-        name: `${model.title} · v${version.version}${plate} · ${quantity} of ${bed.label}`,
+        name: `${model.title}${plate}`,
         batchCode,
         productType: model.productType,
         salesProductId: model.salesProductId,
         face: model.face,
-        vendor: "Skale Club",
+        vendor: maker?.name ?? "Skale Club",
         notes: ctx.notes,
         quantity,
         organizationId: ctx.organizationId,
@@ -1059,9 +1078,10 @@ async function targetOrganization(ref: string | number | undefined, scope: Produ
  * one bed each, the last one partial (10 on a 4-up bed: 4 + 4 + 2). Each serialized plate issues its own batch; a
  * part's plates are its fixed file, so its count rounds up to whole beds. The request and all its plates are written
  * in one transaction: either all of them exist or none. `existingBatch` links a batch made before the catalog
- * instead, as a request of one plate, for the batch's own organization unless another is named.
+ * instead, as a request of one plate, for the batch's own organization unless another is named. `replaces` (set by
+ * reprintDamaged only) is the printed plate this request makes again: it is locked and checked inside the transaction.
  */
-export async function createJob(input: PrintJobCreateInput, userId: string | null, source: JourneySource, scope: ProductionScope): Promise<PrintRequestItem> {
+export async function createJob(input: PrintJobCreateInput, userId: string | null, source: JourneySource, scope: ProductionScope, replaces: PrintJobRow | null = null): Promise<PrintRequestItem> {
   const model = await resolveModel(input.model);
   let organizationRef = input.organization;
   if (input.existingBatch && organizationRef === undefined && model.kind === "serialized") {
@@ -1096,8 +1116,17 @@ export async function createJob(input: PrintJobCreateInput, userId: string | nul
   const notes = input.notes ?? null;
   const afterCommit: Array<() => Promise<void>> = [];
   const requestId = await db.transaction(async (tx) => {
+    if (replaces) {
+      // Two clicks at once both wait on this lock; the second finds the first one's request and is refused.
+      await tx.select({ id: printJobs.id }).from(printJobs).where(eq(printJobs.id, replaces.id)).for("update");
+      const [alive] = await rows<{ id: string }>(sql`
+        SELECT j4.id FROM print_requests r4 JOIN print_jobs j4 ON j4.request_id = r4.id
+        WHERE r4.replaces_job_id = ${replaces.id} AND j4.status <> 'cancelled' LIMIT 1`, tx);
+      if (alive) throw new TagError("The damaged pieces of this print were already printed again", 409, "print_job_reprinted", { reprintedBy: alive.id });
+    }
     const [request] = await tx.insert(printRequests).values({
       organizationId: organization.id, modelId: model.id, versionId: version.id, bedLabel: bed.label, quantity, notes, source, requestedByUserId: userId,
+      replacesJobId: replaces?.id ?? null,
     }).returning({ id: printRequests.id });
     for (let index = 0; index < plates.length; index++) {
       const ctx: PlateContext = {
@@ -1129,6 +1158,19 @@ export async function generatePieces(input: PrintGenerateInput, userId: string |
   return createJob({
     model: choice.modelId, bed: choice.bedLabel, quantity: input.quantity, notes: input.notes ?? null, organization: input.organization,
   }, userId, source, scope);
+}
+
+/**
+ * "Print the damaged again": the pieces a printed plate marked damaged are asked for as a new request of the same
+ * model, organization and bed. The count comes from the plate's batch, not from the client, and a plate's damaged
+ * pieces are asked for once while that request lives (createJob refuses the second with `print_job_reprinted`).
+ */
+export async function reprintDamaged(id: string, userId: string | null, scope: ProductionScope, source: JourneySource = "admin"): Promise<PrintRequestItem> {
+  const job = await loadJob(id, scope);
+  if (job.status !== "printed" || !job.batchId) throw new TagError("Only a printed plate with pieces can have its damaged pieces printed again", 409, "print_job_state");
+  const [{ n }] = await rows<{ n: number }>(sql`SELECT count(*)::int AS n FROM tags WHERE batch_id = ${job.batchId} AND stock_status = 'damaged'`);
+  if (!n) throw new TagError("No piece of this print is damaged", 409, "print_job_no_damaged");
+  return createJob({ model: job.modelId, bed: job.bedLabel, quantity: n, organization: job.organizationId }, userId, source, scope, job);
 }
 
 /**

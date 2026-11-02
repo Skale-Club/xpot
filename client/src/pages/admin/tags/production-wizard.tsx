@@ -19,7 +19,8 @@ import { errorMessage, invalidateAdminTags, sendJson } from "./api";
 import { catalogOptions, useTagCatalog } from "./batches-shared";
 import { useTagLabels } from "./labels";
 import { bedSummary, usePrintModels, useProductionAccess } from "./production-shared";
-import { canPrintModel, printableBeds, printQuantity, type ExistingProductionBatch } from "./production-workflow";
+import { assemblyParts, canPrintModel, filamentColours, printableBeds, printQuantity, type ExistingProductionBatch } from "./production-workflow";
+import { useModelName } from "./production-identity";
 
 const EMPTY_FORM = {
   name: "", batchCode: "", productType: TAG_PRODUCT_TYPES[0] as string,
@@ -56,7 +57,12 @@ export function ProductionWizard({ onClose, onCreated, onOrdered, onCloseAutoFoc
   const [bedLabel, setBedLabel] = useState("");
   const beds = model ? printableBeds(model, existingBatch) : [];
   const bed = beds.find((b) => b.label === bedLabel) ?? beds[0];
-  const [step, setStep] = useState(0);
+  // Printing a model the person already opened (its page, its card) starts at how many: the model is not asked again.
+  const fromModel = Boolean(initialModel) && !existingBatch && !external;
+  const first = fromModel ? 1 : 0;
+  const [step, setStep] = useState(first);
+  const nameOf = useModelName();
+  const bySlug = new Map((modelsQuery.data ?? []).map((m) => [m.slug, m]));
   // Printing is the way in; supplier orders and existing codes sit behind a small link.
   const [otherWays, setOtherWays] = useState(external);
   const stepHeading = useRef<HTMLHeadingElement>(null);
@@ -71,6 +77,7 @@ export function ProductionWizard({ onClose, onCreated, onOrdered, onCloseAutoFoc
   const productReady = printing ? !!model && !!bed : form.name.trim().length > 0 && catalog.some((p) => p.id === Number(form.salesProductId));
   const ready = productReady && quantityOk;
   const stepNames = [tw("stepProduct"), printing ? u("quantityStep") : tw("stepCodes"), tw("stepReview")];
+  const visibleSteps = [0, 1, 2].filter((index) => index >= first);
   const organizationChoices = model?.kind === "serialized" && !existingBatch ? access.organizations : [];
   const organization = organizationChoices.find((o) => String(o.id) === organizationId) ?? organizationChoices[0];
   const create = useMutation({
@@ -114,12 +121,12 @@ export function ProductionWizard({ onClose, onCreated, onOrdered, onCloseAutoFoc
     <Dialog open onOpenChange={(open) => { if (!open && !busy) onClose(); }}>
       <DialogContent phoneSheet className="flex max-h-[min(90dvh,850px)] max-w-2xl flex-col gap-0 overflow-hidden p-0" onCloseAutoFocus={onCloseAutoFocus} onEscapeKeyDown={(event) => { if (busy) event.preventDefault(); }}>
         <div className="shrink-0 border-b border-white/[0.08] px-5 py-5 pr-14 sm:px-6 sm:pr-14">
-          <DialogTitle className="text-white">{existingBatch ? u("prepareExisting", { code: existingBatch.batchCode }) : u("newProduction")}</DialogTitle>
-          <DialogDescription className="mt-2">{printing ? u(step === 0 ? "printIntro" : step === 1 ? "quantityIntro" : "reviewPrint") : step === 0 ? tw("createIntro") : step === 1 ? tw("codeIntro") : tw("reviewIntro")}</DialogDescription>
-          <ol className="mt-5 flex items-center gap-2" aria-label={tw("stepCount", { current: step + 1, total: 3 })}>
-            {stepNames.map((name, index) => <li key={name} className="flex min-w-0 flex-1 items-center gap-2">
+          <DialogTitle className="text-white">{existingBatch ? u("prepareExisting", { code: existingBatch.batchCode }) : fromModel && model ? tp("printTitle", { model: nameOf(model) }) : external ? u("otherWays") : u("newProduction")}</DialogTitle>
+          <DialogDescription className={fromModel ? "sr-only" : "mt-2"}>{printing ? u(step === 0 ? "printIntro" : step === 1 ? "quantityIntro" : "reviewPrint") : step === 0 ? tw("createIntro") : step === 1 ? tw("codeIntro") : tw("reviewIntro")}</DialogDescription>
+          <ol className="mt-5 flex items-center gap-2" aria-label={tw("stepCount", { current: step + 1 - first, total: visibleSteps.length })}>
+            {stepNames.map((name, index) => index < first ? null : <li key={name} className="flex min-w-0 flex-1 items-center gap-2">
               <button type="button" onClick={() => setStep(index)} disabled={index > step || busy} aria-current={step === index ? "step" : undefined} className={`flex min-h-10 items-center gap-2 text-xs font-medium ${step === index ? "text-white" : index < step ? "text-violet-300" : "text-white/35"}`}>
-                <span className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full border text-[11px] ${index <= step ? "border-violet-400/50 bg-violet-500/20" : "border-white/15"}`}>{index < step ? <Check className="h-3 w-3" aria-hidden="true" /> : index + 1}</span><span>{name}</span>
+                <span className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full border text-[11px] ${index <= step ? "border-violet-400/50 bg-violet-500/20" : "border-white/15"}`}>{index < step ? <Check className="h-3 w-3" aria-hidden="true" /> : index + 1 - first}</span><span>{name}</span>
               </button>
               {index < 2 ? <span className={`h-px min-w-2 flex-1 ${index < step ? "bg-violet-400/40" : "bg-white/10"}`} aria-hidden="true" /> : null}
             </li>)}
@@ -128,8 +135,8 @@ export function ProductionWizard({ onClose, onCreated, onOrdered, onCloseAutoFoc
         <form onSubmit={submit} className="flex min-h-0 flex-1 flex-col" data-testid="admin-tags-new-batch-form">
           <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 py-5 sm:px-6" data-testid="production-wizard-body">
           <fieldset disabled={busy} aria-labelledby={stepHeadingId} className="min-w-0 space-y-6">
-            <h2 id={stepHeadingId} ref={stepHeading} tabIndex={-1} className="text-sm font-semibold text-white/85 outline-none">{printing ? stepNames[step] : step === 0 ? tw("batchIdentity") : step === 1 ? tw("codeSetup") : tw("stepReview")}</h2>
-            {step === 0 && !initialModel && !existingBatch && (otherWays || !printing) ? <Field label={u("source")}><Select value={form.codes} onChange={(e) => set({ codes: e.target.value as typeof form.codes })} options={[{ value: "print", label: u("sourcePrint") }, { value: "issued", label: u("sourceSupplier") }, { value: "scanned", label: u("sourceReceive") }]} data-testid="production-source" /></Field> : null}
+            <h2 id={stepHeadingId} ref={stepHeading} tabIndex={-1} className="text-sm font-semibold text-white/85 outline-none">{printing ? stepNames[step] : step === 0 ? tw("stepProduct") : step === 1 ? tw("codeSetup") : tw("stepReview")}</h2>
+            {step === 0 && !initialModel && !existingBatch && (otherWays || !printing) ? <Field label={u("source")}><Select value={form.codes} onChange={(e) => set({ codes: e.target.value as typeof form.codes })} options={[...(external ? [] : [{ value: "print", label: u("sourcePrint") }]), { value: "issued", label: u("sourceSupplier") }, { value: "scanned", label: u("sourceReceive") }]} data-testid="production-source" /></Field> : null}
             {step === 0 && printing ? <div className="space-y-4">
               {modelsQuery.isLoading && !initialModel ? <p role="status" className="text-sm text-white/50">{u("loadingModels")}</p> : modelsQuery.error && !modelsQuery.data && !initialModel ? <p role="alert" className="text-sm text-red-300">{u("modelsError")} <button type="button" className="underline" onClick={() => void modelsQuery.refetch()}>{tw("retryCatalog")}</button></p> : <>
                 <fieldset className="space-y-2"><legend className="mb-2 text-xs font-semibold text-white/60">{u("printModel")}</legend>
@@ -146,12 +153,12 @@ export function ProductionWizard({ onClose, onCreated, onOrdered, onCloseAutoFoc
             </div> : null}
             {step === 0 && printing && !initialModel && !existingBatch && !otherWays && access.isAdmin ? <button type="button" onClick={() => setOtherWays(true)} className="text-xs text-white/50 underline underline-offset-2 hover:text-white" data-testid="production-other-ways">{u("otherWays")}</button> : null}
             {step === 0 && !printing ? <div className="space-y-4">
-              <Field label={t("fieldNameRequired")}><Input value={form.name} onChange={(e) => set({ name: e.target.value })} required maxLength={120} placeholder={t("namePlaceholder")} autoFocus /></Field>
+              <Field label={t("fieldNameRequired")}><Input value={form.name} onChange={(e) => set({ name: e.target.value })} required maxLength={120} placeholder={u("supplierNamePlaceholder")} autoFocus /></Field>
               <div className="grid gap-3 sm:grid-cols-2">
-                <Field label={tw("physicalModel")}><Select value={form.productType} onChange={(e) => set({ productType: e.target.value })} options={labels.productOptions} /></Field>
-                <Field label={t("fieldPrintedOnPieces")} hint={tw("faceHint")}><Select value={form.face} onChange={(e) => set({ face: e.target.value })} placeholder={form.productType === "google_review_sign" ? t("faceFromProduct") : t("faceNotSet")} options={labels.faceOptions} /></Field>
+                <Field label={u("whatIsIt")}><Select value={form.productType} onChange={(e) => set({ productType: e.target.value })} options={labels.productOptions} /></Field>
+                <Field label={u("whatPrinted")} hint={tw("faceHint")}><Select value={form.face} onChange={(e) => set({ face: e.target.value })} placeholder={form.productType === "google_review_sign" ? t("faceFromProduct") : t("faceNotSet")} options={labels.faceOptions} /></Field>
               </div>
-              <Field label={tw("salesProductRequired")} hint={tw("salesProductHint")}>
+              <Field label={u("soldAsPrice")} hint={tw("salesProductHint")}>
                 <Select value={form.salesProductId} onChange={(e) => set({ salesProductId: e.target.value })} required disabled={catalogLoading || !!catalogError} placeholder={catalogLoading ? tw("loadingCatalog") : t("chooseCatalogProduct")} options={catalogOptions(catalog)} />
               </Field>
               {catalogError ? <p role="alert" className="text-xs text-red-300">{tw("catalogError")} <button type="button" className="underline underline-offset-2" onClick={() => void reloadCatalog()}>{tw("retryCatalog")}</button></p> : !catalogLoading && catalog.length === 0 ? <p role="status" className="text-xs text-amber-300">{tw("catalogEmpty")}</p> : null}
@@ -159,7 +166,6 @@ export function ProductionWizard({ onClose, onCreated, onOrdered, onCloseAutoFoc
             {step === 1 ? <fieldset aria-label={tw("codeSetup")} className="space-y-4" data-testid="admin-tags-new-batch-codes">
               {printing ? <>
                 {model ? <ProductionIdentity model={model} hero /> : null}
-                {model ? <MaterialsNeeded materials={model.materials} /> : null}
                 {organizationChoices.length > 1 ? <Field label={tp("organization")} hint={tp("organizationHint")}><Select value={organization ? String(organization.id) : ""} onChange={(e) => setOrganizationId(e.target.value)} options={organizationChoices.map((o) => ({ value: String(o.id), label: o.name }))} data-testid="production-print-organization" /></Field> : null}
                 {beds.length > 1 ? <Field label={tp("fieldBed")}><Select value={bed?.label ?? ""} onChange={(e) => { setBedLabel(e.target.value); }} options={beds.map((b) => ({ value: b.label, label: bedSummary(b, tp) }))} data-testid="production-print-bed" /></Field> : null}
                 <Field label={tp("fieldQuantity")} hint={tp(model?.kind === "serialized" ? "fieldQuantityHint" : "fieldQuantityHintPart", { copies: bed?.copies ?? 1, max: printPlan.max })}><Input type="number" inputMode="numeric" required min={1} max={printPlan.max} step={1} value={existingBatch ? existingBatch.tagCount : form.quantity} disabled={!!existingBatch} onChange={(e) => set({ quantity: e.target.value })} data-testid="production-print-quantity" /></Field>
@@ -170,7 +176,7 @@ export function ProductionWizard({ onClose, onCreated, onOrdered, onCloseAutoFoc
               <p className="flex items-start gap-2 rounded-xl border border-white/[0.06] bg-white/[0.02] p-3 text-xs leading-relaxed text-white/50"><Info className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden="true" />{tw("stockHint")}</p>
             </fieldset> : null}
             {step === 2 ? <>
-              {printing && model ? <ProductionIdentity model={model} hero /> : !printing ? <ProductionIdentity model={{ title: form.name, productType: form.productType, face: form.face || (form.productType === "google_review_sign" ? "google_review" : null) }} hero /> : null}
+              {printing && model ? <><ProductionIdentity model={model} hero /><MaterialsNeeded materials={model.materials} filaments={filamentColours(model)} assembly={assemblyParts(model, bySlug)} /></> : !printing ? <ProductionIdentity model={{ title: form.name, productType: form.productType, face: form.face || (form.productType === "google_review_sign" ? "google_review" : null) }} hero /> : null}
               <dl className="grid grid-cols-1 gap-4 rounded-xl border border-white/10 bg-white/[0.02] p-4 text-sm sm:grid-cols-2">
                 {(printing ? [
                   [tp("fieldQuantity"), String(printPlan.pieces)],
@@ -199,10 +205,10 @@ export function ProductionWizard({ onClose, onCreated, onOrdered, onCloseAutoFoc
           </div>
           <footer className="shrink-0 space-y-4 border-t border-white/[0.08] bg-[#111727] px-5 py-4 sm:px-6">
             <div className="flex flex-wrap items-center justify-between gap-3">
-              <span className="text-xs text-white/40">{tw("stepCount", { current: step + 1, total: 3 })}</span>
+              <span className="text-xs text-white/40">{tw("stepCount", { current: step + 1 - first, total: visibleSteps.length })}</span>
               <div className="ml-auto flex gap-2">
-                <Button type="button" variant="ghost" onClick={step === 0 ? onClose : () => setStep((s) => s - 1)} disabled={busy}>{step === 0 ? tc("cancel") : tw("back")}</Button>
-                {step < 2 ? <Button key="next" type="submit" variant="brand" accent="tags" disabled={step === 0 ? !productReady : !quantityOk} data-testid="batch-step-next">{tw("next")}<ChevronRight className="h-4 w-4" aria-hidden="true" /></Button> : <Button key="create" type="submit" variant="brand" accent="tags" disabled={!ready} loading={busy} data-testid={printing ? "production-print-confirm" : "admin-tags-new-batch-submit"}>{printing ? u("requestFiles") : issuing ? t.plural("createIssuedBatch", quantity) : t("createEmptyBatch")}</Button>}
+                <Button type="button" variant="ghost" onClick={step === first ? onClose : () => setStep((s) => s - 1)} disabled={busy}>{step === first ? tc("cancel") : tw("back")}</Button>
+                {step < 2 ? <Button key="next" type="submit" variant="brand" accent="tags" disabled={step === 0 ? !productReady : !quantityOk} data-testid="batch-step-next">{tw("next")}<ChevronRight className="h-4 w-4" aria-hidden="true" /></Button> : <Button key="create" type="submit" variant="brand" accent="tags" disabled={!ready} loading={busy} data-testid={printing ? "production-print-confirm" : "admin-tags-new-batch-submit"}>{printing ? existingBatch ? u("requestFiles") : tp.plural("printCount", printPlan.pieces) : issuing ? t.plural("createIssuedBatch", quantity) : t("createEmptyBatch")}</Button>}
               </div>
             </div>
           </footer>

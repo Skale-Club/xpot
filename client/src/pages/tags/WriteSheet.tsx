@@ -33,6 +33,11 @@ interface Props {
   onLock?: () => void;
   /** Xpot pieces: the chip was confirmed by a real tap (server side), e.g. after an iPhone write. */
   confirmed?: boolean;
+  /**
+   * Report the write as soon as the chip holds the link, before the confirming tap: a chip that was written but never
+   * confirmed (the sheet closed, the phone died) still counts as written. Xpot pieces; a direct write is one record.
+   */
+  registerWrite?: boolean;
 }
 
 type Phase = "idle" | "writing" | "verifying" | "saving" | "done" | "error";
@@ -50,7 +55,7 @@ export function manualSteps(value: string) {
 /** The heading over those steps: "On iPhone…" only on an iPhone. */
 export const manualTitle = (): "iphoneTitle" | "nfcToolsTitle" => (isIos() ? "iphoneTitle" : "nfcToolsTitle");
 
-export default function WriteSheet({ open, url, identity, onClose, onDone, continueUrl, continueHint, onLock, confirmed }: Props) {
+export default function WriteSheet({ open, url, identity, onClose, onDone, continueUrl, continueHint, onLock, confirmed, registerWrite }: Props) {
   const t = useT(tagsMessages);
   const tc = useT(commonMessages);
   const nfc = nfcMode();
@@ -59,6 +64,12 @@ export default function WriteSheet({ open, url, identity, onClose, onDone, conti
   const [error, setError] = useState<string | null>(null);
   const [lastVerified, setLastVerified] = useState(false);
   const [chipWritten, setChipWritten] = useState(false);
+  // The read-back found another link: verifying again cannot help, only writing again can.
+  const [otherLink, setOtherLink] = useState(false);
+  // "I wrote it with another app" asks once before it marks anything.
+  const [askElsewhere, setAskElsewhere] = useState(false);
+  // The early save (registerWrite): kept apart from abortRef so closing the sheet never cancels it.
+  const earlyRef = useRef<Promise<boolean> | null>(null);
   // The chip is written but saving that failed: a retry saves again instead of asking for another tap.
   const [unsaved, setUnsaved] = useState<WriteResult | null>(null);
   const abortRef = useRef<AbortController | null>(null);
@@ -75,6 +86,8 @@ export default function WriteSheet({ open, url, identity, onClose, onDone, conti
       setError(null);
       setUnsaved(null);
       setChipWritten(false);
+      setOtherLink(false);
+      setAskElsewhere(false);
     }
     return cancel;
   }, [open, cancel]);
@@ -87,6 +100,9 @@ export default function WriteSheet({ open, url, identity, onClose, onDone, conti
       abortRef.current = ctrl;
       setError(null);
       setPhase("saving");
+      // The early save went first: the later report never lands before it.
+      await earlyRef.current;
+      if (ctrl.signal.aborted) return;
       try {
         await saveChipProgress((request) => onDone(result, request), ctrl.signal);
         if (ctrl.signal.aborted) return;
@@ -104,25 +120,39 @@ export default function WriteSheet({ open, url, identity, onClose, onDone, conti
     [onDone, cancel, t, tc],
   );
 
+  // The chip now holds the link: say so before anything else is asked of the person, so closing the sheet loses nothing.
+  const registerEarly = useCallback(() => {
+    if (!registerWrite) return;
+    const ctrl = new AbortController();
+    earlyRef.current = saveChipProgress((request) => onDone({ method: "web_nfc", verified: false, readbackUrl: null }, request), ctrl.signal).then(
+      () => true,
+      () => false,
+    );
+  }, [registerWrite, onDone]);
+
   const startWrite = useCallback(async (verifyOnly = false) => {
     cancel();
     const ctrl = new AbortController();
     abortRef.current = ctrl;
     setError(null);
     setUnsaved(null);
+    setOtherLink(false);
     setPhase(verifyOnly ? "verifying" : "writing");
     try {
       if (!verifyOnly) {
         setChipWritten(false);
+        earlyRef.current = null;
         await writeContent(url, ctrl.signal);
         if (ctrl.signal.aborted) return;
         setChipWritten(true);
         haptic(40);
+        registerEarly();
         setPhase("verifying");
       }
       const readback = await readBack(ctrl.signal);
       if (ctrl.signal.aborted) return;
       if (readback === url) return await report({ method: "web_nfc", verified: true, readbackUrl: readback }, ctrl.signal);
+      setOtherLink(!!readback);
       setError(readback ? t("chipOtherLink", { url: readback }) : t("chipNoLink"));
       setPhase("error");
     } catch (err) {
@@ -132,10 +162,16 @@ export default function WriteSheet({ open, url, identity, onClose, onDone, conti
       setError(t(e.code));
       setPhase("error");
     }
-  }, [url, cancel, report, t]);
+  }, [url, cancel, report, registerEarly, t]);
 
-  const skipVerify = useCallback(() => {
+  const skipVerify = useCallback(async () => {
     cancel();
+    // Already registered when the chip was written: nothing left to save, only to say so.
+    if (earlyRef.current && (await earlyRef.current)) {
+      setLastVerified(false);
+      setPhase("done");
+      return;
+    }
     void report({ method: "web_nfc", verified: false, readbackUrl: null });
   }, [cancel, report]);
 
@@ -145,6 +181,23 @@ export default function WriteSheet({ open, url, identity, onClose, onDone, conti
   };
 
   const errorBox = phase === "error" && error && <InlineAlert tone="error">{error}</InlineAlert>;
+
+  // The chip was written with another app: Xpot cannot see that, so it asks once before it records it.
+  const elsewhere = askElsewhere ? (
+    <div className="space-y-2 rounded-xl border border-white/10 p-3" data-testid="write-elsewhere-ask">
+      <p className="text-sm text-white/70">{t("wroteElsewhereAsk")}</p>
+      <Button type="button" variant="secondary" onClick={() => void report({ method: "manual", verified: false, readbackUrl: null })} className="w-full" data-testid="button-write-elsewhere-yes">
+        {t("wroteElsewhereYes")}
+      </Button>
+      <Button type="button" variant="ghost" onClick={() => setAskElsewhere(false)} className="w-full">
+        {tc("cancel")}
+      </Button>
+    </div>
+  ) : (
+    <Button type="button" variant="ghost" onClick={() => setAskElsewhere(true)} className="w-full" data-testid="button-write-elsewhere">
+      {t("wroteElsewhere")}
+    </Button>
+  );
 
   return (
     <BottomSheet open={open} onClose={close} title={t("writeTitle")} closeOnBack>
@@ -221,7 +274,7 @@ export default function WriteSheet({ open, url, identity, onClose, onDone, conti
       ) : phase === "verifying" ? (
         <>
           <TapAnimation identity={identity} icon={Nfc} label={t("tapAgain")} sub={t("tapAgainSub")} />
-          <Button type="button" variant="secondary" size="lg" onClick={skipVerify} className="w-full">
+          <Button type="button" variant="secondary" size="lg" onClick={() => void skipVerify()} className="w-full">
             {t("skipCheck")}
           </Button>
         </>
@@ -233,21 +286,20 @@ export default function WriteSheet({ open, url, identity, onClose, onDone, conti
       ) : supported ? (
         <div className="mt-5 space-y-3">
           {errorBox}
-          {chipWritten && !unsaved && <p className="text-sm text-white/70">{t("writtenNeedsCheck")}</p>}
+          {chipWritten && !unsaved && !otherLink && <p className="text-sm text-white/70">{t("writtenNeedsCheck")}</p>}
           <SheetActions>
-            <Button type="button" variant="brand" accent="tags" size="lg" onClick={() => void (unsaved ? report(unsaved) : startWrite(chipWritten))} className="w-full" data-testid="button-write-now">
+            {/* A chip that holds another link is wrong for good: the only way on is to write it again. */}
+            <Button type="button" variant="brand" accent="tags" size="lg" onClick={() => void (unsaved ? report(unsaved) : otherLink ? startWrite() : startWrite(chipWritten))} className="w-full" data-testid="button-write-now">
               {phase === "error" ? <RotateCw className="!size-5" /> : <Nfc className="!size-5" />}
-              {chipWritten && !unsaved ? t("verifyAgain") : phase === "error" ? tc("retry") : t("writeNow")}
+              {otherLink && !unsaved ? t("rewriteChip") : chipWritten && !unsaved ? t("verifyAgain") : phase === "error" ? tc("retry") : t("writeNow")}
             </Button>
-            {chipWritten && !unsaved && (
+            {chipWritten && !unsaved && !otherLink && (
               <>
                 <Button type="button" variant="secondary" onClick={() => void startWrite()} className="w-full">{t("rewriteChip")}</Button>
-                <Button type="button" variant="ghost" onClick={skipVerify} className="w-full">{t("skipCheck")}</Button>
+                <Button type="button" variant="ghost" onClick={() => void skipVerify()} className="w-full">{t("skipCheck")}</Button>
               </>
             )}
-            <Button type="button" variant="ghost" onClick={() => void report({ method: "manual", verified: false, readbackUrl: null })} className="w-full">
-              {t("wroteElsewhere")}
-            </Button>
+            {otherLink ? null : elsewhere}
           </SheetActions>
         </div>
       ) : (
@@ -264,18 +316,29 @@ export default function WriteSheet({ open, url, identity, onClose, onDone, conti
             </>
           )}
           {errorBox && <div className="mt-4">{errorBox}</div>}
-          <Button
-            type="button"
-            variant="brand"
-            accent="tags"
-            size="lg"
-            onClick={() => void report({ method: "manual", verified: false, readbackUrl: null })}
-            className="mt-5 w-full"
-            data-testid="button-mark-written"
-          >
-            <Check className="!size-5" />
-            {t("markWritten")}
-          </Button>
+          {nfc === "none" && continueUrl ? (
+            // A computer writes nothing: the way on is the phone, so nothing here marks the chip as written at one click.
+            <SheetActions className="mt-5">
+              <Button type="button" variant="secondary" size="lg" onClick={close} className="w-full" data-testid="button-write-close">
+                {tc("close")}
+              </Button>
+              {elsewhere}
+            </SheetActions>
+          ) : (
+            // The last step of NFC Tools on an iPhone: the write is done, this says so.
+            <Button
+              type="button"
+              variant="brand"
+              accent="tags"
+              size="lg"
+              onClick={() => void report({ method: "manual", verified: false, readbackUrl: null })}
+              className="mt-5 w-full"
+              data-testid="button-mark-written"
+            >
+              <Check className="!size-5" />
+              {t("markWritten")}
+            </Button>
+          )}
         </div>
       )}
     </BottomSheet>

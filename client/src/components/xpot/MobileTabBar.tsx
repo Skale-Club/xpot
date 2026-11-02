@@ -16,8 +16,8 @@ export function orderMobileTabs(tabs: MobileTab[], module: XpotModule): MobileTa
  * Docked edge to edge like Xtimator's: equal-width tabs, 10px labels that
  * truncate instead of spilling, and a short accent bar under the active tab.
  */
-export function MobileTabBar({ tabs, activeId, onSelect, module }: { tabs: MobileTab[]; activeId: string; onSelect: (id: string) => void; module: XpotModule }) {
-  const accent = MODULE_ACCENT[module];
+export function MobileTabBar({ tabs, activeId, onSelect, module, accent: accentOverride, wrapLabels = false }: { tabs: MobileTab[]; activeId: string; onSelect: (id: string) => void; module: XpotModule; /** The panel's amber, instead of the module's colour. */ accent?: { solid: string; text: string }; /** A long name (Entregar peças) takes two lines instead of being cut; every tab keeps room for both. */ wrapLabels?: boolean }) {
+  const accent = accentOverride ?? MODULE_ACCENT[module];
   const orderedTabs = orderMobileTabs(tabs, module);
   return (
     // Hidden while the keyboard is up (index.css), so it never covers the field being typed in.
@@ -43,7 +43,9 @@ export function MobileTabBar({ tabs, activeId, onSelect, module }: { tabs: Mobil
             }`}
           >
             <Icon className={`h-5 w-5 ${isActive ? accent.text : ""}`} />
-            <span className="mt-1 max-w-full truncate text-[10px] font-medium leading-none">{label}</span>
+            {wrapLabels
+              ? <span className="mt-1 flex h-[23px] max-w-full items-start justify-center text-center text-[10px] font-medium leading-[11px]"><span className="line-clamp-2 break-words">{label}</span></span>
+              : <span className="mt-1 max-w-full truncate text-[10px] font-medium leading-none">{label}</span>}
             {/* Rendered on every tab (transparent when inactive) so all tabs keep the same height. */}
             <span className="mt-1 h-[3px] w-6 rounded-full" style={{ background: isActive ? accent.solid : "transparent" }} />
           </button>

@@ -122,7 +122,7 @@ export function StatusPicker({ value, onChange, layout = "compact" }: { value: s
   return (
     <div className="space-y-2">
       <div className={EYEBROW}>{t("visitOutcome")}</div>
-      <div role="radiogroup" aria-label={t("visitOutcome")} className={layout === "wide" ? "grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6" : "grid grid-cols-3 gap-2"}>
+      <div role="radiogroup" aria-label={t("visitOutcome")} className={layout === "wide" ? "grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6" : "grid grid-cols-2 gap-2 sm:grid-cols-3"}>
         {OUTCOMES.map((s) => {
           const isActive = value === s.value;
           const tone = visitStatusTone(s.value);
@@ -138,7 +138,7 @@ export function StatusPicker({ value, onChange, layout = "compact" }: { value: s
               }`}
             >
               {isActive ? <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${PILL_DOTS[tone]}`} aria-hidden="true" /> : null}
-              <span className="truncate">{visitStatusLabel(t, s.value)}</span>
+              <span className="line-clamp-2 text-center leading-tight">{visitStatusLabel(t, s.value)}</span>
             </button>
           );
         })}

@@ -40,6 +40,11 @@ export function ServicesSection({ query }: { query: ReturnType<typeof useService
   const ago = useAgo(useT(systemHealthMessages));
   const [, navigate] = useLocation();
 
+  // A service nobody set up is not news: its name is kept one tap away, not as a row of its own.
+  const all = query.data?.services ?? [];
+  const inUse = all.filter((s) => s.status !== "off");
+  const notSetUp = all.filter((s) => s.status === "off");
+
   const columns: CompactDataColumn<ServiceStatus>[] = [
     {
       key: "service",
@@ -109,14 +114,36 @@ export function ServicesSection({ query }: { query: ReturnType<typeof useService
           ) : query.isError || !query.data ? (
             <ErrorState compact message={tp("servicesLoadFailed")} onRetry={() => void query.refetch()} />
           ) : (
-            <CompactDataTable
-              columns={columns}
-              rows={query.data.services}
-              getRowKey={(s) => s.id}
-              onRowClick={(s) => navigate(serviceHref(s.id))}
-              getRowAriaLabel={(s) => `${serviceName(tp, s.id)}: ${t(STATUS_LABEL_KEYS[s.status])}`}
-              getRowTestId={(s) => `status-service-${s.id}`}
-            />
+            <>
+              <CompactDataTable
+                columns={columns}
+                rows={inUse}
+                getRowKey={(s) => s.id}
+                onRowClick={(s) => navigate(serviceHref(s.id))}
+                getRowAriaLabel={(s) => `${serviceName(tp, s.id)}: ${t(STATUS_LABEL_KEYS[s.status])}`}
+                getRowTestId={(s) => `status-service-${s.id}`}
+              />
+              {notSetUp.length > 0 && (
+                <details className="mt-3 rounded-xl border border-white/10" data-testid="status-services-off">
+                  <summary className="flex min-h-11 cursor-pointer items-center gap-2 px-3 text-sm font-medium text-white/65">
+                    {tp("notSetUp", { count: notSetUp.length })}
+                  </summary>
+                  <ul className="divide-y divide-white/5 border-t border-white/10">
+                    {notSetUp.map((s) => (
+                      <li key={s.id}>
+                        <Link href={serviceHref(s.id)} className="flex min-h-11 items-center justify-between gap-3 px-3 py-2 text-sm hover:bg-white/[0.03]" data-testid={`status-service-${s.id}`}>
+                          <span className="min-w-0">
+                            <span className="text-white/80">{serviceName(tp, s.id)}</span>
+                            <span className="ml-2 text-xs text-white/40">{tp(`job_${s.job}`)}</span>
+                          </span>
+                          <ChevronRight className="h-4 w-4 shrink-0 text-white/30" aria-hidden="true" />
+                        </Link>
+                      </li>
+                    ))}
+                  </ul>
+                </details>
+              )}
+            </>
           )}
         </div>
       </SectionCard>
@@ -161,6 +188,15 @@ export function SyncProblemsSection({ query }: { query: ReturnType<typeof useSyn
   });
 
   const problems = query.data?.problems ?? [];
+  // Nothing to retry is one line, not a card: the section only takes room when a record did not reach the CRM.
+  if (query.isSuccess && problems.length === 0) {
+    return (
+      <div id={CAUSE_ANCHOR.sync} className="scroll-mt-24 flex items-center gap-2 rounded-2xl border border-white/10 px-4 py-3 text-sm text-white/55" data-testid="status-sync">
+        <RefreshCw className="h-4 w-4 shrink-0 text-white/40" aria-hidden="true" />
+        <span>{tp("syncTitle")}: {tp("syncEmpty")}</span>
+      </div>
+    );
+  }
   return (
     <div id={CAUSE_ANCHOR.sync} className="scroll-mt-24">
       <SectionCard

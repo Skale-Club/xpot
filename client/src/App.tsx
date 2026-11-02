@@ -5,19 +5,18 @@ import { useXpotQueries } from "./pages/xpot/hooks/useXpotQueries";
 import { useVisits } from "./pages/xpot/hooks/useVisits";
 import { GeoProvider } from "./pages/xpot/hooks/GeoProvider";
 import { Loader2 } from "@/components/ui/loader";
-import { ModuleSwitch, rememberModule, useXpotModules } from "@/components/ModuleSwitch";
+import { rememberModule, useXpotModules } from "@/components/ModuleSwitch";
 import { useT } from "@/i18n";
-import { commonMessages } from "@/i18n/messages/common";
 import { shellMessages } from "@/i18n/messages/shell";
 import { PieceViewerHost } from "@/components/xpot/PieceViewer3D";
-import { ShellHeader } from "@/components/xpot/ShellHeader";
 import { AppLayout, MODULE_COLUMN } from "@/components/xpot/AppLayout";
 import { VisitsTabBar } from "@/components/xpot/VisitsTabBar";
-import { visitsScreen, type VisitsScreen } from "@/components/xpot/moduleNav";
+import { phoneBarHidden, visitsScreen, type VisitsScreen } from "@/components/xpot/moduleNav";
 import { navIaMessages } from "@/i18n/messages/navIa";
 import { SessionGate } from "@/components/xpot/SessionGate";
-import { getHttpStatus, isStandaloneDisplay, resolveRootView } from "@/lib/pwa";
-import { getXpotHomePath, MODULE_HOME, rememberModuleRoute } from "@/lib/xpot";
+import { isStandaloneDisplay, resolveRootView } from "@/lib/pwa";
+import { getXpotHomePath, isVisitsPath, MODULE_HOME, rememberModuleRoute } from "@/lib/xpot";
+import NotFound from "./pages/NotFound";
 import type { XpotMeResponse } from "./pages/xpot/types";
 import { PersistentRouteProgress } from "@/components/xpot/PersistentRouteProgress";
 import { WorkspaceBoundary } from "@/components/xpot/WorkspaceBoundary";
@@ -70,11 +69,9 @@ const SCREEN_TITLE: Record<Exclude<VisitsScreen, "manage" | "visit">, "tabDashbo
 function VisitsGate() {
   const meQuery = useQuery<XpotMeResponse>({ queryKey: ["/api/xpot/me"], retry: false });
   const modules = useXpotModules();
-  // An expired or refused session goes back to sign-in on its own, as XpotAppShell's
-  // useXpotQueries did before this gate stood in front of it (/dashboard is the PWA start_url).
-  const status = getHttpStatus(meQuery.error);
-  if (status === 401 || status === 403) return <Redirect to="/" />;
-  if (!meQuery.data) return <SessionGate failed={meQuery.isError} />;
+  // No session opens sign-in and returns here (/dashboard is the PWA start_url); a sign-up still
+  // under review says so, and a dropped connection offers to try again.
+  if (!meQuery.data) return <SessionGate error={meQuery.error} />;
   if (!modules.includes("visits") && modules.includes("tags")) return <Redirect to={MODULE_HOME.tags} />;
   return (
     <GeoProvider>
@@ -83,10 +80,15 @@ function VisitsGate() {
   );
 }
 
+/** Every path no other route claimed is a Visits screen, or a wrong address. */
+function VisitsOrNotFound() {
+  const [location] = useLocation();
+  return isVisitsPath(location) ? <VisitsGate /> : <NotFound />;
+}
+
 function XpotAppShell() {
-  const { me, xpotMeQuery, isOnline, activeTab, pathname } = useXpotQueries();
+  const { me, xpotMeQuery, activeTab, pathname } = useXpotQueries();
   const [, setLocation] = useLocation();
-  const t = useT(commonMessages);
   const tShell = useT(shellMessages);
   const tNav = useT(navIaMessages);
   const modules = useXpotModules();
@@ -116,7 +118,7 @@ function XpotAppShell() {
     }
   }, [pathname, setLocation]);
 
-  if (!me) return <SessionGate failed={xpotMeQuery.isError} />;
+  if (!me) return <SessionGate error={xpotMeQuery.error} />;
 
   const screen = visitsScreen(pathname.split("?")[0]);
   const title = screen === "visit" ? tNav("visitScreen") : screen === "manage" ? "Xpot" : tShell(SCREEN_TITLE[screen]);
@@ -126,22 +128,8 @@ function XpotAppShell() {
       title={title}
       wide={WIDE_TABS.has(activeTab)}
       mobileColumnClassName={MODULE_COLUMN}
-      mobileHeader={
-        <>
-          {!isOnline && (
-            <div className="mb-4 rounded-2xl border border-red-500/20 bg-red-500/10 px-4 py-3 text-sm text-red-300">
-              {t("offline")}
-            </div>
-          )}
-          <ShellHeader module="visits" />
-          {modules.length > 1 && (
-            <div className="mb-4">
-              <ModuleSwitch current="visits" />
-            </div>
-          )}
-          <PersistentRouteProgress className="mb-4" />
-        </>
-      }
+      phoneBar={!phoneBarHidden(pathname.split("?")[0])}
+      mobileHeader={<PersistentRouteProgress className="mb-4" />}
       mobileNav={<VisitsTabBar />}
     >
       <div className="space-y-4">
@@ -237,9 +225,7 @@ export default function App() {
         <Route path="/my/*?" component={MyApp} />
         <Route path="/settings" component={XpotSettings} />
         <Route path="/tags/*?" component={TagsApp} />
-        <Route>
-          <VisitsGate />
-        </Route>
+        <Route>{() => <VisitsOrNotFound />}</Route>
         </Switch>
         </WorkspaceBoundary>
       </Router>

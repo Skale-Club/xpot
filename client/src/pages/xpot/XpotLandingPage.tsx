@@ -19,7 +19,7 @@ import {
   Sparkles,
 } from "lucide-react";
 import { queryClient } from "@/lib/queryClient";
-import { consumePostLoginRedirect, getXpotHomePath, rememberPostLoginRedirect } from "@/lib/xpot";
+import { consumePostLoginRedirect, getXpotHomePath, rememberPostLoginRedirect, sessionEndedRequested, signInRequested } from "@/lib/xpot";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -162,9 +162,9 @@ function PhoneMock({ content }: { content: LandingPageContent["mockup"] }) {
         <div className="space-y-3 rounded-[30px] bg-[#070b16] p-4">
           {/* Active visit */}
           <div className="space-y-3 rounded-2xl border border-[#5272F2]/25 p-4" style={{ background: "linear-gradient(160deg, rgba(82,114,242,0.15), rgba(11,184,175,0.06))" }}>
-            <div className="flex items-center justify-between">
-              <span className="text-[10px] font-bold uppercase tracking-[0.2em] text-[#93A9FF]">{content.visit}</span>
-              <span className="flex items-center gap-1.5 text-[11px] font-semibold text-[#61D8CE]">
+            <div className="flex items-center justify-between gap-2">
+              <span className="min-w-0 text-[10px] font-bold uppercase tracking-[0.2em] text-[#93A9FF]">{content.visit}</span>
+              <span className="flex shrink-0 items-center gap-1.5 whitespace-nowrap text-[11px] font-semibold text-[#61D8CE]">
                 <span className="h-1.5 w-1.5 rounded-full bg-[#0BB8AF]" />
                 {content.atDoor}
               </span>
@@ -202,7 +202,7 @@ function PhoneMock({ content }: { content: LandingPageContent["mockup"] }) {
             ].map(({ icon: Icon, label, value }) => (
               <div key={label} className="flex items-center gap-2.5 rounded-xl bg-black/25 px-3 py-2">
                 <Icon className="h-3.5 w-3.5 shrink-0 text-white/50" />
-                <span className="min-w-0 flex-1 truncate text-xs font-medium text-white/85">{label}</span>
+                <span className="min-w-0 flex-1 text-xs font-medium leading-snug text-white/85">{label}</span>
                 {value && <span className="text-xs font-semibold tabular-nums text-[#61D8CE]">{value}</span>}
                 <span className="flex h-6 w-6 items-center justify-center rounded-lg bg-[#0BB8AF]/20 text-[#61D8CE]" aria-label={content.confirm}>
                   <Check className="h-3.5 w-3.5" />
@@ -226,10 +226,15 @@ export function XpotLandingPage() {
   usePublicSeo("home");
   const [isLoginOpen, setIsLoginOpen] = useState(false);
   const [error, setError] = useState("");
+  // The dialog opened because a session ended (?ended=1 with a page to return to): it says so, not "create your account".
+  const [sessionEnded, setSessionEnded] = useState(false);
 
   const handleDialogChange = (open: boolean) => {
     setIsLoginOpen(open);
-    if (!open) setError("");
+    if (!open) {
+      setError("");
+      setSessionEnded(false);
+    }
   };
 
   const { data: me } = useQuery<any>({
@@ -257,9 +262,12 @@ export function XpotLandingPage() {
   }, [setLocation]);
 
   useEffect(() => {
-    // ?next= comes from /oauth/authorize when there is no session: keep it
-    // across the sign-in and open the dialog straight away.
-    if (rememberPostLoginRedirect()) {
+    // ?next= comes from /oauth/authorize or an expired session: keep it across
+    // the sign-in and open the dialog straight away. ?signin=1 (/login, "Go to
+    // sign-in") opens it with nowhere in particular to return to.
+    const hasNext = rememberPostLoginRedirect();
+    if (hasNext || signInRequested(window.location.search)) {
+      setSessionEnded(hasNext && sessionEndedRequested(window.location.search));
       window.history.replaceState(null, "", window.location.pathname);
       setIsLoginOpen(true);
     }
@@ -309,6 +317,10 @@ export function XpotLandingPage() {
     { icon: Boxes, tone: "text-[#8FA8FF] bg-[#5272F2]/10 border-[#5272F2]/20", screenshot: "/landing/product/sales-mobile-clean.webp", productPhoto: false, imageClass: "origin-top -translate-y-[3%] object-contain object-top scale-[0.94]" },
     { icon: Nfc, tone: "text-[#61D8CE] bg-[#0BB8AF]/10 border-[#0BB8AF]/20", screenshot: "/landing/product/nfc-stands-barbershop.webp", productPhoto: true, imageClass: "object-cover object-[48%_center] brightness-[0.72] saturate-[0.82]" },
   ];
+  // The screen prints are the app in English: beside Portuguese or Spanish text they read as another product, and on a phone
+  // they come out about 130 px wide, too small to read. They stay where they can be read (a computer, English); the
+  // photo of the stands, which has no words, stays everywhere.
+  const showPrints = t.lang === "en";
   const tools = content.tools.cards.map((card, index) => ({
     ...card,
     ...(toolVisuals[index] ?? toolVisuals[0]),
@@ -375,9 +387,9 @@ export function XpotLandingPage() {
                       <div className="flex items-center justify-center">
                         <XpotLogo className="h-9 w-auto -translate-y-1.5" />
                       </div>
-                      <DialogTitle className="sr-only">{content.account.welcomeTitle}</DialogTitle>
-                      <DialogDescription className="mx-auto mt-4 max-w-sm text-center text-sm leading-6 text-white/55">
-                        {content.account.welcomeSub}
+                      <DialogTitle className="sr-only">{sessionEnded ? content.account.signIn : content.account.welcomeTitle}</DialogTitle>
+                      <DialogDescription className="mx-auto mt-4 max-w-sm text-center text-sm leading-6 text-white/55" data-testid={sessionEnded ? "session-ended" : undefined}>
+                        {sessionEnded ? t("sessionEnded") : content.account.welcomeSub}
                       </DialogDescription>
                     </DialogHeader>
 
@@ -505,10 +517,12 @@ export function XpotLandingPage() {
               <SectionHeading title={content.how.title} sub={content.how.subtitle} />
             </Reveal>
             <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
-              {tools.map(({ icon: Icon, title, items, tone, screenshot, productPhoto, imageClass }, i) => (
+              {tools.map(({ icon: Icon, title, items, tone, screenshot, productPhoto, imageClass }, i) => {
+                const hasImage = productPhoto || showPrints;
+                return (
                 <Reveal key={title} delay={i * 0.08} className="h-full">
-                  <article className="grid h-full grid-cols-[38%_minmax(0,1fr)] overflow-hidden rounded-2xl border border-white/[0.07] bg-white/[0.035] transition-colors hover:border-white/[0.12] hover:bg-white/[0.05] sm:flex sm:h-[400px] lg:h-[360px] xl:h-[380px]">
-                    <div className="relative min-h-[280px] overflow-hidden border-r border-white/[0.07] bg-[#070b16] sm:aspect-[5/8] sm:h-full sm:min-h-0 sm:w-auto sm:shrink-0">
+                  <article className={`grid h-full overflow-hidden rounded-2xl border border-white/[0.07] bg-white/[0.035] transition-colors hover:border-white/[0.12] hover:bg-white/[0.05] sm:flex ${hasImage ? "sm:h-[400px] lg:h-[360px] xl:h-[380px]" : "sm:h-auto"} ${productPhoto ? "grid-cols-[38%_minmax(0,1fr)]" : "grid-cols-1"}`}>
+                    <div className={`relative min-h-[280px] overflow-hidden border-r border-white/[0.07] bg-[#070b16] sm:aspect-[5/8] sm:h-full sm:min-h-0 sm:w-auto sm:shrink-0 ${productPhoto ? "" : "hidden"} ${hasImage ? "sm:block" : "sm:hidden"}`}>
                       <img
                         src={screenshot}
                         alt={productPhoto ? title : `${title} — mobile screen with demo data`}
@@ -539,7 +553,8 @@ export function XpotLandingPage() {
                     </div>
                   </article>
                 </Reveal>
-              ))}
+                );
+              })}
             </div>
           </LandingBand>
 

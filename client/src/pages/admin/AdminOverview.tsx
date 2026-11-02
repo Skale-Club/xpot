@@ -8,24 +8,33 @@ import { EmptyState, ErrorState } from "@/components/xpot/EmptyState";
 import { ListSkeleton } from "@/components/xpot/ListSkeleton";
 import { KpiTile, SectionCard } from "@/components/xpot/DashboardKit";
 import { Segmented } from "@/components/xpot/Segmented";
-import { useIsSuperAdmin } from "@/components/xpot/AdminBadge";
+import { ownedOrganizationId, useViewerAccess } from "@/lib/adminMode";
 import { useUrlFilters } from "@/hooks/use-url-filters";
 import { useT } from "@/i18n";
 import { manageMessages } from "@/i18n/messages/manage";
 import { peopleWorkspaceMessages } from "@/i18n/messages/peopleWorkspace";
-import { TEAM_PERIODS, teamPeriodSince, type TeamActivityResponse, type TeamActivityRow, type TeamPeriod } from "@shared/teamActivity";
+import { TEAM_PERIODS, teamPeriodSince, teamVisitsHref, type TeamActivityResponse, type TeamActivityRow, type TeamPeriod } from "@shared/teamActivity";
 
 // Visits › Manage › Overview: what the field team did in a period (today, or
 // the last 7, 30 or 90 days), each number opening the list behind it, and one
 // row per rep that opens them in People. Only people with Visits count; Tags
 // has its own report (Tags › Manage › Reps). Sync problems live in Status.
 
-/** The lists the tiles open. Visits history only filters by day, Sales overview by 7/30/90 days. */
-function links(period: TeamPeriod) {
-  const range = period === "today" ? "7" : period;
+const HISTORY = "/admin/work/dashboard/history";
+
+/**
+ * The lists the tiles open, each one showing the same number as its tile: the visits history takes the period and which
+ * of its visits (?period=&show=), Sales overview the same periods (1 is today), and the pipeline lists the team's deals.
+ * People live in /admin/reps only for the platform: an owner or a partner opens their team, in the organization they run
+ * (or the list of them, for someone who runs several).
+ */
+function links(period: TeamPeriod, platform: boolean, organizationId: number | null) {
+  const range = period === "today" ? "1" : period;
   return {
-    reps: "/admin/reps?status=active&module=visits",
-    visits: period === "today" ? "/admin/work/dashboard/history?view=day" : "/admin/work/dashboard/history",
+    reps: platform ? "/admin/reps?status=active&module=visits" : organizationId ? `/organizations/${organizationId}?tab=team` : "/organizations",
+    visits: teamVisitsHref(HISTORY, period),
+    finished: teamVisitsHref(HISTORY, period, "finished"),
+    away: teamVisitsHref(HISTORY, period, "away"),
     inProgress: "/admin/work/dashboard/history?view=day&status=in_progress",
     sales: `/admin/work/sales?range=${range}`,
     pipeline: "/admin/work/sales/pipeline",
@@ -37,14 +46,17 @@ export function AdminOverview() {
   const t = useT(manageMessages);
   const tw = useT(peopleWorkspaceMessages);
   const [, navigate] = useLocation();
-  const isSuperAdmin = useIsSuperAdmin();
+  // The platform's copy covers every organization; an owner's or a partner's covers their own team.
+  const { me, profile } = useViewerAccess();
   // ?period=today|7|30|90 (30 by default).
   const filters = useUrlFilters({ period: "30" });
   const period = TEAM_PERIODS.find((p) => p === filters.values.period) ?? "30";
   // The start is fixed per period choice (not per render), so the query key stays put.
   const since = useMemo(() => teamPeriodSince(period).toISOString(), [period]);
-  const query = useQuery<TeamActivityResponse>({ queryKey: [`/api/xpot/admin/team-activity?since=${encodeURIComponent(since)}`] });
-  const to = links(period);
+  const query = useQuery<TeamActivityResponse>({ queryKey: [`/api/xpot/team-results?since=${encodeURIComponent(since)}`] });
+  const to = links(period, profile === "platform", ownedOrganizationId(me));
+  // A row opens the person: in /admin/reps for the platform, inside the organization they are on for anyone else.
+  const personHref = (r: TeamActivityRow) => (profile === "platform" ? `/admin/reps/${r.repId}` : r.organizationId ? `/organizations/${r.organizationId}/people/${r.repId}` : null);
 
   const picker = (
     <Segmented
@@ -59,7 +71,7 @@ export function AdminOverview() {
   const head = (
     <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
       <div className="sm:order-2">{picker}</div>
-      <p className="min-w-0 flex-1 text-xs text-white/45">{tw("scopeNote")}</p>
+      <p className="min-w-0 flex-1 text-xs text-white/45">{profile === "platform" ? tw("scopeNote") : tw("scopeNoteTeam")}</p>
     </div>
   );
 
@@ -109,16 +121,16 @@ export function AdminOverview() {
       {head}
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <KpiTile icon={Users} label={t("metricActiveReps")} value={m.activeReps} detail={tw("kpiActiveRepsDetail")} onClick={() => navigate(to.reps)} />
+        <KpiTile icon={Users} label={t("metricActiveReps")} value={m.activeReps} onClick={() => navigate(to.reps)} />
         <KpiTile icon={CalendarCheck} label={tw("kpiVisits")} value={m.visits} detail={tw("kpiVisitsDetail")} onClick={() => navigate(to.visits)} />
-        <KpiTile icon={Check} label={t("metricCompletedVisits")} value={m.finishedVisits} detail={tw("kpiFinishedDetail")} onClick={() => navigate(to.visits)} />
+        <KpiTile icon={Check} label={t("metricCompletedVisits")} value={m.finishedVisits} detail={tw("kpiFinishedDetail")} onClick={() => navigate(to.finished)} />
         <KpiTile
           icon={MapPinOff}
           accent={m.locationExceptions > 0 ? "amber" : "blue"}
           label={tw("kpiExceptions")}
           value={m.locationExceptions}
           detail={tw("kpiExceptionsDetail")}
-          onClick={() => navigate(to.visits)}
+          onClick={() => navigate(to.away)}
         />
         <KpiTile
           icon={DollarSign}
@@ -150,7 +162,7 @@ export function AdminOverview() {
                 <li key={r.repId}>
                   <button
                     type="button"
-                    onClick={() => navigate(`/admin/reps/${r.repId}`)}
+                    onClick={() => { const href = personHref(r); if (href) navigate(href); }}
                     aria-label={tw("openPerson", { name: r.displayName })}
                     className="w-full px-4 py-3 text-left transition-colors hover:bg-white/[0.04] focus-visible:!-outline-offset-2"
                   >
@@ -175,20 +187,13 @@ export function AdminOverview() {
               columns={columns}
               rows={reps}
               getRowKey={(r) => r.repId}
-              onRowClick={(r) => navigate(`/admin/reps/${r.repId}`)}
+              onRowClick={(r) => { const href = personHref(r); if (href) navigate(href); }}
               getRowAriaLabel={(r) => tw("openPerson", { name: r.displayName })}
             />
           </>
         )}
       </SectionCard>
 
-      {isSuperAdmin && (
-        <p className="text-right">
-          <button type="button" onClick={() => navigate("/admin/health")} className="min-h-11 text-xs font-medium text-blue-300 hover:text-blue-200">
-            {tw("syncProblemsLink")}
-          </button>
-        </p>
-      )}
     </div>
   );
 }

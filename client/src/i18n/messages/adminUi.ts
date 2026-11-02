@@ -7,7 +7,7 @@ import type { Dictionary } from "../index";
 const en = {
   unsavedChanges: "Unsaved changes",
   // Products
-  searchProducts: "Search by name, SKU or category",
+  searchProducts: "Search by name or category",
   productsLoadFailed: "Could not load the products.",
   noProductsMatch: "No product matches this search.",
   archiveProductTitle: "Archive {name}?",
@@ -23,7 +23,7 @@ export const adminUiMessages: Dictionary<typeof en> = {
   en,
   pt: {
     unsavedChanges: "Alterações não salvas",
-    searchProducts: "Buscar por nome, SKU ou categoria",
+    searchProducts: "Buscar por nome ou categoria",
     productsLoadFailed: "Não foi possível carregar os produtos.",
     noProductsMatch: "Nenhum produto corresponde a esta busca.",
     archiveProductTitle: "Arquivar {name}?",
@@ -35,7 +35,7 @@ export const adminUiMessages: Dictionary<typeof en> = {
   },
   es: {
     unsavedChanges: "Cambios sin guardar",
-    searchProducts: "Buscar por nombre, SKU o categoría",
+    searchProducts: "Buscar por nombre o categoría",
     productsLoadFailed: "No se pudieron cargar los productos.",
     noProductsMatch: "Ningún producto coincide con esta búsqueda.",
     archiveProductTitle: "¿Archivar {name}?",

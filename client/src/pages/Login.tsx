@@ -2,9 +2,10 @@ import { useCallback, useEffect, useState } from "react";
 import { useLocation } from "wouter";
 import { initSupabase } from "@/lib/supabase";
 import { queryClient } from "@/lib/queryClient";
-import { consumePostLoginRedirect, getXpotHomePath } from "@/lib/xpot";
+import { consumePostLoginRedirect, getXpotHomePath, rememberPostLoginRedirect, signInPath } from "@/lib/xpot";
 import { Loader2 } from "@/components/ui/loader";
 import { InlineAlert } from "@/components/xpot/InlineAlert";
+import { SessionGate } from "@/components/xpot/SessionGate";
 import { PAGE_GRADIENT } from "@/components/xpot/surface";
 import { translate, useT } from "@/i18n";
 import { landingMessages } from "@/i18n/messages/landing";
@@ -18,7 +19,8 @@ import type { XpotMeResponse } from "./xpot/types";
 //      exchanges it for an Express session via /api/auth/login, then redirects
 //      to /dashboard.
 //   3. If the user already has an Express session, just redirects to /dashboard.
-//   4. If nothing matches, bounces back to / (landing) where the dialog awaits.
+//   4. If nothing matches (someone who just typed /login), opens the landing
+//      with the sign-in dialog already open; ?next= is kept for after it.
 
 async function getCurrentUser() {
   const response = await fetch("/api/auth/user", { credentials: "include" });
@@ -31,6 +33,7 @@ async function getXpotSession(retryOn401 = true): Promise<{
   status: number;
   data: XpotMeResponse | null;
   message: string | undefined;
+  code: string | undefined;
 }> {
   const response = await fetch("/api/xpot/me", { credentials: "include" });
   // Defense against a post-login session/cookie propagation race: retry once.
@@ -44,6 +47,7 @@ async function getXpotSession(retryOn401 = true): Promise<{
     status: response.status,
     data: response.ok ? (payload as XpotMeResponse) : null,
     message: payload?.message as string | undefined,
+    code: payload?.code as string | undefined,
   };
 }
 
@@ -58,6 +62,8 @@ export default function Login() {
   const t = useT(landingMessages);
   const [status, setStatus] = useState<"working" | "error">("working");
   const [errorMsg, setErrorMsg] = useState<string>("");
+  // A person who signed in but is not approved (or was turned off): the same screen every module shows.
+  const [refusal, setRefusal] = useState<Error | null>(null);
 
   const goLanding = useCallback(
     (msg?: string) => {
@@ -70,7 +76,8 @@ export default function Login() {
           // ignore
         }
       }
-      setLocation("/");
+      // With an error the landing opens the dialog itself; without one, ask for it.
+      setLocation(msg ? "/" : signInPath());
     },
     [setLocation],
   );
@@ -78,6 +85,10 @@ export default function Login() {
   const goDashboard = useCallback(async () => {
     const result = await getXpotSession();
     if (!result.ok) {
+      if (result.status === 403 && (result.code === "pending" || result.code === "blocked")) {
+        setRefusal(Object.assign(new Error(result.message ?? ""), { status: 403, code: result.code }));
+        return;
+      }
       const reason =
         result.message ||
         (result.status === 403
@@ -104,6 +115,8 @@ export default function Login() {
     let mounted = true;
 
     async function run() {
+      // ?next= (the page the person was heading to) survives the sign-in, whichever way it goes.
+      rememberPostLoginRedirect();
       // 1. OAuth provider error in URL — user cancelled, Google rejected, etc.
       const params = new URLSearchParams(window.location.search);
       const oauthError = params.get("error_description") || params.get("error");
@@ -167,6 +180,8 @@ export default function Login() {
       mounted = false;
     };
   }, [goDashboard, goLanding]);
+
+  if (refusal) return <SessionGate error={refusal} />;
 
   return (
     <div

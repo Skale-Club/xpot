@@ -1,5 +1,8 @@
 import { useEffect, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
+import { useIsDesktop } from "@/hooks/use-is-desktop";
+import { prospectingMessages } from "@/i18n/messages/prospecting";
+import { localDateKey, routeStopFocus, todayRouteOf } from "./prospectingUi";
 import {
   Building2,
   MapPinned,
@@ -12,6 +15,7 @@ import {
   DollarSign,
   Mic2,
   CircleCheck,
+  MapPinCheck,
   MapPinOff,
   XCircle,
   type LucideIcon,
@@ -44,12 +48,15 @@ import { SocialLinks } from "./components/leads/socials";
 import { InlineField } from "./components/InlineField";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { VoiceRecorder } from "./components/VoiceRecorder";
+import { VisitTextNote } from "./components/VisitTextNote";
+import { defaultCheckoutStatus } from "./visitRules";
 import { VisitRow } from "./components/VisitRow";
 import { LiveMap } from "./components/LiveMap";
 import { StatusPicker } from "./components/VisitStatus";
 import type { VisitStatus } from "./components/VisitStatus";
 import type { FullSalesLead, GoogleBusinessProfile, SalesLead } from "./types";
-import { LeadSalesPanel } from "./components/sales/LeadSalesPanel";
+import { VisitSaleActions } from "./components/sales/VisitSaleActions";
+import { VisitAction } from "./components/VisitAction";
 import { VisitActionsPanel } from "./components/sales/VisitActions";
 import { EYEBROW, GLASS_RAISED, GLASS_CLASS } from "@/components/xpot/surface";
 import { PlaceLeadSearch } from "./components/PlaceLeadSearch";
@@ -129,38 +136,6 @@ function BriefMetric({ label, value, google }: { label: string; value: string; g
   );
 }
 
-function VisitAction({ icon: Icon, title, hint, onClick, tone = "indigo", testId }: {
-  icon: LucideIcon;
-  title: string;
-  hint: string;
-  onClick: () => void;
-  /** emerald = money (selling), violet = the Tags module, indigo = everything else. */
-  tone?: "indigo" | "violet" | "emerald";
-  testId?: string;
-}) {
-  const palette = tone === "violet"
-    ? "border-violet-400/20 bg-violet-400/[0.07] text-violet-300"
-    : tone === "emerald"
-      ? "border-emerald-400/20 bg-emerald-400/[0.07] text-emerald-300"
-      : "border-blue-400/20 bg-blue-400/[0.07] text-blue-300";
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={`flex min-h-[66px] min-w-0 items-center gap-2.5 rounded-2xl border p-3 text-left transition-transform active:scale-[0.98] ${palette}`}
-      data-testid={testId}
-    >
-      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-white/[0.07]">
-        <Icon className="h-[18px] w-[18px]" aria-hidden="true" />
-      </span>
-      <span className="min-w-0">
-        <strong className="block truncate text-sm font-bold text-white">{title}</strong>
-        <span className="mt-0.5 block truncate text-[10px] text-white/40">{hint}</span>
-      </span>
-    </button>
-  );
-}
-
 function ActiveLeadInfo({ lead, profile, profileLoading }: { lead: VisitLead; profile?: GoogleBusinessProfile; profileLoading: boolean }) {
   const t = useT(checkinMessages);
   const tl = useT(leadsMessages);
@@ -205,13 +180,13 @@ function ActiveLeadInfo({ lead, profile, profileLoading }: { lead: VisitLead; pr
       {(lead.phone || lead.email || websiteHref) && (
         <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
           {lead.phone && (
-            <a href={phoneHref(lead.phone)} className="flex min-h-10 min-w-0 items-center gap-2 rounded-xl bg-white/[0.035] px-3 py-2 text-white/75">
+            <a href={phoneHref(lead.phone)} className="col-span-2 flex min-h-10 min-w-0 items-center gap-2 rounded-xl bg-white/[0.035] px-3 py-2 text-white/75">
               <Phone className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
               <span className="truncate">{displayPhone(lead.phone)}</span>
             </a>
           )}
           {websiteHref && (
-            <a href={websiteHref} target="_blank" rel="noreferrer" className="flex min-h-10 min-w-0 items-center gap-2 rounded-xl bg-white/[0.035] px-3 py-2 text-white/75">
+            <a href={websiteHref} target="_blank" rel="noreferrer" className="col-span-2 flex min-h-10 min-w-0 items-center gap-2 rounded-xl bg-white/[0.035] px-3 py-2 text-white/75">
               <Globe className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
               <span className="truncate">{lead.website}</span>
             </a>
@@ -354,11 +329,37 @@ export function XpotCheckIn() {
     return Number.isFinite(Number(loc.lat)) && Number.isFinite(Number(loc.lng)) ? loc : null;
   })();
 
+  // With a route open today, its next stop is one tap away: no searching for the company the route already names.
+  const tp = useT(prospectingMessages);
+  const isDesktop = useIsDesktop();
+  const routesQuery = useQuery<Array<{ id: number; routeDate: string; status: string }>>({ queryKey: ["/api/xpot/prospecting/routes"], enabled: !activeVisit });
+  const openRoute = todayRouteOf(routesQuery.data, localDateKey());
+  const routeDetailQuery = useQuery<{ stops: Array<{ id: number; name: string; status: string }> }>({
+    queryKey: ["/api/xpot/prospecting/routes", openRoute?.id],
+    enabled: Boolean(openRoute) && !activeVisit,
+  });
+  const nextRouteStop = routeStopFocus(routeDetailQuery.data?.stops ?? []).next;
+  const pickNextStop = useMutation({
+    mutationFn: async (stop: { id: number; name: string }) => {
+      const response = await apiRequest("POST", `/api/xpot/prospecting/routes/${openRoute!.id}/stops/${stop.id}/prepare-check-in`, {});
+      return { ...(await response.json() as { leadId: number }), name: stop.name };
+    },
+    onSuccess: async ({ leadId, name }) => {
+      await queryClient.invalidateQueries({ queryKey: ["/api/xpot/leads"] });
+      setSelectedLeadId(leadId);
+      setCheckInSearch(name);
+    },
+    onError: (error: Error) => toast({ title: tp("checkInUnavailable"), description: error.message, variant: "destructive" }),
+  });
+
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const [editLeadOpen, setEditLeadOpen] = useState(false);
-  const [checkoutStatus, setCheckoutStatus] = useState<VisitStatus>("completed");
+  // No result is marked until the rep picks one: a default would file a closed door as a conversation.
+  const [checkoutStatus, setCheckoutStatus] = useState<VisitStatus | null>(null);
   const [createLeadDialogOpen, setCreateLeadDialogOpen] = useState(false);
   const [activeVisitPanel, setActiveVisitPanel] = useState<"sales" | "note" | "checkout" | "cancel" | null>(null);
+  // A sale recorded during the visit makes "Sale made" the result it starts with at check-out.
+  const visitHasSale = ((activeVisit as { visitSales?: { transactions: number } } | null)?.visitSales?.transactions ?? 0) > 0;
   const activeLeadDetails: VisitLead | null = activeVisit?.lead
     ? (leadsQuery.data?.find((lead) => lead.id === activeVisit.lead!.id) ?? activeVisit.lead)
     : null;
@@ -474,7 +475,12 @@ export function XpotCheckIn() {
         {/* Actions are one tap away, while the visit brief remains fully visible. */}
         <div className="relative grid grid-cols-2 gap-2">
           {activeVisit.lead && (
-            <VisitAction icon={DollarSign} title={t("visitSales")} hint={t("visitSalesHint")} tone="emerald" onClick={() => setActiveVisitPanel("sales")} />
+            <VisitSaleActions
+              lead={activeVisit.lead}
+              visitId={activeVisit.id}
+              saleOpen={activeVisitPanel === "sales"}
+              onSaleOpenChange={(open) => setActiveVisitPanel(open ? "sales" : null)}
+            />
           )}
           <VisitAction icon={Mic2} title={t("visitNote")} hint={t("visitNoteHint")} onClick={() => setActiveVisitPanel("note")} />
           {canSellTags && activeVisit.lead && (
@@ -491,8 +497,18 @@ export function XpotCheckIn() {
               }}
             />
           )}
-          <VisitAction icon={CircleCheck} title={t("finishVisit")} hint={t("finishVisitHint")} tone="emerald" onClick={() => setActiveVisitPanel("checkout")} />
         </div>
+
+        <Button
+          type="button"
+          variant="brand"
+          size="lg"
+          onClick={() => { setCheckoutStatus((current) => defaultCheckoutStatus(current, visitHasSale) as VisitStatus | null); setActiveVisitPanel("checkout"); }}
+          className="relative min-h-12 w-full text-base font-bold"
+          data-testid="button-finish-visit"
+        >
+          <CircleCheck aria-hidden="true" />{t("finishVisit")}
+        </Button>
 
         {/* Secondary on purpose: a mistaken check-in is discarded, not checked out with an outcome. */}
         <div className="relative flex justify-center">
@@ -525,19 +541,11 @@ export function XpotCheckIn() {
         onConfirm={() => cancelVisitMutation.mutate(undefined, { onSettled: () => setActiveVisitPanel(null) })}
       />
 
-      {activeVisit.lead && (
-        <Dialog open={activeVisitPanel === "sales"} onOpenChange={(open) => !open && setActiveVisitPanel(null)}>
-          <DialogContent className="max-w-md">
-            <DialogHeader className="pr-8"><DialogTitle className="text-base">{t("visitSales")}</DialogTitle></DialogHeader>
-            <LeadSalesPanel leadId={activeVisit.lead.id} leadName={activeVisit.lead.name} lead={activeVisit.lead} visitId={activeVisit.id} compact />
-          </DialogContent>
-        </Dialog>
-      )}
-
       <Dialog open={activeVisitPanel === "note"} onOpenChange={(open) => !open && setActiveVisitPanel(null)}>
         <DialogContent className="max-w-md">
           <DialogHeader className="pr-8"><DialogTitle className="text-base">{t("visitNote")}</DialogTitle></DialogHeader>
           <VoiceRecorder onUpload={uploadVisitNote} />
+          <VisitTextNote visitId={activeVisit.id} saved={activeVisit.note?.summary} />
           <VisitActionsPanel visitId={activeVisit.id} onApplied={() => invalidateXpotData()} />
         </DialogContent>
       </Dialog>
@@ -545,15 +553,24 @@ export function XpotCheckIn() {
       <Dialog open={activeVisitPanel === "checkout"} onOpenChange={(open) => !open && setActiveVisitPanel(null)}>
         <DialogContent className="max-w-md">
           <DialogHeader className="pr-8"><DialogTitle className="text-base">{t("finishVisit")}</DialogTitle></DialogHeader>
-          <StatusPicker value={checkoutStatus} onChange={setCheckoutStatus} />
-          <ConfirmSlider
-            label={uploadAudioMutation.isPending ? t("uploadInProgress") : t("slideToCheckOut")}
-            helperText=""
-            loading={checkOutMutation.isPending || uploadAudioMutation.isPending}
-            disabled={uploadAudioMutation.isPending || cancelVisitMutation.isPending}
-            onConfirm={() => checkOutMutation.mutate({ status: checkoutStatus })}
-            mode="check-out"
-          />
+          <StatusPicker value={checkoutStatus ?? ""} onChange={(next) => {
+            setCheckoutStatus(next);
+            // "Sale made" with nothing sold on this visit: the sale is asked for now, not left as a result with no sale behind it (VIS-24).
+            if (next === "sale_made" && !visitHasSale) setActiveVisitPanel("sales");
+          }} />
+          {/* The slider appears with the first choice: one more tap, and the result is always one the rep gave. */}
+          {checkoutStatus ? (
+            <ConfirmSlider
+              label={uploadAudioMutation.isPending ? t("uploadInProgress") : t("slideToCheckOut")}
+              helperText=""
+              loading={checkOutMutation.isPending || uploadAudioMutation.isPending}
+              disabled={uploadAudioMutation.isPending || cancelVisitMutation.isPending}
+              onConfirm={() => checkOutMutation.mutate({ status: checkoutStatus })}
+              mode="check-out"
+            />
+          ) : (
+            <p className="text-center text-xs text-white/45" data-testid="checkout-choose-result">{t("chooseResultFirst")}</p>
+          )}
         </DialogContent>
       </Dialog>
 
@@ -568,6 +585,18 @@ export function XpotCheckIn() {
       <div className={`px-1 ${EYEBROW}`}>{t("checkInHeading")}</div>
       <div className="rounded-2xl" style={GLASS_RAISED}>
         <div className="px-4 py-5 space-y-5 sm:px-6">
+          {nextRouteStop && !selectedLead ? (
+            <button
+              type="button"
+              onClick={() => pickNextStop.mutate(nextRouteStop)}
+              disabled={pickNextStop.isPending}
+              className="flex min-h-12 w-full min-w-0 items-center gap-2.5 rounded-2xl border border-blue-400/25 bg-blue-500/[0.1] px-4 text-left text-sm font-semibold text-blue-100 transition active:scale-[0.99]"
+              data-testid="check-in-next-stop"
+            >
+              <MapPinCheck className="h-4 w-4 shrink-0" aria-hidden="true" />
+              <span className="min-w-0 truncate">{tp("stopNext", { name: nextRouteStop.name })}</span>
+            </button>
+          ) : null}
           <PlaceLeadSearch
             value={checkInSearch}
             onChange={(next) => { setCheckInSearch(next); if (!next) setSelectedLeadId(""); }}
@@ -658,17 +687,30 @@ export function XpotCheckIn() {
 
           {/* Slider */}
           <div className={checkInDropdownOpen ? "pointer-events-none" : ""}>
-            <ConfirmSlider
-              label={selectedLead ? t("slideToCheckIn") : t("selectLeadFirst")}
-              helperText={selectedLead ? t("confirmVisitStart", { name: selectedLead.name }) : t("chooseLeadHint")}
-              loading={checkInMutation.isPending || createLeadMutation.isPending}
-              disabled={!selectedLeadId || createLeadMutation.isPending}
-              onConfirm={() => {
+            {(() => {
+              const startCheckIn = () => {
                 const input = { leadId: Number(selectedLeadId), lat: geoState.lat, lng: geoState.lng, gpsAccuracyMeters: geoState.accuracy };
                 if (!hasLocation) setOverridePrompt({ input, miss: null });
                 else checkInMutation.mutate(input);
-              }}
-            />
+              };
+              // A mouse has no use for a slider: on a computer it is a button, shown once a company is chosen.
+              if (isDesktop) {
+                return selectedLead ? (
+                  <Button type="button" variant="brand" size="lg" onClick={startCheckIn} loading={checkInMutation.isPending || createLeadMutation.isPending} className="w-full font-bold" data-testid="check-in-button">
+                    <MapPinCheck aria-hidden="true" />{t("checkInAt", { name: selectedLead.name })}
+                  </Button>
+                ) : <p className="text-sm text-white/45">{t("chooseLeadHint")}</p>;
+              }
+              return selectedLead ? (
+                <ConfirmSlider
+                  label={t("slideToCheckIn")}
+                  helperText={t("confirmVisitStart", { name: selectedLead.name })}
+                  loading={checkInMutation.isPending || createLeadMutation.isPending}
+                  disabled={!selectedLeadId || createLeadMutation.isPending}
+                  onConfirm={startCheckIn}
+                />
+              ) : <p className="text-sm text-white/45">{t("chooseLeadHint")}</p>;
+            })()}
           </div>
         </div>
       </div>

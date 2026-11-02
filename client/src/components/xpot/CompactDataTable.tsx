@@ -34,6 +34,7 @@ export function CompactDataTable<T>({
   testId,
   getRowTestId,
   isRowSelected,
+  stickyHeadTop,
 }: {
   columns: readonly CompactDataColumn<T>[];
   rows: readonly T[];
@@ -50,6 +51,11 @@ export function CompactDataTable<T>({
   getRowTestId?: (row: T) => string;
   /** Rows ticked in a selection get a faint tint. */
   isRowSelected?: (row: T) => boolean;
+  /**
+   * Keep the headings in view while the page scrolls, this many px below the top of the scrolling area. The table then
+   * never scrolls sideways by itself (a scrolling box would hold the headings back): give it columns that fit.
+   */
+  stickyHeadTop?: number;
 }) {
   function handleKeyDown(event: KeyboardEvent<HTMLTableRowElement>, row: T) {
     if (!onRowClick || event.target !== event.currentTarget) return;
@@ -60,7 +66,7 @@ export function CompactDataTable<T>({
   }
 
   return (
-    <div className={`overflow-x-auto rounded-2xl ${GLASS_SUBTLE_CLASS} ${className}`}>
+    <div className={`${stickyHeadTop === undefined ? "overflow-x-auto" : "overflow-x-clip"} rounded-2xl ${GLASS_SUBTLE_CLASS} ${className}`}>
       <table className="w-full text-left text-sm" data-testid={testId}>
         <thead className={`border-b border-white/[0.07] ${TABLE_HEAD}`}>
           <tr>
@@ -68,9 +74,9 @@ export function CompactDataTable<T>({
               <th
                 key={column.key}
                 scope="col"
-                style={column.width ? { width: column.width } : undefined}
+                style={{ ...(column.width ? { width: column.width } : null), ...(stickyHeadTop === undefined ? null : { top: stickyHeadTop }) }}
                 aria-sort={column.ariaSort}
-                className={`whitespace-nowrap px-4 py-2.5 ${ALIGN[column.align ?? "left"]} ${column.headerClassName ?? ""}`}
+                className={`whitespace-nowrap px-4 py-2.5 ${stickyHeadTop === undefined ? "" : "sticky z-10 bg-[#101018]"} ${ALIGN[column.align ?? "left"]} ${column.headerClassName ?? ""}`}
               >
                 {column.label}
               </th>

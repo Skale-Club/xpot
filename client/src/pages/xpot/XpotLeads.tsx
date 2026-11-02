@@ -1,11 +1,12 @@
 import { useCallback, useMemo, useState } from "react";
-import { useRoute } from "wouter";
+import { useRoute, useRouter } from "wouter";
 import {
   Plus,
   Search,
   Trash2,
   LogIn,
   Building2,
+  Navigation,
   Nfc,
   MoreVertical,
   CalendarDays,
@@ -14,7 +15,7 @@ import {
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { LeadTagSummary } from "@shared/tagsApi";
 import { useXpotModules } from "@/components/ModuleSwitch";
-import { LeadCardBody } from "./components/LeadCardBody";
+import { LeadCardBody, buildRouteUrl } from "./components/LeadCardBody";
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/xpot/ConfirmDialog";
 import { useXpotQueries } from "./hooks/useXpotQueries";
@@ -29,7 +30,7 @@ import { useIsDesktop } from "@/hooks/use-is-desktop";
 import { BottomSheet } from "@/pages/tags/ui";
 import { leadPiecesPath } from "@/pages/tags/lib";
 import { useViewerAccess } from "@/lib/adminMode";
-import { LeadRowFacts, LeadsTable } from "./components/leads/LeadsTable";
+import { CheckInAction, LeadRowFacts, LeadsTable } from "./components/leads/LeadsTable";
 import { LeadDetailPane } from "./components/leads/LeadDetailPane";
 import { CreateLeadDialog } from "./components/CreateLeadDialog";
 import { useT } from "@/i18n";
@@ -45,6 +46,7 @@ import { currentSearch, useUrlFilters } from "@/hooks/use-url-filters";
 import { ListPager, usePagedList } from "@/components/xpot/pagination";
 import { selectLeadForDetail } from "./lead-detail-selection";
 import { companyStage, followUpDueTime, isWorkedCompany, needsFollowUp } from "./visitRules";
+import { Segmented } from "@/components/xpot/Segmented";
 import { leadAccess } from "./leadAccess";
 import { isFinishedVisitStatus } from "@shared/visit-status";
 
@@ -71,9 +73,14 @@ function LeadPiecesChip({ lead, summary, onOpen }: { lead: FullSalesLead; summar
   );
 }
 
-function LeadCard({ lead, onOpen, onMore, pieces, onOpenPieces, lastVisit }: {
+function LeadCard({ lead, onOpen, onMore, pieces, onOpenPieces, lastVisit, worked, followUp, activeVisitLeadId, onCheckIn, onBackToVisit }: {
   lead: FullSalesLead;
+  activeVisitLeadId: number | null;
+  onCheckIn: (lead: FullSalesLead) => void;
+  onBackToVisit: () => void;
   lastVisit: Date | null;
+  worked: boolean;
+  followUp: boolean;
   pieces?: LeadTagSummary;
   onOpenPieces?: () => void;
   onOpen: () => void;
@@ -81,6 +88,7 @@ function LeadCard({ lead, onOpen, onMore, pieces, onOpenPieces, lastVisit }: {
   onMore: () => void;
 }) {
   const t = useT(leadsMessages);
+  const routeUrl = buildRouteUrl(lead.locations?.[0]);
   return (
     <div
       role="button"
@@ -91,9 +99,10 @@ function LeadCard({ lead, onOpen, onMore, pieces, onOpenPieces, lastVisit }: {
     >
       <LeadCardBody
         lead={lead}
+        compact
         subtitle={
           <div className="space-y-1.5">
-            <LeadRowFacts lead={lead} lastVisit={lastVisit} />
+            <LeadRowFacts lead={lead} lastVisit={lastVisit} worked={worked} followUp={followUp} />
             {pieces && onOpenPieces ? <LeadPiecesChip lead={lead} summary={pieces} onOpen={onOpenPieces} /> : null}
           </div>
         }
@@ -112,6 +121,15 @@ function LeadCard({ lead, onOpen, onMore, pieces, onOpenPieces, lastVisit }: {
           </Button>
         }
       />
+      {/* What the rep does on the street: go there, then start the visit. */}
+      <div className="mt-3 flex items-center gap-2 border-t border-white/[0.06] pt-3" onClick={(e) => e.stopPropagation()}>
+        <CheckInAction lead={lead} activeVisitLeadId={activeVisitLeadId} onCheckIn={onCheckIn} onBackToVisit={onBackToVisit} />
+        {routeUrl ? (
+          <Button asChild variant="secondary" size="sm">
+            <a href={routeUrl} target="_blank" rel="noopener noreferrer"><Navigation aria-hidden="true" />{t("directions")}</a>
+          </Button>
+        ) : null}
+      </div>
     </div>
   );
 }
@@ -127,9 +145,9 @@ function LeadActionSheet({ lead, onClose, onSell, onCheckIn, onDelete, canDelete
 }) {
   const t = useT(leadsMessages);
   const items = [
-    { key: "sell", label: t("salesAndConsignment"), icon: DollarSign, run: onSell, cls: "text-emerald-300" },
     { key: "checkin", label: t("checkIn"), icon: LogIn, run: onCheckIn, cls: "text-blue-300" },
-    ...(canDelete ? [{ key: "delete", label: t("delete"), icon: Trash2, run: onDelete, cls: "text-red-300" }] : []),
+    { key: "sell", label: t("salesAndConsignment"), icon: DollarSign, run: onSell, cls: "text-emerald-300" },
+    ...(canDelete ? [{ key: "delete", label: t("deleteCompany"), icon: Trash2, run: onDelete, cls: "text-red-300" }] : []),
   ];
   return (
     <BottomSheet open={Boolean(lead)} onClose={onClose} title={lead?.name}>
@@ -153,14 +171,15 @@ function LeadActionSheet({ lead, onClose, onSell, onCheckIn, onDelete, canDelete
 
 // ─── Main Component ───────────────────────────────────────────────────────────
 
-const LEAD_FILTERS = ["all", "followup", "lead", "customer", "prospect"] as const;
+// The chips narrow "My companies" and add up inside it. The companies not visited yet are a tab of their own
+// (status=prospect in the link), never a chip that counts a different group.
+const LEAD_FILTERS = ["all", "followup", "lead", "customer"] as const;
 type LeadFilter = (typeof LEAD_FILTERS)[number];
 const LEAD_FILTER_LABEL = {
   all: "filterAll",
   followup: "filterFollowUp",
   lead: "filterLeads",
   customer: "filterCustomers",
-  prospect: "tabProspects",
 } as const satisfies Record<LeadFilter, string>;
 
 /**
@@ -179,13 +198,18 @@ export function XpotLeads() {
   const t = useT(leadsMessages);
   const tc = useT(commonMessages);
   const { setLocation, me } = useXpotQueries();
+  // The panel is for looking at the portfolio, My work is for working it: the first tab is named for that.
+  const inPanel = useRouter().base.startsWith("/admin");
+  const activeVisitLeadId = me?.activeVisit?.leadId ?? null;
+  const checkIn = (lead: FullSalesLead) => setLocation(`/route/check-in?leadId=${lead.id}`);
+  const backToVisit = () => setLocation("/route/check-in");
   // A rep who only holds a piece at a company may not delete it (the server refuses).
   const canDelete = useCallback((lead: FullSalesLead) => leadAccess(me, lead).owner, [me]);
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const isDesktop = useIsDesktop();
   // Management mode: the piece chips count every rep's pieces (getLeadTagSummaries).
-  const { canManage } = useViewerAccess();
+  const { canManage, adminMode } = useViewerAccess();
   const [routeMatch, routeParams] = useRoute("/leads/:id");
   const routeId = routeMatch && /^\d+$/.test(routeParams.id) ? Number(routeParams.id) : null;
   // ?status=customer&day=2026-10-12&q=bakery&org=4 — survives reloads and opening a company.
@@ -195,6 +219,7 @@ export function XpotLeads() {
   const organizationOptions = (me?.organizations ?? [])
     .filter((organization) => !organization.personal || organization.id === organizationId)
     .map((organization) => ({ value: String(organization.id), label: organization.name }));
+  const toVisitTab = filters.values.status === "prospect";
   const leadFilter: LeadFilter = (LEAD_FILTERS as readonly string[]).includes(filters.values.status) ? (filters.values.status as LeadFilter) : "all";
   const search = filters.values.q;
   const day = fromDayKey(filters.values.day);
@@ -203,6 +228,9 @@ export function XpotLeads() {
   const [leadPendingDelete, setLeadPendingDelete] = useState<FullSalesLead | null>(null);
   const [actionLead, setActionLead] = useState<FullSalesLead | null>(null);
   const [addOpen, setAddOpen] = useState(false);
+  // What was searched when "Add" was tapped, so the new company starts with that name.
+  const [addName, setAddName] = useState("");
+  const openAdd = (name = "") => { setAddName(name); setAddOpen(true); };
 
   const { leadsQuery, deleteLeadMutation } = useLeads(routeId === null, organizationId);
   const leadDetailQuery = useQuery<{
@@ -254,7 +282,7 @@ export function XpotLeads() {
   // Businesses saved (e.g. picked on the Dashboard) but never checked in stay out
   // of the default view; the Prospects chip is where they can be found.
   const prospects = allLeads.filter((lead) => !isWorkedLead(lead));
-  const pool = leadFilter === "prospect" ? prospects : leads;
+  const pool = toVisitTab ? prospects : leads;
   const visitsByLead = useMemo(() => {
     const map = new Map<number, EnrichedSalesVisit[]>();
     for (const v of visits ?? []) {
@@ -269,11 +297,13 @@ export function XpotLeads() {
     (leadId: number) => visitsByLead.get(leadId)?.find((visit) => isFinishedVisitStatus(visit.status))?.status ?? null,
     [visitsByLead],
   );
+  // The company's own last visit (anyone's) when it has one: the visits loaded here may be only the viewer's.
+  const lastVisitAtOf = useMemo(() => new Map(allLeads.map((lead) => [lead.id, lead.lastVisitAt] as const)), [allLeads]);
   const lastVisitFor = useCallback((leadId: number) => {
     const v = visitsByLead.get(leadId)?.[0];
-    const when = v?.checkedInAt ?? v?.createdAt;
+    const when = lastVisitAtOf.get(leadId) ?? v?.checkedInAt ?? v?.createdAt;
     return when ? new Date(when) : null;
-  }, [visitsByLead]);
+  }, [visitsByLead, lastVisitAtOf]);
 
   const selectedLead = routeId !== null && leadDetailQuery.data
     ? {
@@ -283,6 +313,8 @@ export function XpotLeads() {
         openOpportunities: leadDetailQuery.data.opportunities.filter((opportunity) => opportunity.status === "open").length,
       } as FullSalesLead
     : selectLeadForDetail(allLeads, routeId);
+
+  const isFollowUp = useCallback((lead: FullSalesLead) => needsFollowUp(lead, lastOutcomeFor(lead.id)), [lastOutcomeFor]);
 
   // Companies visited (checked in) on the chosen day.
   const visitedOnDay = useMemo(() => {
@@ -302,7 +334,7 @@ export function XpotLeads() {
   );
   const baseList = useMemo(() => narrow(pool), [narrow, pool]);
   const displayList = useMemo(() => {
-    const filtered = baseList.filter((lead) => matchesLeadFilter(lead, leadFilter, lastOutcomeFor(lead.id)));
+    const filtered = toVisitTab ? baseList : baseList.filter((lead) => matchesLeadFilter(lead, leadFilter, lastOutcomeFor(lead.id)));
     return [...filtered].sort((a, b) => {
       const aDue = followUpDueTime(a);
       const bDue = followUpDueTime(b);
@@ -312,10 +344,10 @@ export function XpotLeads() {
       if (aVisited !== bVisited) return bVisited - aVisited;
       return a.name.localeCompare(b.name);
     });
-  }, [baseList, leadFilter, lastOutcomeFor]);
+  }, [baseList, leadFilter, toVisitTab, lastOutcomeFor]);
 
   // Big portfolios render 50 at a time; a new filter starts from the top.
-  const pagedLeads = usePagedList(displayList, { resetKey: `${leadFilter}|${search}|${filters.values.day}` });
+  const pagedLeads = usePagedList(displayList, { resetKey: `${toVisitTab}|${leadFilter}|${search}|${filters.values.day}` });
 
   const countsByDay = useMemo(() => {
     const relevantIds = new Set(leads.map((lead) => lead.id));
@@ -352,10 +384,14 @@ export function XpotLeads() {
   const filterChips = LEAD_FILTERS.map((id) => ({
     id,
     label: t(LEAD_FILTER_LABEL[id]),
-    count: id === "prospect"
-      ? narrow(prospects).length
-      : worked.filter((lead) => matchesLeadFilter(lead, id, lastOutcomeFor(lead.id))).length,
+    count: worked.filter((lead) => matchesLeadFilter(lead, id, lastOutcomeFor(lead.id))).length,
   }));
+  const companyTabs = [
+    // "My companies" is the owner's organizations; this tab is the saved companies: the person's own, or in the panel everyone's in scope.
+    { id: "mine", label: t(adminMode ? "tabAllCompanies" : "tabMine"), count: worked.length },
+    { id: "tovisit", label: t("tabProspects"), count: narrow(prospects).length },
+  ];
+  const nothingSaved = !leadsQuery.isLoading && !leadsQuery.isError && allLeads.length === 0;
 
   const filterBar = (
     <FilterBar
@@ -386,7 +422,7 @@ export function XpotLeads() {
         <Button
           type="button"
           variant="brand"
-          onClick={() => setAddOpen(true)}
+          onClick={() => openAdd()}
           title={t("newLead")}
           aria-label={t("newLead")}
           data-shortcut="new"
@@ -406,7 +442,15 @@ export function XpotLeads() {
               detail={t.plural("companyCount", displayList.length)}
             />
           ) : null}
-          <FilterChips items={filterChips} value={leadFilter} onChange={(status) => filters.set({ status })} ariaLabel={t("filterByStatus")} />
+          <Segmented
+            ariaLabel={t("tabLeads")}
+            className="w-full lg:max-w-md"
+            itemClassName="min-h-10 px-1"
+            value={toVisitTab ? "tovisit" : "mine"}
+            onChange={(tab) => filters.set({ status: tab === "tovisit" ? "prospect" : null })}
+            items={companyTabs}
+          />
+          {toVisitTab ? null : <FilterChips items={filterChips} value={leadFilter} onChange={(status) => filters.set({ status })} ariaLabel={t("filterByStatus")} />}
         </div>
       }
       summary={{ shown: displayList.length, total: pool.length, active: filters.activeCount() > 0, onClear: () => filters.reset() }}
@@ -421,16 +465,20 @@ export function XpotLeads() {
     <EmptyState tone="red" icon={Building2} title={t("loadFailed")} hint={(leadsQuery.error as Error).message}>
       <RetryButton onRetry={() => void leadsQuery.refetch()} busy={leadsQuery.isFetching} />
     </EmptyState>
-  ) : leadFilter === "prospect" && prospects.length === 0 ? (
+  ) : toVisitTab && prospects.length === 0 ? (
     <EmptyState icon={Building2} title={t("noProspects")} hint={t("noProspectsHint")} />
-  ) : leads.length === 0 && !search && leadFilter !== "prospect" ? (
+  ) : leads.length === 0 && !search && !toVisitTab ? (
     <EmptyState icon={Building2} title={t("noLeads")} hint={t("noLeadsHint")}>
-      <Button type="button" variant="brand" size="sm" onClick={() => setAddOpen(true)}>
+      <Button type="button" variant="brand" size="sm" onClick={() => openAdd()}>
         <Plus aria-hidden="true" /> {t("addLead")}
       </Button>
     </EmptyState>
   ) : displayList.length > 0 ? null : search ? (
-    <EmptyState icon={Search} title={t("noResults", { query: search })} hint={t("chooseAnotherFilter")} />
+    <EmptyState icon={Search} title={t("noResults", { query: search })} hint={t("checkSpelling")}>
+      <Button type="button" variant="brand" size="sm" onClick={() => openAdd(search)}>
+        <Plus aria-hidden="true" /> {t("addNamed", { query: search })}
+      </Button>
+    </EmptyState>
   ) : day ? (
     <EmptyState icon={CalendarDays} title={t("noCompaniesOnDate")} hint={t("chooseAnotherDate")} />
   ) : (
@@ -459,7 +507,7 @@ export function XpotLeads() {
         )
       ) : (
         <>
-          {filterBar}
+          {nothingSaved ? null : filterBar}
           {isDesktop ? (
             <>
               {emptyStates}
@@ -470,8 +518,12 @@ export function XpotLeads() {
                   onSelect={openLead}
                   piecesFor={piecesFor}
                   lastVisitFor={lastVisitFor}
+                  worked={!toVisitTab}
+                  isFollowUp={isFollowUp}
                   onSell={setSalesLead}
-                  onCheckIn={(lead) => setLocation(`/route/check-in?leadId=${lead.id}`)}
+                  onCheckIn={checkIn}
+                  activeVisitLeadId={activeVisitLeadId}
+                  onBackToVisit={backToVisit}
                   onDelete={setLeadPendingDelete}
                   canDelete={canDelete}
                 />
@@ -487,7 +539,12 @@ export function XpotLeads() {
                   lead={lead}
                   onOpen={() => openLead(lead)}
                   onMore={() => setActionLead(lead)}
+                  activeVisitLeadId={activeVisitLeadId}
+                  onCheckIn={checkIn}
+                  onBackToVisit={backToVisit}
                   lastVisit={lastVisitFor(lead.id)}
+                  worked={!toVisitTab}
+                  followUp={isFollowUp(lead)}
                   pieces={piecesFor(lead.id)}
                   onOpenPieces={() => setLocation(`${canManage ? "~" : ""}${leadPiecesPath(lead.id, lead.name, canManage)}`)}
                 />
@@ -519,7 +576,7 @@ export function XpotLeads() {
       {/* The same "New company" dialog as check-in and the Dashboard (Google
           autofill with coordinates, phone mask); created here as a lead, the
           status this list shows. */}
-      <CreateLeadDialog open={addOpen} onOpenChange={setAddOpen} initialName="" status="lead" />
+      <CreateLeadDialog open={addOpen} onOpenChange={setAddOpen} initialName={addName} status="lead" />
 
       <ConfirmDialog
         open={Boolean(leadPendingDelete)}

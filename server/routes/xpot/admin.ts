@@ -15,6 +15,7 @@ import {
   changeRepPhone,
   createResellerAccount,
   listRepsWithAccess,
+  organizationsWhereOnlyOwner,
   phoneChangeSchema,
   refuseRep,
   resellerAccountSchema,
@@ -155,7 +156,9 @@ export function createAdminRouter() {
   router.get("/admin/reps/:id/organizations", withRep(async (id) => {
     const rep = await storage.getSalesRep(id);
     if (!rep || rep.deletedAt) throw new AccountError("Person not found", 404, "rep_not_found");
-    return organizationsForRep(id);
+    const [memberships, onlyOwnerOf] = await Promise.all([organizationsForRep(id), organizationsWhereOnlyOwner(id)]);
+    // The screen hides what the server would refuse: removing or suspending the last owner.
+    return memberships.map((membership) => ({ ...membership, onlyOwner: onlyOwnerOf.has(membership.organizationId) }));
   }));
 
   router.get("/admin/sync-events", async (_req, res) => {
@@ -203,10 +206,16 @@ export function createAdminRouter() {
       storage.listXphereIntegrations(),
     ]);
     const byUser = new Map(configs.map((c) => [c.userId, c]));
+    // The latest record of those with a token saved: the rest have nothing to sync yet.
+    const lastSyncOf = new Map(await Promise.all(reps.filter((rep) => rep.userId && byUser.get(rep.userId)?.apiKey).map(async (rep) => {
+      const [last] = await storage.listSalesSyncEventsForRep(rep.id, 1);
+      return [rep.id, last ? { status: last.status, at: last.lastAttemptAt ?? last.createdAt, error: last.lastError } : null] as const;
+    })));
     const items = reps.map((rep) => {
       const cfg = rep.userId ? byUser.get(rep.userId) : undefined;
       return {
         ...presentXphere(cfg),
+        lastSync: lastSyncOf.get(rep.id) ?? null,
         userId: rep.userId,
         repId: rep.id,
         displayName: rep.displayName,

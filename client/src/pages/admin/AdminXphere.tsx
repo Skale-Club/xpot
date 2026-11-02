@@ -1,32 +1,29 @@
 import { useState } from "react";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { apiRequest } from "@/lib/queryClient";
-import { describeApiError } from "@/lib/apiErrors";
-import { useToast } from "@/hooks/use-toast";
+import { useQuery } from "@tanstack/react-query";
+import { Link, useLocation } from "wouter";
+import { ChevronRight, Users, Webhook } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Switch } from "@/components/ui/switch";
-import { ConfirmDialog } from "@/components/xpot/ConfirmDialog";
-import { CopyButton } from "@/components/xpot/CopyButton";
+import { CompactDataTable, type CompactDataColumn } from "@/components/xpot/CompactDataTable";
 import { EmptyState, ErrorState } from "@/components/xpot/EmptyState";
-import { Field, Input } from "@/components/xpot/Field";
 import { FilterBar, FilterSearch, FilterToggle } from "@/components/xpot/filters";
-import { FormFooter } from "@/components/xpot/FormFooter";
 import { ListSkeleton } from "@/components/xpot/ListSkeleton";
 import { ListPager, usePagedList } from "@/components/xpot/pagination";
-import { INTEGRATION_TONE, Pill } from "@/components/xpot/StatusPill";
+import { Pill, toneOf } from "@/components/xpot/StatusPill";
 import { GLASS_CLASS } from "@/components/xpot/surface";
-import { Eye, EyeOff, RotateCw, Users, Webhook } from "lucide-react";
-import { Link } from "wouter";
+import { formatDateTime } from "@/lib/format";
 import { useT } from "@/i18n";
-import { commonMessages } from "@/i18n/messages/common";
-import { manageMessages } from "@/i18n/messages/manage";
 import { integrationsMessages } from "@/i18n/messages/integrations";
-import { isXphereQueryKey, maskInboundKey, visibleXphereRows, XPHERE_KEY, type XphereRow } from "./integrationsUi";
-import { SERVICES_KEY } from "./platform/servicesUi";
-import { useReportUnsaved } from "./unsavedEdits";
+import { manageMessages, type ManageKey } from "@/i18n/messages/manage";
+import { visibleXphereRows, xphereState, XPHERE_KEY, type XphereRow, type XphereState } from "./integrationsUi";
 
-/** The read-only value boxes (endpoint, inbound key): the field's shape without being editable. */
-const CODE_BOX = "min-w-0 flex-1 break-all rounded-xl border border-white/10 bg-black/20 px-3.5 py-2.5 font-mono text-xs text-white/75";
+const STATE_TONE = { connected: "green", paused: "amber", notConnected: "slate" } as const satisfies Record<XphereState, string>;
+const SYNC_KEYS: Record<string, ManageKey> = {
+  pending: "syncStatus_pending",
+  synced: "syncStatus_synced",
+  failed: "syncStatus_failed",
+  needs_review: "syncStatus_needs_review",
+};
+const SYNC_TONE: Record<string, "green" | "slate" | "amber" | "red"> = { synced: "green", pending: "slate", needs_review: "amber", failed: "red" };
 
 /** Name or email contains the search (any case). */
 function matches(row: XphereRow, search: string) {
@@ -34,39 +31,91 @@ function matches(row: XphereRow, search: string) {
   return !q || [row.displayName, row.email].some((value) => value?.toLowerCase().includes(q));
 }
 
-/** Account › Integrations › Xphere: each person's link to the Xphere CRM, set by the global admin. */
+/**
+ * Account › Integrations › Xphere: who is connected to the Xphere CRM, one row each. The connection itself
+ * (token, keys, address) is set in the person's own panel in People, where "Set up" goes.
+ */
 export function AdminXphere() {
   const query = useQuery<XphereRow[]>({ queryKey: XPHERE_KEY });
   const t = useT(integrationsMessages);
   const tm = useT(manageMessages);
+  const [, navigate] = useLocation();
   const [showAll, setShowAll] = useState(false);
   const [search, setSearch] = useState("");
-  const endpoint = `${window.location.origin}/api/xpot/inbound`;
   const visible = visibleXphereRows(query.data ?? [], showAll);
   const rows = visible.filter((row) => matches(row, search));
   const page = usePagedList(rows, { resetKey: `${search}|${showAll}` });
 
-  if (query.isLoading) return <ListSkeleton rows={3} rowClassName="h-40 rounded-2xl" />;
+  if (query.isLoading) return <ListSkeleton rows={4} rowClassName="h-14 rounded-xl" />;
   if (query.isError || !query.data) {
     return <ErrorState message={t("xphereLoadFailed")} onRetry={() => void query.refetch()} />;
   }
 
+  // Someone who cannot be connected (no Visits, blocked, waiting, deleted) says why instead of a state.
+  const cannot = (row: XphereRow) => row.deleted || row.access !== "active" || !row.usesVisits;
+  const columns: CompactDataColumn<XphereRow>[] = [
+    {
+      key: "person",
+      label: t("colPerson"),
+      render: (row) => (
+        <div className="min-w-0">
+          <p className="truncate font-medium text-white/90" data-testid={`xphere-person-${row.repId}`}>{row.displayName}</p>
+          <p className="truncate text-xs text-white/40">{row.email ?? "—"}</p>
+        </div>
+      ),
+    },
+    {
+      key: "state",
+      label: t("colState"),
+      render: (row) => {
+        if (row.deleted) return <Pill tone="muted">{t("statusDeleted")}</Pill>;
+        if (row.access === "blocked") return <Pill tone="red">{t("statusBlocked")}</Pill>;
+        if (row.access === "pending") return <Pill tone="amber">{t("statusPending")}</Pill>;
+        if (!row.usesVisits) return <Pill tone="slate">{t("statusTagsOnly")}</Pill>;
+        const state = xphereState(row);
+        return <Pill tone={STATE_TONE[state]} dot>{t(`xphereState_${state}`)}</Pill>;
+      },
+    },
+    {
+      key: "sync",
+      label: t("colLastSync"),
+      headerClassName: "hidden sm:table-cell",
+      cellClassName: "hidden sm:table-cell",
+      render: (row) =>
+        row.lastSync ? (
+          <div className="flex flex-col items-start gap-1">
+            <Pill tone={toneOf(SYNC_TONE, row.lastSync.status, "amber")}>{SYNC_KEYS[row.lastSync.status] ? tm(SYNC_KEYS[row.lastSync.status]) : row.lastSync.status}</Pill>
+            {row.lastSync.at && <span className="text-[11px] text-white/40">{formatDateTime(row.lastSync.at)}</span>}
+          </div>
+        ) : (
+          <span className="text-white/35">—</span>
+        ),
+    },
+    {
+      key: "open",
+      label: <span className="sr-only">{t("colSetUp")}</span>,
+      width: 120,
+      cellClassName: "text-right",
+      render: (row) =>
+        row.deleted ? null : cannot(row) ? (
+          <ChevronRight className="ml-auto h-4 w-4 text-white/30" aria-hidden="true" />
+        ) : (
+          <Button asChild variant="secondary" size="sm">
+            <Link href={`/admin/reps/${row.repId}`} onClick={(e) => e.stopPropagation()} data-testid={`xphere-setup-${row.repId}`}>
+              {xphereState(row) === "notConnected" ? t("setUp") : t("manageXphere")}
+            </Link>
+          </Button>
+        ),
+    },
+  ];
+
   return (
     <div className="space-y-4">
-      <div className={`space-y-3 rounded-2xl ${GLASS_CLASS} p-5`}>
+      <div className={`rounded-2xl ${GLASS_CLASS} p-5`}>
         <p className="flex items-start gap-2 text-sm text-white/60">
-          <Webhook className="mt-0.5 h-4 w-4 shrink-0" />
+          <Webhook className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
           {t("xphereIntro")}
         </p>
-        <div>
-          <p className="mb-1.5 text-xs font-semibold text-white/60">{t("xphereEndpoint")}</p>
-          <div className="flex items-center gap-2">
-            <code className={CODE_BOX} data-testid="xphere-endpoint">
-              {endpoint}
-            </code>
-            <CopyButton value={endpoint} label={t("copyAddress")} iconOnly />
-          </div>
-        </div>
       </div>
 
       <FilterBar
@@ -75,169 +124,25 @@ export function AdminXphere() {
         summary={{ active: search.trim() !== "", shown: rows.length, total: visible.length, onClear: () => setSearch("") }}
       />
 
-      {rows.length === 0 && (
+      {rows.length === 0 ? (
         <EmptyState
           compact
           icon={Users}
           title={search.trim() ? tm("noPeopleMatch") : query.data.length && !showAll ? t("noRepsHidden") : t("noRepsYet")}
         />
+      ) : (
+        <>
+          <CompactDataTable
+            columns={columns}
+            rows={page.visible}
+            getRowKey={(row) => row.repId}
+            onRowClick={(row) => !row.deleted && navigate(`/admin/reps/${row.repId}`)}
+            getRowClassName={(row) => (row.deleted ? "opacity-60" : "")}
+            getRowTestId={(row) => `xphere-${row.repId}`}
+          />
+          <ListPager shown={page.shown} total={page.total} hasMore={page.hasMore} onMore={page.showMore} />
+        </>
       )}
-      {page.visible.map((row) => (
-        <XphereRowCard key={row.repId} row={row} />
-      ))}
-      <ListPager shown={page.shown} total={page.total} hasMore={page.hasMore} onMore={page.showMore} />
-    </div>
-  );
-}
-
-function XphereRowCard({ row }: { row: XphereRow }) {
-  const { toast } = useToast();
-  const queryClient = useQueryClient();
-  const t = useT(integrationsMessages);
-  const tm = useT(manageMessages);
-  const tc = useT(commonMessages);
-  const [apiKey, setApiKey] = useState("");
-  const [apiUrl, setApiUrl] = useState(row.apiUrl);
-  const [isEnabled, setIsEnabled] = useState(row.isEnabled);
-  const [revealed, setRevealed] = useState(false);
-  const [rotating, setRotating] = useState(false);
-  const editable = Boolean(row.userId) && !row.deleted;
-  const dirty = apiKey.trim() !== "" || apiUrl.trim() !== row.apiUrl || isEnabled !== row.isEnabled;
-  useReportUnsaved(`xphere:${row.repId}`, dirty);
-  const labels: Record<string, string> = { apiUrl: t("apiUrl"), apiKey: t("outboundToken") };
-  // The token chip reads like an integration: saved and switched on is live, saved but off is idle.
-  const tokenTone = INTEGRATION_TONE[row.apiKeySet ? (row.isEnabled ? "live" : "idle") : "off"];
-  const reset = () => {
-    setApiKey("");
-    setApiUrl(row.apiUrl);
-    setIsEnabled(row.isEnabled);
-  };
-
-  const save = useMutation({
-    mutationFn: async () => {
-      const body: Record<string, unknown> = { isEnabled, apiUrl: apiUrl.trim() };
-      if (apiKey.trim()) body.apiKey = apiKey.trim();
-      const res = await apiRequest("PUT", `/api/xpot/admin/xphere/${row.userId}`, body);
-      return res.json();
-    },
-    onSuccess: () => {
-      toast({ title: t("xphereSavedFor", { name: row.displayName }), variant: "success" });
-      setApiKey("");
-      // The list and the person's own view in People (its key is per user).
-      void queryClient.invalidateQueries({ predicate: (q) => isXphereQueryKey(q.queryKey) });
-      // Integrations › Services and Status count who is connected.
-      void queryClient.invalidateQueries({ queryKey: [...SERVICES_KEY] });
-    },
-    onError: (e: Error) => toast({ title: tm("errorSaving"), description: describeApiError(e, (path) => labels[path]), variant: "destructive" }),
-  });
-
-  const rotate = useMutation({
-    mutationFn: async () => (await apiRequest("POST", `/api/xpot/admin/xphere/${row.userId}/rotate-inbound-key`)).json(),
-    onSuccess: () => {
-      toast({ title: t("keyRotated", { name: row.displayName }), variant: "success" });
-      setRotating(false);
-      setRevealed(true);
-      // The list and the person's own view in People (its key is per user).
-      void queryClient.invalidateQueries({ predicate: (q) => isXphereQueryKey(q.queryKey) });
-    },
-    onError: (e: Error) => {
-      setRotating(false);
-      toast({ title: tm("error"), description: describeApiError(e), variant: "destructive" });
-    },
-  });
-
-  return (
-    <div className={`rounded-2xl ${GLASS_CLASS} p-5 ${editable ? "" : "opacity-60"}`} data-testid={`xphere-${row.repId}`}>
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div className="min-w-0">
-          <div className="flex flex-wrap items-center gap-2">
-            {/* The person (access, role, modules) is in People; a deleted account's placeholder has no page there. */}
-            {row.deleted ? (
-              <h3 className="font-semibold">{row.displayName}</h3>
-            ) : (
-              <h3 className="font-semibold">
-                <Link href={`/admin/reps/${row.repId}`} className="hover:text-blue-200 hover:underline" data-testid={`xphere-person-${row.repId}`}>
-                  {row.displayName}
-                </Link>
-              </h3>
-            )}
-            <Pill tone={tokenTone}>{row.apiKeySet ? t("tokenSaved") : t("noToken")}</Pill>
-            {row.access === "blocked" && <Pill tone="red">{t("statusBlocked")}</Pill>}
-            {row.access === "pending" && <Pill tone="amber">{t("statusPending")}</Pill>}
-            {!row.usesVisits && <Pill tone="slate">{t("statusTagsOnly")}</Pill>}
-          </div>
-          <p className="mt-1 text-xs text-white/40">{row.email ?? "—"}</p>
-        </div>
-        <label className="flex min-h-11 cursor-pointer items-center gap-2.5 text-sm font-medium text-white/70">
-          {t("xphereEnabled")}
-          <Switch checked={isEnabled} onCheckedChange={setIsEnabled} disabled={!editable} />
-        </label>
-      </div>
-
-      <div className="mt-3">
-        <p className="mb-1.5 text-xs font-semibold text-white/60">{t("inboundKey")}</p>
-        {row.inboundApiKey ? (
-          <div className="flex flex-wrap items-center gap-2">
-            <code className={CODE_BOX} data-testid={`xphere-key-${row.repId}`}>
-              {revealed ? row.inboundApiKey : maskInboundKey(row.inboundApiKey)}
-            </code>
-            <Button variant="secondary" size="sm" className="w-9 px-0" onClick={() => setRevealed((v) => !v)} aria-label={revealed ? t("hideKey") : t("revealKey")} title={revealed ? t("hideKey") : t("revealKey")}>
-              {revealed ? <EyeOff /> : <Eye />}
-            </Button>
-            <CopyButton value={row.inboundApiKey} label={t("copyKey")} iconOnly />
-            <Button variant="secondary" size="sm" onClick={() => setRotating(true)} disabled={!editable} loading={rotate.isPending} data-testid={`xphere-rotate-${row.repId}`}>
-              <RotateCw />
-              {t("rotateKey")}
-            </Button>
-          </div>
-        ) : (
-          <p className="text-xs text-white/40">{t("noInboundKeyYet")}</p>
-        )}
-      </div>
-
-      <div className="mt-3 grid gap-3 sm:grid-cols-2">
-        <Field label={t("outboundToken")}>
-          <Input
-            type="password"
-            autoComplete="off"
-            value={apiKey}
-            onChange={(e) => setApiKey(e.target.value)}
-            placeholder={row.apiKeySet ? t("keepCurrentToken") : "xph_..."}
-            disabled={!editable}
-          />
-        </Field>
-        <Field label={t("apiUrl")} hint={t("apiUrlHint")}>
-          <Input
-            value={apiUrl}
-            onChange={(e) => setApiUrl(e.target.value)}
-            placeholder="https://xphere.app"
-            disabled={!editable}
-          />
-        </Field>
-      </div>
-
-      <FormFooter dirty={dirty} onCancel={dirty ? reset : undefined} className="mt-4">
-        <Button
-          variant="brand"
-          onClick={() => save.mutate()}
-          disabled={!editable || !dirty}
-          loading={save.isPending}
-          title={!row.userId ? t("repNoUser") : undefined}
-        >
-          {tc("save")}
-        </Button>
-      </FormFooter>
-
-      <ConfirmDialog
-        open={rotating}
-        onOpenChange={setRotating}
-        title={t("rotateTitle", { name: row.displayName })}
-        description={t("rotateBody")}
-        confirmLabel={t("rotateKey")}
-        destructive
-        busy={rotate.isPending}
-        onConfirm={() => rotate.mutate()}
-      />
     </div>
   );
 }

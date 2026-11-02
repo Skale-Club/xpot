@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { PrintModelItem, PrintRequestItem } from "../shared/printProduction";
-import { batchPrefixFromTitle, canPrintModel, pendingPieces, printableBeds, printQuantity, productionJourneyStep, productionNeedsAction, productionPath, productionTabFor, showPlateNumber, slugFromTitle } from "../client/src/pages/admin/tags/production-workflow";
+import { parseBatchName, batchTabsFor, pendingBatches } from "../client/src/pages/admin/tags/batches-model";
+import { buildState, collapsedPlates, damagedToReprint, needsPrintComputer, journeyTitle, personName, plainTitle, batchPrefixFromTitle, boardGroups, chipsWritten, pauseNeedsChips, canAssembleJob, canPrintModel, journeyProgress, latestPlates, pendingPieces, plateActions, printableBeds, printComputers, printedOutcome, printQuantity, productionNeedsAction, productionPath, productionTabFor, showPlateNumber, slugFromTitle } from "../client/src/pages/admin/tags/production-workflow";
 
 const model = {
   id: "model", kind: "serialized", status: "ready", productType: "large_plate", face: "google_review", salesProductId: 1,
@@ -19,14 +20,139 @@ describe("production tabs", () => {
 });
 
 describe("unified production", () => {
-  it("advances from preparing to printing to done, where marking printed is the last step", () => {
-    const job = { status: "requested" } as const;
-    expect(productionJourneyStep(job)).toBe(0);
-    expect(productionJourneyStep({ status: "building" })).toBe(0);
-    expect(productionJourneyStep({ status: "ready" })).toBe(1);
-    expect(productionJourneyStep({ status: "printing" })).toBe(1);
-    expect(productionJourneyStep({ status: "printed" })).toBe(2);
-    expect(productionJourneyStep({ status: "failed" })).toBe(0);
+  it("walks file, printer, stock and done; a failed or cancelled job is on no step", () => {
+    const at = (status: string, extra = {}) => journeyProgress({ status, batchId: "b", pendingCount: 0, ...extra } as never);
+    expect(at("requested")).toBe(0);
+    expect(at("building")).toBe(0);
+    expect(at("ready")).toBe(1);
+    expect(at("printing")).toBe(1);
+    expect(at("printed")).toBe(3);
+    // Printed, but the pieces are not in stock: it is not "completed" yet.
+    expect(at("printed", { pendingCount: 8 })).toBe(2);
+    expect(at("printed", { batchId: null, pendingCount: null })).toBe(3);
+    expect(at("failed")).toBeNull();
+    expect(at("cancelled")).toBeNull();
+  });
+  it("tells what a printed job did to its pieces, pending first", () => {
+    expect(printedOutcome({ batchId: null, pendingCount: null, damagedCount: null })).toBe("count");
+    expect(printedOutcome({ batchId: "b", pendingCount: 8, damagedCount: 0 })).toBe("pending");
+    expect(printedOutcome({ batchId: "b", pendingCount: 2, damagedCount: 2 })).toBe("pending");
+    expect(printedOutcome({ batchId: "b", pendingCount: 0, damagedCount: 2 })).toBe("damaged");
+    expect(printedOutcome({ batchId: "b", pendingCount: 0, damagedCount: 0 })).toBe("inStock");
+  });
+  it("assembles only a printed job whose pieces are all in stock", () => {
+    const job = { status: "printed", batchId: "b", pendingCount: 0 } as const;
+    expect(canAssembleJob(job, 1, null)).toBe(true);
+    expect(canAssembleJob({ ...job, pendingCount: 8 }, 1, null)).toBe(false);
+    expect(canAssembleJob(job, 0, null)).toBe(false);
+    expect(canAssembleJob(job, 1, "2026-11-01")).toBe(false);
+    expect(canAssembleJob({ ...job, status: "ready" }, 1, null)).toBe(false);
+    expect(canAssembleJob({ ...job, batchId: null }, 1, null)).toBe(false);
+  });
+  it("offers Mark printed only once the job is on the printer, never without a file or before the file was taken", () => {
+    const job = (status: string, files = 1, redoneBy: string | null = null) => ({ status, redoneBy, downloads: Array.from({ length: files }, (_, i) => ({ id: String(i), kind: "gcode_3mf", filename: "x" })) }) as never;
+    expect(plateActions(job("requested", 0))).toEqual(["uploadFile"]);
+    expect(plateActions(job("building", 0))).toEqual([]);
+    expect(plateActions(job("ready"))).toEqual(["download", "start"]);
+    expect(plateActions(job("ready", 0))).toEqual(["uploadFile"]);
+    expect(plateActions(job("printing"))).toEqual(["markPrinted", "download"]);
+    expect(plateActions(job("failed"))).toEqual(["printAgain"]);
+    expect(plateActions(job("failed", 1, "next"))).toEqual([]);
+    expect(plateActions(job("printed"))).toEqual([]);
+    expect(plateActions(job("cancelled"))).toEqual([]);
+    for (const status of ["requested", "building", "ready", "failed", "cancelled", "printed"]) expect(plateActions(job(status))).not.toContain("markPrinted");
+  });
+  it("groups the board by what the operator must do, failed first, and only the last attempt of each plate", () => {
+    const plate = (plateNumber: number, status: string, createdAt: string, redoneBy: string | null = null) => ({ plateNumber, status, createdAt, redoneBy }) as never;
+    const request = (id: string, ...plates: unknown[]) => ({ id, plates, open: true }) as never;
+    const groups = boardGroups([
+      request("a", plate(1, "waiting-ignored", "1"), plate(1, "requested", "2"), plate(2, "failed", "1"), plate(2, "failed", "2")),
+      request("b", plate(1, "printing", "1"), plate(2, "printed", "1"), plate(3, "ready", "1"), plate(4, "cancelled", "1")),
+    ]);
+    expect(groups.map((g) => [g.group, g.requests.map((r) => [(r.request as { id: string }).id, r.plates.map((p) => `${p.plateNumber}:${p.status}`)])])).toEqual([
+      ["attention", [["a", ["2:failed"]]]],
+      ["printing", [["b", ["1:printing"]]]],
+      ["ready", [["b", ["3:ready"]]]],
+      ["waiting", [["a", ["1:requested"]]]],
+    ]);
+    // A plate being built is the computer's work, not a file the operator owes: its own group, after the ones with a button.
+    const mixed = boardGroups([request("d", plate(1, "building", "1"), plate(2, "requested", "1"))]);
+    expect(mixed.map((g) => [g.group, g.requests[0].plates.map((p) => p.status)])).toEqual([["waiting", ["requested"]], ["making", ["building"]]]);
+    expect(needsPrintComputer([request("d", plate(1, "building", "1"))])).toBe(true);
+    expect(needsPrintComputer([request("e", plate(1, "ready", "1"), plate(2, "failed", "1"))])).toBe(false);
+    // A failed plate printed again no longer asks for attention: only its new attempt counts.
+    expect(latestPlates({ plates: [plate(1, "failed", "1"), plate(1, "ready", "2")] as never[] }).map((p) => (p as { status: string }).status)).toEqual(["ready"]);
+    expect(boardGroups([request("c", plate(1, "printed", "1"))])).toEqual([]);
+  });
+  it("tells one story about a plate being built, from the job and its computer together", () => {
+    const computer = (name: string, on: boolean) => ({ name, on, lastSeenAt: on ? "2026-11-02T09:59:00Z" : "2026-11-02T01:00:00Z" });
+    const job = (status: string, stale: boolean, deviceName: string | null) => ({ status, stale, deviceName }) as never;
+    const computers = [computer("Bench PC", true), computer("Harbor bench", false)];
+    // The computer is on and the file moves: making. On but silent for 30 minutes: quiet.
+    expect(buildState(job("building", false, "Bench PC"), computers)).toBe("making");
+    expect(buildState(job("building", true, "Bench PC"), computers)).toBe("quiet");
+    // The computer that took it is off: it waits for it, however recent the job's own news is, and silence does not change that.
+    expect(buildState(job("building", false, "Harbor bench"), computers)).toBe("computerOff");
+    expect(buildState(job("building", true, "Harbor bench"), computers)).toBe("computerOff");
+    // A computer no longer paired is not coming back.
+    expect(buildState(job("building", false, "Old PC"), computers)).toBe("computerOff");
+    // Computers not loaded, or a job no computer took yet: the job's own news is all there is.
+    expect(buildState(job("building", false, "Harbor bench"), null)).toBe("making");
+    expect(buildState(job("building", true, null), computers)).toBe("quiet");
+    expect(buildState(job("building", false, null), computers)).toBe("making");
+    for (const status of ["requested", "ready", "printing", "printed", "failed", "cancelled"]) expect(buildState(job(status, true, "Bench PC"), computers)).toBeNull();
+  });
+  it("says nine alike prints once, and not before three", () => {
+    const plate = (quantity: number, files: number) => ({ quantity, downloads: Array.from({ length: files }, (_, i) => ({ id: String(i) })) }) as never;
+    expect(collapsedPlates([plate(4, 0), plate(4, 0)])).toBeNull();
+    expect(collapsedPlates(Array.from({ length: 9 }, () => plate(4, 0)))).toEqual({ count: 9, each: 4, filesSent: 0 });
+    expect(collapsedPlates([plate(4, 1), plate(4, 0), plate(2, 1)])).toEqual({ count: 3, each: null, filesSent: 2 });
+  });
+  it("asks for damaged pieces again only while no replacement is alive", () => {
+    const job = (extra = {}) => ({ status: "printed", batchId: "b", pendingCount: 0, damagedCount: 2, reprintedBy: null, ...extra }) as never;
+    expect(damagedToReprint(job())).toBe(2);
+    expect(damagedToReprint(job({ reprintedBy: { id: "n", batchCode: "LPLATE-2026-014" } }))).toBe(0);
+    expect(damagedToReprint(job({ damagedCount: 0 }))).toBe(0);
+    expect(damagedToReprint(job({ pendingCount: 1 }))).toBe(0);
+    expect(damagedToReprint(job({ status: "failed" }))).toBe(0);
+  });
+  it("knows when the pause needs chips written first, and how many are", () => {
+    expect(pauseNeedsChips("Peel one programmed 10 × 20 NTAG213 sticker and press it flat")).toBe(true);
+    expect(pauseNeedsChips("Drop one blank NTAG sticker in each pocket")).toBe(false);
+    expect(pauseNeedsChips(null)).toBe(false);
+    expect(chipsWritten([{ chipWritten: true }, { chipWritten: false }, { chipWritten: false }])).toEqual({ done: 1, total: 3 });
+  });
+  it("keeps the piece's name and print job number out of a batch name, old or new", () => {
+    expect(parseBatchName("Stand Large · Google Review · White · v1 · plate 1/2 · 4 of x4")).toEqual({ title: "Stand Large · Google Review · White", plate: { number: 1, total: 2 } });
+    expect(parseBatchName("Plate Large · Menu · White · print job 3/3")).toEqual({ title: "Plate Large · Menu · White", plate: { number: 3, total: 3 } });
+    expect(parseBatchName("Plate Large · Menu · White · v2 · 4 of x4")).toEqual({ title: "Plate Large · Menu · White", plate: null });
+    expect(parseBatchName("Tagworks acrylic run")).toEqual({ title: "Tagworks acrylic run", plate: null });
+    expect(plainTitle("Google G token · Large Stand (rounded relief v2)")).toBe("Google G token · Large Stand");
+    expect(plainTitle("Stand base · Small")).toBe("Stand base · Small");
+  });
+  it("leaves a cancelled print job's batch out of the batches awaiting pieces, and a scanned batch without Print", () => {
+    const batch = (printJobStatus: string | null, pendingCount = 4, status = "open") => ({ status, pendingCount, printJobStatus });
+    expect(pendingBatches([batch("printing"), batch("cancelled"), batch(null), batch("failed"), batch("printed", 0), batch(null, 4, "cancelled")]).length).toBe(3);
+    expect(batchTabsFor({ printJobId: null, codeSource: "scanned" })).toEqual(["summary", "receive"]);
+    expect(batchTabsFor({ printJobId: null, codeSource: "issued" })).toEqual(["summary", "print", "receive"]);
+  });
+  it("shows a piece, not a tag, and a name, not an address, in the history", () => {
+    expect(journeyTitle("Tag 0XBAXB57 created (Plate)")).toBe("Piece 0XBAXB57 created (Plate)");
+    expect(journeyTitle("Tag shop updated")).toBe("Tag shop updated");
+    expect(personName("Jessica Alvarez", "jessica.alvarez@lab.example")).toBe("Jessica Alvarez");
+    expect(personName(null, "jessica.alvarez@lab.example")).toBe("Jessica Alvarez");
+    expect(personName(null, null)).toBeNull();
+  });
+  it("calls a print computer on when it was heard from in the last ten minutes", () => {
+    const now = Date.parse("2026-11-02T10:00:00Z");
+    const device = (deviceName: string, lastSeenAt: string | null, extra = {}) => ({ deviceName, lastSeenAt, status: "active", capabilities: ["print"], ...extra });
+    expect(printComputers([
+      device("Bench PC", "2026-11-02T09:55:00Z"),
+      device("Harbor bench", "2026-11-02T09:00:00Z"),
+      device("Never", null),
+      device("Writer", "2026-11-02T09:59:00Z", { capabilities: ["nfc"] }),
+      device("Old", "2026-11-02T09:59:00Z", { status: "revoked" }),
+    ], now).map((c) => [c.name, c.on])).toEqual([["Bench PC", true], ["Harbor bench", false], ["Never", false]]);
   });
   it("keeps batch links and filters inside Production without changing other paths", () => {
     expect(productionPath("/batches?pending=1")).toBe("/production/batches?pending=1");

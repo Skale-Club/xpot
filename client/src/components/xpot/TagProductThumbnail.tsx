@@ -4,6 +4,7 @@ import { PieceThumb3D, PieceThumbLoader, usePieceModel } from "@/components/xpot
 import { TagFaceIcon } from "@/components/xpot/TagFaceIcon";
 import { useT } from "@/i18n";
 import { tagsMessages } from "@/i18n/messages/tags";
+import { manageTagsPiecesMessages } from "@/i18n/messages/manageTagsPieces";
 
 const PLAQUE_PRODUCT_TYPES = new Set([
   "large_stand",
@@ -29,7 +30,7 @@ const SIZES = {
     standCorners: "rounded-t-[5px] rounded-b-[2px]",
     mark: "h-2 w-2",
     face: "xs",
-    base: "h-[5px] w-[34px] rounded-b-[3px] rounded-t-[1px]",
+    base: "h-[5px] w-7 rounded-b-[3px] rounded-t-[1px]",
   },
   md: {
     body: "w-11 gap-1.5 p-1.5 pb-2",
@@ -40,7 +41,7 @@ const SIZES = {
     standCorners: "rounded-t-[8px] rounded-b-[3px]",
     mark: "h-3 w-3",
     face: "sm",
-    base: "h-2 w-12 rounded-b-[4px] rounded-t-[1px]",
+    base: "h-2 w-11 rounded-b-[4px] rounded-t-[1px]",
   },
   lg: {
     body: "h-32 w-24 justify-between p-3 pb-4",
@@ -51,7 +52,7 @@ const SIZES = {
     standCorners: "rounded-t-xl rounded-b-[4px]",
     mark: "h-6 w-6",
     face: "lg",
-    base: "h-3 w-28 rounded-b-md rounded-t-[2px]",
+    base: "h-3 w-24 rounded-b-md rounded-t-[2px]",
   },
 } as const;
 
@@ -92,10 +93,21 @@ export function tagPlaqueSpec(
 }
 
 /**
- * Model and size as compact chips ("STAND" plus a coloured "L" or "S"), kept
- * beside the plaque drawing rather than on it. Products that are not plaques
- * show `fallback`.
+ * The piece's model as one name ("Large plate"): size and model read together, the same on the lists, the pop-up and
+ * the page. A product that is not a plaque gives its own name.
  */
+export function useTagModelName() {
+  const t = useT(tagsMessages);
+  const tp = useT(manageTagsPiecesMessages);
+  return (piece: { productType: string; face: string | null | undefined; batchCode?: string | null }): string => {
+    const { size, model } = tagPlaqueSpec(piece.productType, piece.face, piece.batchCode);
+    if (size && model) return tp(`modelName_${model}_${size}` as "modelName_Plate_Large");
+    if (model) return t(`plaqueModel_${model}` as "plaqueModel_Plate");
+    return t(`product_${piece.productType}` as "product_custom");
+  };
+}
+
+/** The model as one line of text, kept beside the plaque drawing rather than on it. Products that are not plaques show `fallback`. */
 export function TagModelChips({
   productType,
   face,
@@ -109,29 +121,10 @@ export function TagModelChips({
   fallback?: ReactNode;
   className?: string;
 }) {
-  const t = useT(tagsMessages);
-  const { size, model } = tagPlaqueSpec(productType, face, batchCode);
-  const chip = "inline-flex h-4 items-center rounded px-1 text-[10px] font-bold uppercase leading-none tracking-wide";
-  if (!size && !model) {
-    return (
-      <span className={`${chip} bg-white/10 text-white/75 ring-1 ring-white/15 ${className}`} data-testid="tag-model-chips">
-        {fallback ?? t(`product_${productType}` as "product_custom")}
-      </span>
-    );
-  }
+  const name = useTagModelName();
   return (
-    <span className={`inline-flex items-center gap-1 align-middle ${className}`} data-testid="tag-model-chips">
-      {model ? <span className={`${chip} bg-white/[0.08] text-white/70`}>{t(`plaqueModel_${model}`)}</span> : null}
-      {/* A size, not a state: Large in the Tags accent, Small neutral (amber would read as "needs a step"). */}
-      {size ? (
-        <span
-          className={`${chip} w-4 justify-center px-0 ${size === "Large" ? "bg-violet-500/20 text-violet-200" : "bg-white/10 text-white/70"}`}
-          title={t(`plaqueSize_${size}`)}
-          aria-label={t(`plaqueSize_${size}`)}
-        >
-          {t(`plaqueSize_${size}`).charAt(0)}
-        </span>
-      ) : null}
+    <span className={`text-xs text-white/55 ${className}`} data-testid="tag-model-chips">
+      {fallback && !tagPlaqueSpec(productType, face, batchCode).model ? fallback : name({ productType, face, batchCode })}
     </span>
   );
 }
@@ -316,7 +309,7 @@ export function TagProductThumbnail({
         <TagFaceIcon face={face} size={plate ? s.plateFace : s.face} className="!shadow-none !ring-0" />
       </span>
       {/* The stand's foot. */}
-      {stand ? <span className={`bg-black ${s.base}`} /> : null}
+      {stand ? <span className={`bg-black ring-1 ring-white/25 ${s.base}`} /> : null}
     </span>
   );
 }

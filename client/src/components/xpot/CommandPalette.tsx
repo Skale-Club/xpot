@@ -64,15 +64,14 @@ export function CommandPalette({
   const [index, setIndex] = useState(0);
   const listRef = useRef<HTMLDivElement>(null);
 
-  // Same keys as the Leads and Pieces screens, so an already loaded list is reused.
+  // Same keys as the Leads and Pieces screens, so an already loaded list is reused. In the panel the pieces are the company's, not just the person's own.
   const { data: leads } = useQuery<FullSalesLead[]>({
     queryKey: ["/api/xpot/leads"],
     enabled: open && modules.includes("visits"),
   });
   const { data: pieces } = useQuery({
-    queryKey: ["tags", "list", null, null],
-    // "My pieces", as on the Pieces screen (same key); every piece is in Tags › Manage.
-    queryFn: () => tagsGet<TagListItem[]>("/api/xpot/tags?mine=1"),
+    queryKey: ["tags", "list", adminMode ? "panel" : null, null],
+    queryFn: () => tagsGet<TagListItem[]>(adminMode ? "/api/xpot/tags" : "/api/xpot/tags?mine=1"),
     enabled: open && modules.includes("tags"),
     staleTime: 15_000,
   });
@@ -175,7 +174,8 @@ export function CommandPalette({
             <p className="px-3 py-8 text-center text-sm text-white/35">{t("paletteEmpty")}</p>
           ) : (
             entries.map((entry, i) => {
-              const header = entry.group !== lastGroup ? entry.group : null;
+              // A group of one item (Settings, the panel's door) has no heading.
+              const header = entry.group && entry.group !== lastGroup ? entry.group : null;
               lastGroup = entry.group;
               const Icon = entry.icon;
               return (
@@ -214,7 +214,7 @@ export function CommandPalette({
           )}
         </div>
         <div className="border-t border-white/[0.08] px-4 py-2 text-[11px] text-white/30">
-          {t("paletteHint")} · {tn("shortcutsLabel")}: {shortcuts.map((key) => shortcutLabel[key]).join(" · ")}
+          {t("paletteHint")}{shortcuts.length > 1 ? ` · ${tn("shortcutsLabel")}: ${shortcuts.map((key) => shortcutLabel[key]).join(" · ")}` : ""}
         </div>
       </DialogContent>
     </Dialog>

@@ -10,7 +10,7 @@ import { Package, PackagePlus, TrendingUp } from "lucide-react";
 import { formatCents, formatShortDate } from "../../utils";
 import { useLeadSalesSnapshot, type ConsignmentWithRefs } from "../../hooks/useSalesModule";
 import { SaleDialog } from "./SaleDialog";
-import { DepositDialog, SettleDialog, ReturnDialog } from "./ConsignmentDialogs";
+import { AdjustDialog, DepositDialog, SettleDialog, ReturnDialog } from "./ConsignmentDialogs";
 import { ConsignmentCard } from "./cards";
 import { SectionLabel } from "./ui";
 import { ListSkeleton } from "@/components/xpot/ListSkeleton";
@@ -22,6 +22,7 @@ import { salesMessages } from "@/i18n/messages/sales";
 import { salesModuleMessages } from "@/i18n/messages/salesModule";
 import { apiErrorMessages } from "@/i18n/messages/apiErrors";
 import { useLeadAccess, type LeadOwnership } from "../../leadAccess";
+import { useShowProfit } from "../../hooks/useShowProfit";
 
 export function LeadSalesPanel({
   leadId, leadName, lead, visitId, compact,
@@ -37,6 +38,7 @@ export function LeadSalesPanel({
   const t = useT(salesModuleMessages);
   const ts = useT(salesMessages);
   const te = useT(apiErrorMessages);
+  const showProfit = useShowProfit();
   // A sale or stock is filed under the company's organization; outside it the server refuses.
   const canRecord = useLeadAccess(lead).records;
   const snapshot = useLeadSalesSnapshot(leadId);
@@ -44,6 +46,8 @@ export function LeadSalesPanel({
   const [depositOpen, setDepositOpen] = useState(false);
   const [settleRow, setSettleRow] = useState<ConsignmentWithRefs | null>(null);
   const [returnRow, setReturnRow] = useState<ConsignmentWithRefs | null>(null);
+  // The shelf holds more than the record: the correction opens with the difference filled in.
+  const [correct, setCorrect] = useState<{ row: ConsignmentWithRefs; delta: number } | null>(null);
 
   const data = snapshot.data;
   const consignments = data?.activeConsignments ?? [];
@@ -70,13 +74,15 @@ export function LeadSalesPanel({
             {data?.lastSaleAt ? ` · ${t("lastSale", { date: formatShortDate(data.lastSaleAt) })}` : ""}
           </div>
         </div>
-        <div className={`min-w-0 flex-1 rounded-2xl px-3.5 py-3 ${GLASS_CLASS}`}>
-          <div className={EYEBROW}>{t("youKept")}</div>
-          <div className="mt-0.5 truncate text-xl font-bold tabular-nums text-white">
-            {formatCents(data?.lifetimeProfitCents ?? 0)}
+        {showProfit ? (
+          <div className={`min-w-0 flex-1 rounded-2xl px-3.5 py-3 ${GLASS_CLASS}`}>
+            <div className={EYEBROW}>{t("youKept")}</div>
+            <div className="mt-0.5 truncate text-xl font-bold tabular-nums text-white">
+              {formatCents(data?.lifetimeProfitCents ?? 0)}
+            </div>
+            <div className="text-[11px] text-white/40">{t("afterProductionCost")}</div>
           </div>
-          <div className="text-[11px] text-white/40">{t("afterProductionCost")}</div>
-        </div>
+        ) : null}
       </div>
       )}
 
@@ -122,6 +128,11 @@ export function LeadSalesPanel({
       <SettleDialog
         open={Boolean(settleRow)} onOpenChange={(o) => !o && setSettleRow(null)}
         row={settleRow} visitId={visitId} onDone={refresh}
+        onCorrectStock={(row, delta) => { setSettleRow(null); setCorrect({ row, delta }); }}
+      />
+      <AdjustDialog
+        open={Boolean(correct)} onOpenChange={(o) => !o && setCorrect(null)}
+        row={correct?.row ?? null} initialDelta={correct?.delta} visitId={visitId} onDone={refresh}
       />
       <ReturnDialog
         open={Boolean(returnRow)} onOpenChange={(o) => !o && setReturnRow(null)}

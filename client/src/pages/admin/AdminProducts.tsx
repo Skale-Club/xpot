@@ -17,6 +17,7 @@ import {
 } from "@/pages/xpot/hooks/useSalesModule";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { MemberMenu } from "@/pages/xpot/components/MemberMenu";
 import { ConfirmDialog } from "@/components/xpot/ConfirmDialog";
 import { EmptyState, ErrorState } from "@/components/xpot/EmptyState";
 import { Field, Input, Select, Textarea } from "@/components/xpot/Field";
@@ -159,9 +160,8 @@ export function AdminProducts() {
                 <div className="min-w-0 flex-1">
                   <div className="flex flex-wrap items-center gap-2">
                     <span className="truncate text-sm font-medium text-white">{p.name}</span>
-                    {p.sku ? <span className="font-mono text-[10px] text-white/30">{p.sku}</span> : null}
                     <Pill tone="slate">{p.kind === "digital" ? t("kind_digital") : t("kind_physical")}</Pill>
-                    {p.consignable ? <Pill tone="slate">{t("consignable")}</Pill> : null}
+                    {p.consignable ? <span title={t("consignableHint")}><Pill tone="slate">{t("consignable")}</Pill></span> : null}
                     {!p.isActive ? <Pill tone="muted">{t("archived")}</Pill> : null}
                     {p.tiers.length > 0 ? <Pill tone="slate">{t.plural("tiers", p.tiers.length)}</Pill> : null}
                   </div>
@@ -176,18 +176,25 @@ export function AdminProducts() {
                     {p.suggestedRetailCents ? <span>{t("resaleValue", { amount: money(p.suggestedRetailCents, p.currency) })}</span> : null}
                   </div>
                 </div>
-                <div className="flex shrink-0 gap-1">
+                <div className="flex shrink-0 gap-1 lg:hidden">
+                  <MemberMenu label={t("edit")} testId={`product-menu-${p.id}`} items={[
+                    ...(p.kind === "physical" ? [{ key: "tiers", label: t("volumePricing"), onSelect: () => setTiersFor(p) }] : []),
+                    { key: "edit", label: t("edit"), onSelect: () => setEditing(p) },
+                    ...(p.isActive ? [{ key: "archive", label: t("archive"), onSelect: () => setArchiving(p) }] : [{ key: "unarchive", label: tw("unarchive"), onSelect: () => update.mutate({ id: p.id, isActive: true }) }]),
+                  ]} />
+                </div>
+                <div className="hidden shrink-0 gap-1 lg:flex">
                   {p.kind === "physical" && (
-                    <Button variant="ghost" size="icon" onClick={() => setTiersFor(p)} title={t("volumePricing")} aria-label={t("volumePricing")}>
-                      <Layers />
+                    <Button variant="ghost" size="icon" onClick={() => setTiersFor(p)} title={t("volumePricing")} aria-label={t("volumePricing")} className="lg:w-auto lg:px-3">
+                      <Layers /><span className="hidden lg:inline">{t("volumePricing")}</span>
                     </Button>
                   )}
-                  <Button variant="ghost" size="icon" onClick={() => setEditing(p)} title={t("edit")} aria-label={t("edit")}>
-                    <Pencil />
+                  <Button variant="ghost" size="icon" onClick={() => setEditing(p)} title={t("edit")} aria-label={t("edit")} className="lg:w-auto lg:px-3">
+                    <Pencil /><span className="hidden lg:inline">{t("edit")}</span>
                   </Button>
                   {p.isActive ? (
-                    <Button variant="ghost" size="icon" onClick={() => setArchiving(p)} disabled={remove.isPending} title={t("archive")} aria-label={t("archive")}>
-                      <Archive />
+                    <Button variant="ghost" size="icon" onClick={() => setArchiving(p)} disabled={remove.isPending} title={t("archive")} aria-label={t("archive")} className="lg:w-auto lg:px-3">
+                      <Archive /><span className="hidden lg:inline">{t("archive")}</span>
                     </Button>
                   ) : (
                     // Unarchiving is setting it active again (PATCH isActive), so reps can sell it.
@@ -254,11 +261,11 @@ function ProductDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-md">
-        <DialogHeader>
+      <DialogContent className="flex max-h-[min(92dvh,760px)] max-w-md flex-col gap-0 overflow-hidden p-0">
+        <DialogHeader className="shrink-0 px-5 pb-3 pt-5 pr-12">
           <DialogTitle className="text-base font-semibold text-white">{product ? t("editProduct", { name: product.name }) : t("newProduct")}</DialogTitle>
         </DialogHeader>
-        <div className="space-y-3.5">
+        <div className="min-h-0 flex-1 space-y-3.5 overflow-y-auto px-5 pb-4">
           <Field label={t("fieldName")}>
             <Input value={form.name} onChange={(e) => set("name", e.target.value)} autoFocus />
           </Field>
@@ -285,19 +292,24 @@ function ProductDialog({
           {/* Green: this block is money (what they pay, what it costs, what we keep). */}
           <div className="space-y-3 rounded-2xl border border-emerald-400/20 bg-emerald-500/[0.06] p-3.5">
             <div className="grid grid-cols-2 gap-2">
-              <Field label={t("priceB2B")} hint={t("theyPay")}>
+              <Field label={t("priceB2B")}>
                 <CentsInput valueCents={form.basePriceCents ?? 0} onChangeCents={(c) => set("basePriceCents", c)} />
               </Field>
-              <Field label={t("costToMake")}>
-                <CentsInput valueCents={form.costCents ?? 0} onChangeCents={(c) => set("costCents", c || null)} />
-              </Field>
+              {/* A service or a site costs nothing to make: no cost box, and the margin below is the whole price. */}
+              {form.kind === "digital" ? null : (
+                <Field label={t("costToMake")}>
+                  <CentsInput valueCents={form.costCents ?? 0} onChangeCents={(c) => set("costCents", c || null)} />
+                </Field>
+              )}
             </div>
-            <div className="flex items-center justify-between border-t border-white/10 pt-2.5">
-              <span className="text-xs text-white/50">{t("youKeepPer", { unit: form.unitLabel || t("defaultUnit") })}</span>
-              <span className={`text-lg font-bold tabular-nums ${margin >= 0 ? "text-emerald-300" : "text-red-300"}`}>
-                {formatMoney(margin, form.currency ?? "USD", t.locale)}
-              </span>
-            </div>
+            {form.kind === "digital" ? null : (
+              <div className="flex items-center justify-between border-t border-white/10 pt-2.5">
+                <span className="text-xs text-white/50">{t("youKeepPer", { unit: form.unitLabel || t("defaultUnit") })}</span>
+                <span className={`text-lg font-bold tabular-nums ${margin >= 0 ? "text-emerald-300" : "text-red-300"}`}>
+                  {formatMoney(margin, form.currency ?? "USD", t.locale)}
+                </span>
+              </div>
+            )}
           </div>
 
           <Field label={t("suggestedResale")} hint={t("suggestedResaleHint")}>
@@ -313,6 +325,9 @@ function ProductDialog({
             <SwitchRow checked={form.isActive !== false} onCheckedChange={(checked) => set("isActive", checked)} label={t("activeCanSell")} />
           </div>
 
+        </div>
+        {/* Outside the scrolling part: Save stays in view however long the form is (VIS-30). */}
+        <div className="shrink-0 border-t px-5 py-3">
           <FormFooter dirty={Boolean(product) && dirty} onCancel={() => onOpenChange(false)}>
             <Button variant="brand" onClick={() => void submit().catch(() => undefined)} disabled={!form.name.trim() || (Boolean(product) && !dirty)} loading={pending}>
               {product ? t("saveChanges") : t("createProduct")}

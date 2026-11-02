@@ -7,7 +7,9 @@
 // overridden per piece. When neither says, a product with one obvious face
 // (a Google Review sign) answers for it; otherwise the face is unknown (null).
 
-import type { TagProductType } from "./tags.js";
+import type { TagProductType, TagDestinationType } from "./tags.js";
+import { guessDestinationType, socialNetworkOf } from "./tagApp.js";
+import { contentKindOf } from "./chipContent.js";
 
 export const TAG_FACES = [
   "google_review",
@@ -66,3 +68,29 @@ export function resolveTagFace(input: { face?: string | null; batchFace?: string
 
 export const tagFaceLabel = (face: string | null | undefined): string =>
   isTagFace(face) ? TAG_FACE_LABELS[face] : "Not set";
+/**
+ * What a piece opens when that is not what is printed on it: a piece with the Instagram mark that opens a Google
+ * review sends whoever scans it somewhere they did not expect. Only the faces that name one kind of destination are
+ * checked (Google, a social network, a call, an email, a contact card); any other face accepts any link. Returns the
+ * destination's own kind, or null when it matches, is unknown, or there is nothing to compare. A warning, never a block.
+ */
+export function destinationNotPrinted(face: string | null | undefined, url: string | null | undefined): TagDestinationType | null {
+  if (!isTagFace(face) || !url) return null;
+  const opens = guessDestinationType(url);
+  const content = contentKindOf(url);
+  switch (face) {
+    case "google_review":
+      return opens === "google_review" ? null : opens;
+    case "instagram":
+    case "facebook":
+    case "tiktok":
+    case "whatsapp":
+      return socialNetworkOf(url) === face ? null : opens;
+    case "phone":
+    case "email":
+    case "vcard":
+      return content === face ? null : opens;
+    default:
+      return null;
+  }
+}

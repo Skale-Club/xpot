@@ -57,6 +57,8 @@ export function PrintPreviewCard({ modelSlug, versionId, preview, canUpload = tr
     </>
   ) : null;
 
+  // Without a 3D view and nobody who can add one there is nothing to show.
+  if (!url && !canUpload) return null;
   return (
     <SectionCard title={t("previewTitle")} icon={Box} accent="tags" actions={actions} bodyClassName="p-0" testId="production-preview">
       {url ? (
@@ -80,10 +82,7 @@ export function PrintPreviewCard({ modelSlug, versionId, preview, canUpload = tr
           <p className="border-t border-white/[0.06] px-4 py-2 text-xs text-white/45">{t("previewHint")}</p>
         </div>
       ) : (
-        <div className="px-4 py-5 text-sm">
-          <p className="text-white/60">{t("previewEmpty")}</p>
-          <p className="mt-1 text-xs text-white/40">{t("previewEmptyHint")}</p>
-        </div>
+        <p className="px-4 py-4 text-sm text-white/60">{t("previewEmpty")}</p>
       )}
     </SectionCard>
   );

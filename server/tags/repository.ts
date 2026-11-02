@@ -1,6 +1,7 @@
 import { and, eq, inArray, isNull, sql, type SQL } from "drizzle-orm";
 import { db } from "../db.js";
 import {
+  organizations,
   salesLeads,
   salesProducts,
   salesReps,
@@ -40,7 +41,7 @@ import type {
 import { JOURNEY_PRODUCT_LABELS, tagActionEntry, type JourneySource } from "#shared/tagJourney.js";
 import { resolveTagFace } from "#shared/tagFace.js";
 import type { TagStockMetric } from "#shared/tagMetrics.js";
-import { kitCode } from "#shared/tagKits.js";
+import { kitCode, takeBackDestination } from "#shared/tagKits.js";
 import { tagSystemReason } from "#shared/tagReasons.js";
 import { checkCodes, handOutBlocker, takeBackBlocker, type DistributionCheck, type DistributionPiece } from "#shared/tagDistribution.js";
 import type { TagPieceQueue } from "#shared/tagQueues.js";
@@ -122,6 +123,8 @@ export interface TagListFilters {
   house?: boolean;
   /** Only pieces counted by this stock number (shared/tagMetrics.ts), e.g. `house` for the company stock card. */
   metric?: TagStockMetric;
+  /** Leave out the pieces not in stock yet (stock status `pending`): the stock list's default view. */
+  hidePending?: boolean;
   /** Only pieces in this Overview "Needs action" queue (shared/tagQueues.ts). */
   queue?: TagPieceQueue;
   method?: "qr" | "nfc";
@@ -151,8 +154,10 @@ type TagRow = {
   destination_url: string | null;
   lead_id: number | null;
   lead_name: string | null;
+  organization_id: number | null;
   rep_id: number | null;
   rep_name: string | null;
+  organization_name: string | null;
   kit_id: string | null;
   kit_number: number | null;
   batch_id: string | null;
@@ -164,6 +169,8 @@ type TagRow = {
   sold_at: Date | null;
   sale_id: number | null;
   sold_price_cents: number | null;
+  print_job_status: string | null;
+  inventory_scan_at: Date | null;
   created_at: Date;
 };
 
@@ -192,8 +199,10 @@ function toListItem(r: TagRow): TagListItem {
     destinationUrl: r.destination_url,
     leadId: r.lead_id,
     leadName: r.lead_name,
+    organizationId: r.organization_id,
     repId: r.rep_id,
     repName: r.rep_name,
+    organizationName: r.organization_name,
     kitId: r.kit_id,
     kitCode: r.kit_number == null ? null : kitCode(Number(r.kit_number)),
     batchId: r.batch_id,
@@ -205,23 +214,30 @@ function toListItem(r: TagRow): TagListItem {
     soldAt: iso(r.sold_at),
     saleId: r.sale_id,
     soldPriceCents: r.sold_price_cents === null ? null : Number(r.sold_price_cents),
+    printJobStatus: r.print_job_status,
+    lastInventoryScanAt: iso(r.inventory_scan_at),
     createdAt: iso(r.created_at)!,
   };
 }
 
-function tagListQuery(where: SQL, limit: number, offset = 0): SQL {
+/** `inventoryScan`: also read the last stock-intake scan of each piece (the "Scanned, not live" list shows when). */
+function tagListQuery(where: SQL, limit: number, offset = 0, opts: { inventoryScan?: boolean } = {}): SQL {
   return sql`
     SELECT t.id, t.public_code, t.serial_number, t.product_type, COALESCE(t.sales_product_id, b.sales_product_id) AS sales_product_id,
            t.face, b.face AS batch_face, t.status, t.stock_status, t.ownership_type, t.custodian_rep_id,
            t.internal_use_note, t.nfc_provisioning_status, t.label,
            t.destination_type, t.destination_url, t.lead_id, l.name AS lead_name, t.rep_id, r.display_name AS rep_name,
+           t.organization_id, org.name AS organization_name,
            t.kit_id, k.kit_number, t.batch_id, b.batch_code, t.activated_at, t.sold_at, t.created_at,
            sold.sale_id, sold.net_total_cents AS sold_price_cents, acquired.acquisition_cost_cents,
+           pj.status AS print_job_status, ${opts.inventoryScan ? sql`scan.inventory_scan_at` : sql`NULL::timestamptz`} AS inventory_scan_at,
            COALESCE(s.qr, 0)::int AS qr, COALESCE(s.nfc, 0)::int AS nfc, s.last_interaction_at
     FROM tags t
     LEFT JOIN sales_leads l ON l.id = t.lead_id
     LEFT JOIN sales_reps r ON r.id = t.rep_id
+    LEFT JOIN organizations org ON org.id = t.organization_id
     LEFT JOIN tag_batches b ON b.id = t.batch_id
+    LEFT JOIN print_jobs pj ON pj.id = b.print_job_id
     LEFT JOIN tag_kits k ON k.id = t.kit_id
     LEFT JOIN LATERAL (
       -- A Visits line can carry several pieces: each one is its share.
@@ -246,6 +262,9 @@ function tagListQuery(where: SQL, limit: number, offset = 0): SQL {
       FROM tag_events e
       WHERE e.tag_id = t.id AND ${COUNTABLE}
     ) s ON true
+    ${opts.inventoryScan ? sql`LEFT JOIN LATERAL (
+      SELECT max(e.occurred_at) AS inventory_scan_at FROM tag_events e WHERE e.tag_id = t.id AND e.event_type = 'inventory_scan' AND NOT e.is_bot
+    ) scan ON true` : sql``}
     WHERE ${where}
     ORDER BY t.batch_id NULLS LAST, t.serial_number NULLS LAST, t.created_at DESC, t.id
     LIMIT ${limit} OFFSET ${offset}
@@ -268,6 +287,7 @@ export async function listTags(filters: TagListFilters): Promise<TagListItem[]> 
   }
   if (filters.house) conds.push(sql`t.rep_id IS NULL`);
   if (filters.metric) conds.push(stockMetricSql(filters.metric));
+  if (filters.hidePending) conds.push(sql`t.stock_status <> 'pending'`);
   if (filters.queue) conds.push(pieceQueueSql(filters.queue));
   if (filters.method === "qr") conds.push(sql`COALESCE(s.qr, 0) > 0`);
   if (filters.method === "nfc") conds.push(sql`COALESCE(s.nfc, 0) > 0`);
@@ -277,7 +297,7 @@ export async function listTags(filters: TagListFilters): Promise<TagListItem[]> 
   }
   const limit = Math.min(Math.max(filters.limit ?? 500, 1), 2000);
   const offset = Math.max(filters.offset ?? 0, 0);
-  return (await rows<TagRow>(tagListQuery(sql.join(conds, sql` AND `), limit, offset))).map(toListItem);
+  return (await rows<TagRow>(tagListQuery(sql.join(conds, sql` AND `), limit, offset, { inventoryScan: filters.queue === "scannedNotLive" }))).map(toListItem);
 }
 
 export async function getTagRow(id: string): Promise<Tag | null> {
@@ -296,20 +316,23 @@ async function historyFor(where: SQL, limit: number): Promise<Array<TagHistoryEn
   productType: string;
   face: string | null;
   batchCode: string | null;
+  leadName: string | null;
 }>> {
   const list = await rows<{
-    id: string; tag_id: string; public_code: string; product_type: string; face: string | null;
+    id: string; tag_id: string; public_code: string; product_type: string; face: string | null; lead_name: string | null;
     batch_face: string | null; batch_code: string | null; previous_url: string | null; new_url: string | null;
     previous_destination_type: string | null; new_destination_type: string | null;
-    changed_by_user_id: string | null; changed_by_email: string | null; reason: string | null; created_at: Date;
+    changed_by_user_id: string | null; changed_by_email: string | null; changed_by_name: string | null; reason: string | null; created_at: Date;
   }>(sql`
-    SELECT h.id, h.tag_id, t.public_code, t.product_type, t.face, b.face AS batch_face, b.batch_code,
+    SELECT h.id, h.tag_id, t.public_code, t.product_type, t.face, b.face AS batch_face, b.batch_code, l.name AS lead_name,
            h.previous_url, h.new_url, h.previous_destination_type,
-           h.new_destination_type, h.changed_by_user_id, u.email AS changed_by_email, h.reason, h.created_at
+           h.new_destination_type, h.changed_by_user_id, u.email AS changed_by_email, cr.display_name AS changed_by_name, h.reason, h.created_at
     FROM tag_destination_history h
     JOIN tags t ON t.id = h.tag_id
     LEFT JOIN tag_batches b ON b.id = t.batch_id
+    LEFT JOIN sales_leads l ON l.id = t.lead_id
     LEFT JOIN users u ON u.id = h.changed_by_user_id
+    LEFT JOIN sales_reps cr ON cr.user_id = h.changed_by_user_id
     WHERE ${where}
     ORDER BY h.created_at DESC
     LIMIT ${limit}
@@ -321,12 +344,14 @@ async function historyFor(where: SQL, limit: number): Promise<Array<TagHistoryEn
     productType: h.product_type,
     face: faceOf(h),
     batchCode: h.batch_code,
+    leadName: h.lead_name,
     previousUrl: h.previous_url,
     newUrl: h.new_url,
     previousDestinationType: h.previous_destination_type,
     newDestinationType: h.new_destination_type,
     changedByUserId: h.changed_by_user_id,
     changedByEmail: h.changed_by_email,
+    changedByName: h.changed_by_name,
     reason: h.reason,
     createdAt: iso(h.created_at)!,
   }));
@@ -362,7 +387,7 @@ export async function getTagDetail(id: string, baseUrl: string, actor?: TagActor
     disabledAt: iso(tag.disabledAt),
     updatedAt: iso(tag.updatedAt)!,
     ...buildTagUrls(baseUrl, tag.publicCode),
-    history: history.map(({ tagId: _t, publicCode: _p, productType: _pt, face: _f, batchCode: _b, ...h }) => h),
+    history: history.map(({ tagId: _t, publicCode: _p, productType: _pt, face: _f, batchCode: _b, leadName: _l, ...h }) => h),
     ...(custody !== undefined ? { custody } : {}),
   };
 }
@@ -878,7 +903,7 @@ export async function deliverKit(input: KitInput, userId: string | null, source:
 
     const [kit] = await tx
       .insert(tagKits)
-      .values({ organizationId, repId: input.repId, note: input.note ?? null, createdByUserId: userId })
+      .values({ organizationId, sourceOrganizationId: input.sourceOrganizationId ?? null, repId: input.repId, note: input.note ?? null, createdByUserId: userId })
       .returning({ id: tagKits.id });
     const now = new Date();
     const ownershipType = input.unitCostCents === undefined ? "company" : input.ownershipType ?? "rep";
@@ -978,8 +1003,9 @@ export async function listKits(filter: { repId?: number; kitId?: string; organiz
     id: string; kit_number: number; rep_id: number; rep_name: string | null; note: string | null; created_at: Date; piece_count: number;
     unsold_count: number; returnable_count: number; sold_count: number; acquisition_source: string | null; unit_cost_cents: number | null;
     handed_out: number; returned: number; moved: number; ownership_type: string | null;
+    organization_id: number; source_organization_id: number | null;
   }>(sql`
-    SELECT k.id, k.kit_number, k.rep_id, r.display_name AS rep_name, k.note, k.created_at,
+    SELECT k.id, k.kit_number, k.rep_id, r.display_name AS rep_name, k.note, k.created_at, k.organization_id, k.source_organization_id,
       count(t.id)::int AS piece_count,
       count(t.id) FILTER (WHERE t.rep_id = k.rep_id AND ${stockMetricSql("withResellers")})::int AS unsold_count,
       count(t.id) FILTER (WHERE t.rep_id = k.rep_id AND ${stockMetricSql("returnable")})::int AS returnable_count,
@@ -1011,10 +1037,16 @@ export async function listKits(filter: { repId?: number; kitId?: string; organiz
       ORDER BY m.created_at LIMIT 1
     ) own ON true
     WHERE ${sql.join(conds, sql` AND `)}
-    GROUP BY k.id, r.display_name, acq.source, acq.unit_cost_cents, items.handed_out, items.returned, items.moved, own.to_ownership_type
+    GROUP BY k.id, k.organization_id, k.source_organization_id, r.display_name, acq.source, acq.unit_cost_cents, items.handed_out, items.returned, items.moved, own.to_ownership_type
     ORDER BY k.created_at DESC
   `);
-  return list.map((k) => {
+  // Where "Take back unsold" sends this kit's pieces, for the person asking (a kit's pieces sit in the receiver's organization).
+  const companyId = await companyOrganizationId();
+  const destinations = list.map((k) => takeBackDestination({
+    kitSourceOrganizationId: k.source_organization_id, pieceOrganizationId: k.organization_id, companyOrganizationId: companyId, scope: filter.scope ?? null,
+  }));
+  const names = await organizationNames(Array.from(new Set(destinations)));
+  return list.map((k, index) => {
     const pieceCount = Number(k.piece_count);
     const soldCount = Number(k.sold_count);
     return {
@@ -1037,6 +1069,7 @@ export async function listKits(filter: { repId?: number; kitId?: string; organiz
       soldCount,
       acquisitionSource: k.acquisition_source,
       unitCostCents: k.unit_cost_cents === null ? null : Number(k.unit_cost_cents),
+      takeBackTo: { organizationId: destinations[index], name: names.get(destinations[index]) ?? "", company: destinations[index] === companyId },
     };
   });
 }
@@ -1076,12 +1109,13 @@ export async function getKitItems(kitId: string, scope: OrganizationScope = null
 type CheckRow = {
   id: string; public_code: string; status: string; stock_status: string; rep_id: number | null; rep_name: string | null;
   serial_number: number | null; batch_code: string | null; product_type: string; kit_number: number | null; sold: boolean;
+  organization_id: number; kit_source_organization_id: number | null; ownership_type: string;
 };
 
 async function piecesForCheck(where: SQL, limit?: number): Promise<CheckRow[]> {
   return rows<CheckRow>(sql`
     SELECT t.id, t.public_code, t.status, t.stock_status, t.rep_id, r.display_name AS rep_name, t.serial_number, b.batch_code,
-           t.product_type, k.kit_number,
+           t.product_type, k.kit_number, t.organization_id, k.source_organization_id AS kit_source_organization_id, t.ownership_type,
            EXISTS (SELECT 1 FROM sales_sale_tags st WHERE st.tag_id = t.id AND st.status = 'active') AS sold
     FROM tags t
     LEFT JOIN sales_reps r ON r.id = t.rep_id
@@ -1126,10 +1160,21 @@ export async function checkHandOut(
   return checkCodes(codes, new Map(found.map((r) => [r.public_code, r])), (r) => handOutBlocker(checkPiece(r)), describeCheck);
 }
 
-/** Take back, dry run: per code, can it come back to house stock now and why not. Nothing moves. */
+/**
+ * Take back, dry run: per code, can it come back to stock now and why not, and for a piece that can, whose stock it
+ * goes into (the same destination returnToHouse uses). Nothing moves.
+ */
 export async function checkTakeBack(codes: string[], scope: OrganizationScope = null): Promise<DistributionCheck> {
   const found = codes.length ? await piecesForCheck(sql`t.public_code IN ${sqlList(Array.from(new Set(codes)))} AND ${inOrganizations(sql`t.organization_id`, scope)}`) : [];
-  return checkCodes(codes, new Map(found.map((r) => [r.public_code, r])), (r) => takeBackBlocker(checkPiece(r)), describeCheck);
+  const companyId = await companyOrganizationId();
+  const destinationOf = (r: CheckRow) => takeBackDestination({ kitSourceOrganizationId: r.kit_source_organization_id, pieceOrganizationId: r.organization_id, companyOrganizationId: companyId, scope });
+  const names = await organizationNames(Array.from(new Set(found.filter((r) => takeBackBlocker(checkPiece(r)) === null).map(destinationOf))));
+  return checkCodes(codes, new Map(found.map((r) => [r.public_code, r])), (r) => takeBackBlocker(checkPiece(r)), (code, r) => ({
+    ...describeCheck(code, r),
+    goesTo: r && takeBackBlocker(checkPiece(r)) === null ? { organizationId: destinationOf(r), name: names.get(destinationOf(r)) ?? "", company: destinationOf(r) === companyId } : null,
+    // Bought by the reseller: taking it back does not give their money back.
+    bought: r?.ownership_type === "rep",
+  }));
 }
 
 /** `(a, b, c)` for an IN list (never empty: callers check). */
@@ -1137,17 +1182,17 @@ function sqlList(values: readonly string[]): SQL {
   return sql`(${sql.join(values.map((v) => sql`${v}`), sql`, `)})`;
 }
 
-/** The organization holding a piece, by printed code. */
-export async function getOrganizationOfCode(code: string): Promise<number | null> {
-  const [tag] = await db.select({ organizationId: tags.organizationId }).from(tags).where(eq(tags.publicCode, code)).limit(1);
-  return tag?.organizationId ?? null;
+/** What Take back needs to know about the organizations: its name, and the company's id. */
+async function organizationNames(ids: readonly number[]): Promise<Map<number, string>> {
+  const list = ids.length ? await db.select({ id: organizations.id, name: organizations.name }).from(organizations).where(inArray(organizations.id, [...ids])) : [];
+  return new Map(list.map((o) => [o.id, o.name]));
 }
 
-/** Admin: unsold pieces back from a reseller to house stock (kit returned, reseller left). */
 /**
- * Unsold pieces a reseller hands back go to house stock. A typo must not pass
- * silently: unknown codes are refused, and pieces already in house stock are
- * reported instead of counted.
+ * Admin: unsold pieces back from a reseller to stock (kit returned, reseller left). A piece goes back to the
+ * organization its kit came from (shared/tagKits.ts takeBackDestination), and the answer says where each group went.
+ * A typo must not pass silently: unknown codes are refused, and pieces already in house stock are reported instead
+ * of counted.
  */
 export async function returnToHouse(
   codes: string[],
@@ -1155,23 +1200,23 @@ export async function returnToHouse(
   source: JourneySource = "admin",
   /** Whose pieces may come back: another organization's codes read as unknown. */
   scope: OrganizationScope = null,
-  /** Whose house stock they come back to; the owner of an organization takes them into its stock. Default: the company's. */
-  houseOrganizationId?: number,
-): Promise<{ returned: number; alreadyInHouse: string[] }> {
-  const organizationId = houseOrganizationId ?? await companyOrganizationId();
+): Promise<{ returned: number; alreadyInHouse: string[]; to: Array<{ organizationId: number; name: string; company: boolean; count: number }> }> {
+  const companyId = await companyOrganizationId();
   let moved: Array<{
     id: string; publicCode: string; repId: number | null; kitId: string | null; stockStatus: string;
-    ownershipType: string; custodianRepId: number | null;
+    ownershipType: string; custodianRepId: number | null; destination: number;
   }> = [];
   const result = await db.transaction(async (tx) => {
     const picked = await tx
       .select({
         id: tags.id, publicCode: tags.publicCode, status: tags.status, stockStatus: tags.stockStatus,
         ownershipType: tags.ownershipType, custodianRepId: tags.custodianRepId, repId: tags.repId, kitId: tags.kitId,
+        organizationId: tags.organizationId, kitSourceOrganizationId: tagKits.sourceOrganizationId,
       })
       .from(tags)
+      .leftJoin(tagKits, eq(tags.kitId, tagKits.id))
       .where(scope === null ? inArray(tags.publicCode, codes) : and(inArray(tags.publicCode, codes), inArray(tags.organizationId, [...scope])))
-      .for("update");
+      .for("update", { of: tags });
     const found = new Set(picked.map((t) => t.publicCode));
     const missing = codes.filter((c) => !found.has(c));
     if (missing.length) throw new TagError(`Unknown codes: ${missing.join(", ")}`, 404, "tag_codes_unknown", { codes: missing.join(", ") });
@@ -1185,26 +1230,31 @@ export async function returnToHouse(
     const configured = picked.filter((t) => t.status !== "inventory" || t.stockStatus !== "available").map((t) => t.publicCode);
     if (configured.length) throw new TagError(`Clear the customer of these set-up pieces before returning them: ${configured.join(", ")}`, 409, "return_configured", { codes: configured.join(", ") });
     const alreadyInHouse = picked.filter((t) => t.repId === null).map((t) => t.publicCode);
-    const moving = picked.filter((t) => t.repId !== null);
+    const moving = picked.filter((t) => t.repId !== null).map((t) => ({
+      ...t,
+      destination: takeBackDestination({ kitSourceOrganizationId: t.kitSourceOrganizationId, pieceOrganizationId: t.organizationId, companyOrganizationId: companyId, scope }),
+    }));
     if (moving.length) {
       const now = new Date();
       await tx
         .update(tagAcquisitionUnits)
         .set({ returnedAt: now })
         .where(and(inArray(tagAcquisitionUnits.tagId, moving.map((t) => t.id)), isNull(tagAcquisitionUnits.returnedAt)));
-      await tx
-        .update(tags)
-        .set({
-          organizationId,
-          repId: null,
-          kitId: null,
-          custodianRepId: null,
-          ownershipType: "company",
-          stockStatus: "available",
-          stockUpdatedAt: now,
-          updatedAt: now,
-        })
-        .where(inArray(tags.id, moving.map((t) => t.id)));
+      for (const organizationId of Array.from(new Set(moving.map((t) => t.destination)))) {
+        await tx
+          .update(tags)
+          .set({
+            organizationId,
+            repId: null,
+            kitId: null,
+            custodianRepId: null,
+            ownershipType: "company",
+            stockStatus: "available",
+            stockUpdatedAt: now,
+            updatedAt: now,
+          })
+          .where(inArray(tags.id, moving.filter((t) => t.destination === organizationId).map((t) => t.id)));
+      }
       await markKitItemsLeft(tx, moving.map((t) => ({ kitId: t.kitId, tagId: t.id })), "returned", now);
       await tx.insert(tagStockMovements).values(moving.map((tag) => ({
         tagId: tag.id,
@@ -1224,6 +1274,14 @@ export async function returnToHouse(
     }
     return { returned: moving.length, alreadyInHouse };
   });
+  const destinations = Array.from(new Set(moved.map((t) => t.destination)));
+  const names = await organizationNames(destinations);
+  const to = destinations.map((organizationId) => ({
+    organizationId,
+    name: names.get(organizationId) ?? "",
+    company: organizationId === companyId,
+    count: moved.filter((t) => t.destination === organizationId).length,
+  }));
   if (moved.length) {
     const reps = new Set(moved.map((t) => t.repId));
     const kits = new Set(moved.map((t) => t.kitId));
@@ -1232,7 +1290,7 @@ export async function returnToHouse(
     await recordJourney({
       kind: "execution",
       action: "returned_to_house",
-      title: `${moved.length} ${moved.length === 1 ? "piece" : "pieces"} returned to company stock${rep ? ` by ${rep.name}` : ""}`,
+      title: `${moved.length} ${moved.length === 1 ? "piece" : "pieces"} returned to ${to.length !== 1 ? "stock" : to[0].organizationId === companyId ? "company stock" : `${to[0].name} stock`}${rep ? ` by ${rep.name}` : ""}`,
       repId,
       // Only a single kit: a batch id here would also make the entry
       // batch-wide for every piece of the batch.
@@ -1240,7 +1298,7 @@ export async function returnToHouse(
       metadata: { codes: moved.map((t) => t.publicCode), count: moved.length },
     }, journeyContext(userId, source));
   }
-  return result;
+  return { ...result, to };
 }
 
 // ─── Batches ──────────────────────────────────────────────────────────────────
@@ -1885,7 +1943,8 @@ interface BatchRow {
   face: string | null; vendor: string | null; quantity: number; status: string; code_source: string; print_job_id: string | null;
   notes: string | null; created_at: Date; tag_count: number; pending_count: number; house_count: number; hand_out_count: number;
   with_resellers_count: number; sold_count: number; damaged_count: number; active_count: number; nfc_verified_count: number;
-  last_production_action: string | null; organization_id: number;
+  last_production_action: string | null; organization_id: number; organization_name: string | null;
+  print_job_status: string | null; print_job_error: string | null;
 }
 
 const BATCH_SELECT = sql`
@@ -1900,7 +1959,10 @@ const BATCH_SELECT = sql`
     ${countMetricSql("damaged")} AS damaged_count,
     ${countMetricSql("live")} AS active_count,
     count(t.id) FILTER (WHERE t.nfc_provisioning_status IN ('verified', 'locked'))::int AS nfc_verified_count,
-    ${PRODUCTION_STEP_SQL} AS last_production_action
+    ${PRODUCTION_STEP_SQL} AS last_production_action,
+    (SELECT o.name FROM organizations o WHERE o.id = b.organization_id) AS organization_name,
+    (SELECT pj.status FROM print_jobs pj WHERE pj.id = b.print_job_id) AS print_job_status,
+    (SELECT pj.error_message FROM print_jobs pj WHERE pj.id = b.print_job_id) AS print_job_error
   FROM tag_batches b
   LEFT JOIN tags t ON t.batch_id = b.id`;
 
@@ -1915,11 +1977,15 @@ function batchItem(b: BatchRow): TagBatchItem {
     salesProductId: b.sales_product_id,
     face: resolveTagFace({ batchFace: b.face, productType: b.product_type }),
     ownFace: b.face,
-    vendor: b.vendor,
+    // A print batch's maker is whoever prints it; older ones were all filed under "Skale Club".
+    vendor: b.print_job_id && b.vendor === "Skale Club" && b.organization_name ? b.organization_name : b.vendor,
     quantity: Number(b.quantity),
     status: b.status,
     codeSource: b.code_source,
     printJobId: b.print_job_id,
+    printJobStatus: b.print_job_status,
+    printJobError: b.print_job_error,
+    organizationName: b.organization_name,
     organizationId: Number(b.organization_id),
     stage: batchStage({ status: b.status, codeSource: b.code_source, tagCount, pendingCount, lastProductionAction: b.last_production_action }),
     lastProductionAction: b.last_production_action,
@@ -2167,7 +2233,8 @@ export async function getOverview(now: Date = new Date(), timezoneOffsetMinutes 
   const [queueRow] = await rows<{ stuscle_orders: number; batches_not_received: number }>(sql`
     SELECT (SELECT count(*)::int FROM tag_acquisitions a WHERE a.status = 'pending' AND ${inOrganizations(sql`a.organization_id`, scope)}) AS stuscle_orders,
            (SELECT count(DISTINCT b.id)::int FROM tag_batches b JOIN tags t ON t.batch_id = b.id
-             WHERE b.status <> 'cancelled' AND ${stockMetricSql("notReceived")} AND ${inOrganizations(sql`b.organization_id`, scope)}) AS batches_not_received
+             WHERE b.status <> 'cancelled' AND ${stockMetricSql("notReceived")}
+               AND NOT EXISTS (SELECT 1 FROM print_jobs pj WHERE pj.id = b.print_job_id AND pj.status = 'cancelled') AND ${inOrganizations(sql`b.organization_id`, scope)}) AS batches_not_received
   `);
   const counts: TagOverview["counts"] = { total: 0, inventory: 0, assigned: 0, active: 0, disabled: 0, retired: 0, damaged: Number(stockRow?.damaged ?? 0) };
   const stock = { house: Number(stockRow?.house ?? 0), withResellers: Number(stockRow?.with_resellers ?? 0) };
@@ -2316,14 +2383,15 @@ export async function getTagDashboard(repId: number | null, days = 30, now: Date
   // The shared stock numbers (shared/tagMetrics.ts), so the dashboard reads what Overview, Inventory and
   // Resellers read: "in stock" is the unsold stock in resellers' hands (the rep's own, for a rep), set-up and
   // live pieces included; "sold" is an active financial sale in the period (as the Resellers report counts it).
-  const [totals] = await rows<{ in_stock: number; active: number; sold: number; missing: number }>(sql`
+  const [totals] = await rows<{ in_stock: number; active: number; sold: number; missing: number; missing_live: number }>(sql`
     SELECT
       ${countMetricSql("withResellers")} AS in_stock,
       count(*) FILTER (WHERE t.status = 'active')::int AS active,
       count(*) FILTER (WHERE EXISTS (
         SELECT 1 FROM sales_sale_tags st WHERE st.tag_id = t.id AND st.status = 'active' AND st.sold_at >= ${since}
       ))::int AS sold,
-      count(*) FILTER (WHERE t.status IN ('assigned', 'active') AND t.nfc_provisioning_status IN ('not_programmed', 'failed'))::int AS missing
+      count(*) FILTER (WHERE t.status IN ('assigned', 'active') AND t.nfc_provisioning_status IN ('not_programmed', 'failed'))::int AS missing,
+      count(*) FILTER (WHERE t.status = 'active' AND t.nfc_provisioning_status IN ('not_programmed', 'failed'))::int AS missing_live
     FROM tags t WHERE ${tagScope}
   `);
   const [scans] = await rows<{ qr: number; nfc: number; visitors: number }>(sql`
@@ -2397,6 +2465,7 @@ export async function getTagDashboard(repId: number | null, days = 30, now: Date
     scans: { qr: Number(scans?.qr ?? 0), nfc: Number(scans?.nfc ?? 0) },
     visitors: Number(scans?.visitors ?? 0),
     chipsMissing: Number(totals?.missing ?? 0),
+    chipsMissingLive: Number(totals?.missing_live ?? 0),
     daily: daily.map((d) => ({ day: d.day, qr: Number(d.qr), nfc: Number(d.nfc) })),
     topPieces: topPieces.map((p) => ({
       id: p.id,

@@ -5,7 +5,7 @@
 
 import { useState, type ReactNode } from "react";
 import { Minus, Plus } from "lucide-react";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { FIELD_CONTROL, Select as KitSelect } from "@/components/xpot/Field";
 import { Pill, type PillTone } from "@/components/xpot/StatusPill";
@@ -13,6 +13,7 @@ import { EYEBROW, GLASS_SUBTLE_CLASS } from "@/components/xpot/surface";
 import { cn } from "@/lib/utils";
 import { useT } from "@/i18n";
 import { visitsUiMessages } from "@/i18n/messages/visitsUi";
+import { parseSettleCount } from "./settleCount";
 import { centsToInput, currencySymbol, formatCents, inputToCents } from "../../utils";
 
 export { GLASS } from "@/components/xpot/surface";
@@ -142,6 +143,32 @@ export function QtyInput({
   );
 }
 
+/** A count that starts empty (null) and is only a number once the rep types or taps one. */
+export function CountInput({
+  value, onChange, autoFocus,
+}: { value: number | null; onChange: (n: number | null) => void; autoFocus?: boolean }) {
+  const t = useT(visitsUiMessages);
+  return (
+    <div className="flex items-center gap-1">
+      <Button type="button" variant="secondary" size="icon" aria-label={t("decrease")} disabled={value === null || value <= 0} onClick={() => onChange(Math.max(0, (value ?? 0) - 1))}>
+        <Minus aria-hidden="true" />
+      </Button>
+      <input
+        value={value ?? ""}
+        autoFocus={autoFocus}
+        inputMode="numeric"
+        placeholder="?"
+        onChange={(e) => onChange(parseSettleCount(e.target.value.replace(/[^0-9]/g, "")))}
+        className={cn(inputCls, "px-1 text-center font-semibold tabular-nums")}
+        data-testid="settle-count-input"
+      />
+      <Button type="button" variant="secondary" size="icon" aria-label={t("increase")} onClick={() => onChange((value ?? 0) + 1)}>
+        <Plus aria-hidden="true" />
+      </Button>
+    </div>
+  );
+}
+
 /** The kit's native Select, with the old `onChange(value)` signature. */
 export function Select({
   value, onChange, options, placeholder, disabled,
@@ -178,13 +205,14 @@ export function Chip({ children, tone = "neutral" }: { children: ReactNode; tone
 
 /** A dialog on the kit's modal shell (ui/dialog), wider with `wide`. */
 export function SheetDialog({
-  open, onOpenChange, title, children, wide,
-}: { open: boolean; onOpenChange: (o: boolean) => void; title: string; children: ReactNode; wide?: boolean }) {
+  open, onOpenChange, title, description, children, wide,
+}: { open: boolean; onOpenChange: (o: boolean) => void; title: string; description?: string; children: ReactNode; wide?: boolean }) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className={wide ? "max-w-2xl" : "max-w-md"}>
-        <DialogHeader className="pr-8">
+        <DialogHeader className="pr-10">
           <DialogTitle className="text-base">{title}</DialogTitle>
+          {description ? <DialogDescription className="text-xs">{description}</DialogDescription> : null}
         </DialogHeader>
         {children}
       </DialogContent>

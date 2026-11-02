@@ -1,5 +1,5 @@
 // The panel home's "Today" rows (client/src/pages/admin/home-model.ts), by profile: zero rows are dropped, the
-// platform gets two blocks (Platform, My company), a partner the company's production for their organization, an owner
+// platform gets three blocks (people and orders, production, pieces), a partner the company's production for their organization, an owner
 // their team's purchases and the Tags queues; files are "stuck" only after two hours, failed plates not printed again
 // show up, and a pending order is never counted twice.
 
@@ -47,29 +47,33 @@ describe("todayRows: platform", () => {
     expect(todayRows({ profile: "platform", requests: [], queues: queues(), pendingOrders: 0, pendingPeople: 0 })).toEqual([]);
   });
 
-  it("splits Platform (people, Stuscle orders) from My company (print, queues), hiding zeros", () => {
+  it("splits the work in three blocks (people and orders, production, pieces), hiding zeros", () => {
     const blocks = todayBlocks({
       profile: "platform", now: NOW, pendingPeople: 3, pendingOrders: 2,
       requests: [request(plate("ready", 1), plate("building", 2, 4), plate("failed", 3, 1))],
       queues: queues({ chipPending: 4, batchesNotReceived: 1 }),
     });
-    expect(blocks.map((block) => block.id)).toEqual(["platform", "company"]);
+    expect(blocks.map((block) => block.id)).toEqual(["people", "production", "pieces"]);
     expect(blocks[0].rows.map((row) => [row.id, row.count, row.href])).toEqual([
       ["peopleWaiting", 3, "/admin/reps?status=pending"],
       ["stuscleOrders", 2, "/admin/tags/kits?view=orders"],
     ]);
     expect(blocks[1].rows.map((row) => [row.id, row.count, row.href])).toEqual([
-      ["platesToPrint", 1, "/admin/tags/production/queue"],
+      // What broke first (stuck files, failed prints), then what is next in line; batches awaiting pieces are production's too.
       ["filesStuck", 1, "/admin/tags/production/queue"],
       ["printsFailed", 1, "/admin/tags/production/queue"],
+      ["platesToPrint", 1, "/admin/tags/production/queue"],
       ["batchesNotReceived", 1, "/admin/tags/batches?pending=1"],
+    ]);
+    expect(blocks[2].rows.map((row) => [row.id, row.count, row.href])).toEqual([
       ["chipPending", 4, "/admin/tags/overview/chipPending"],
     ]);
   });
 
   it("drops a block that is left empty", () => {
-    expect(todayBlocks({ profile: "platform", pendingPeople: 1, queues: queues() }).map((block) => block.id)).toEqual(["platform"]);
-    expect(todayBlocks({ profile: "platform", queues: queues({ noProduct: 2 }) }).map((block) => block.id)).toEqual(["company"]);
+    expect(todayBlocks({ profile: "platform", pendingPeople: 1, queues: queues() }).map((block) => block.id)).toEqual(["people"]);
+    expect(todayBlocks({ profile: "platform", queues: queues({ noProduct: 2 }) }).map((block) => block.id)).toEqual(["pieces"]);
+    expect(todayBlocks({ profile: "platform", requests: [request("ready")] }).map((block) => block.id)).toEqual(["production"]);
   });
 
   it("counts the wholesale orders once, from the orders list, not from the overview's identical queue", () => {

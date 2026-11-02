@@ -4,14 +4,12 @@ import { useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import { useT } from "@/i18n";
 import { pieceScreenMessages } from "@/i18n/messages/pieceScreen";
-import { getSellTo } from "@/pages/tags/lib";
 import { ActivitySection } from "./ActivitySection";
 import { ChipSection } from "./ChipSection";
 import { CustodyCard } from "./CustodyCard";
 import { CustomerDestinationSection } from "./CustomerDestinationSection";
 import { ManagementSection } from "./ManagementSection";
 import { PerformanceSection } from "./PerformanceSection";
-import { PieceStatusChips } from "./PieceHeader";
 import { usePiece, type PieceCommands } from "./PieceContext";
 import { SaleSection } from "./SaleSection";
 import { pieceSections, pieceSituation, type PieceMainAction } from "./pieceView";
@@ -24,6 +22,7 @@ import { pieceSections, pieceSituation, type PieceMainAction } from "./pieceView
 // `columns`: the admin page on a computer, the working sections on the left,
 // Management on the right, Performance and Activity across the bottom.
 
+const HINT_KEY = { waitingPrint: "hintWaitingPrint", printDone: "hintPrintDone", askManager: "hintAskManager", printFailed: "hintPrintFailed", printCancelled: "hintPrintCancelled" } as const;
 const ACTION_ICON = { openPrint: Printer, viewPerformance: BarChart3, reactivate: Power, goLive: Power, writeChip: Nfc, configure: Settings2 } as const;
 
 function ActionIcon({ kind }: { kind: keyof typeof ACTION_ICON }) {
@@ -37,11 +36,7 @@ export function PieceBody({ layout, desktopWriter }: { layout: "stack" | "column
   const [, navigate] = useLocation();
   // Sections fill these on render; the main button calls them (PieceCommands).
   const commands = useRef<PieceCommands>({});
-  // Sheets are not portals: one that opens by itself (the chip write continued from a computer, a
-  // piece sold during a visit) would be hidden inside a closed "More details", so those start it open.
-  const [detailsOpen, setDetailsOpen] = useState(
-    () => new URLSearchParams(window.location.search).get("write") === "1" || (!tag.leadId && viewer.surface === "field" && !!getSellTo()),
-  );
+  const [detailsOpen, setDetailsOpen] = useState(false);
   const performanceRef = useRef<HTMLDivElement>(null);
   const chipRef = useRef<HTMLDivElement>(null);
 
@@ -82,20 +77,33 @@ export function PieceBody({ layout, desktopWriter }: { layout: "stack" | "column
   const main = receiveIsMain ? (
     <CustodyCard />
   ) : action ? (
-    <Button type="button" variant="brand" accent="tags" size="lg" onClick={run} className="w-full" data-testid="button-main-action" data-action={action.kind}>
+    // A piece that works needs nothing next: seeing how it does is one option among the others, not the brand button.
+    <Button type="button" variant={action.kind === "viewPerformance" ? "secondary" : "brand"} accent="tags" size="lg" onClick={run} className="w-full" data-testid="button-main-action" data-action={action.kind}>
       <ActionIcon kind={action.kind as keyof typeof ACTION_ICON} />
       {tp(`action${action.kind[0].toUpperCase()}${action.kind.slice(1)}` as "actionGoLive")}
     </Button>
   ) : null;
-  const hint = situation.hint ? <p className="text-sm text-white/55" data-testid="piece-hint">{tp(situation.hint === "waitingPrint" ? "hintWaitingPrint" : "hintAskManager")}</p> : null;
+  const printHref = situation.printHref;
+  const hint = situation.hint ? (
+    <p className="text-sm text-white/55" data-testid="piece-hint">
+      {tp(HINT_KEY[situation.hint])}
+      {printHref ? (
+        <>
+          {" "}
+          <a href={printHref} onClick={(e) => { e.preventDefault(); navigate(printHref); }} className="font-semibold text-white/80 underline underline-offset-2 hover:text-white" data-testid="link-see-print">{tp("actionSeePrint")}</a>
+        </>
+      ) : null}
+    </p>
+  ) : null;
 
   if (layout === "stack") {
     const customerOutside = !!tag.leadId || action?.kind === "configure";
     return (
       <div className="min-w-0 space-y-3" data-testid="piece-body">
-        {main}
+        {action?.kind === "viewPerformance" ? null : main}
         {hint}
         {customerOutside ? customer : null}
+        {action?.kind === "viewPerformance" ? main : null}
         <details
           open={detailsOpen}
           onToggle={(e) => setDetailsOpen(e.currentTarget.open)}
@@ -107,7 +115,6 @@ export function PieceBody({ layout, desktopWriter }: { layout: "stack" | "column
             <ChevronDown className="h-4 w-4 transition-transform group-open:rotate-180" aria-hidden="true" />
           </summary>
           <div className="min-w-0 space-y-3 p-3 pt-0">
-            <PieceStatusChips tag={tag} />
             {receiveIsMain ? null : <CustodyCard />}
             {customerOutside ? null : customer}
             {chip}
@@ -126,7 +133,6 @@ export function PieceBody({ layout, desktopWriter }: { layout: "stack" | "column
       {hint}
       <div className="grid min-w-0 grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,380px)]">
         <div className="min-w-0 space-y-4">
-          <PieceStatusChips tag={tag} />
           {receiveIsMain ? null : <CustodyCard />}
           {customer}
           {chip}

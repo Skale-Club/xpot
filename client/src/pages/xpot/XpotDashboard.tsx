@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { MapPinned, DollarSign, Target, Clock3, Activity, AlertTriangle, RotateCw, ChevronRight, Route as RouteIcon, ListTodo, Check, Plus, CalendarClock, CalendarDays } from "lucide-react";
+import { MapPinned, DollarSign, Target, Clock3, Activity, AlertTriangle, RotateCw, ChevronRight, MapPinCheck, Route as RouteIcon, ListTodo, Check, Plus, CalendarClock, CalendarDays } from "lucide-react";
 import { AreaChart, Area, XAxis, Tooltip, ResponsiveContainer } from "recharts";
 import { useXpotQueries } from "./hooks/useXpotQueries";
 import { useSyncStatus } from "./hooks/useSyncStatus";
@@ -17,6 +17,7 @@ import { EmptyState } from "@/components/xpot/EmptyState";
 import { PageHeader } from "@/components/xpot/PageHeader";
 import { DANGER_SURFACE, EYEBROW } from "@/components/xpot/surface";
 import { useSalesSummary } from "./hooks/useSalesModule";
+import { useShowProfit } from "./hooks/useShowProfit";
 import { useT } from "@/i18n";
 import { dashboardMessages } from "@/i18n/messages/dashboard";
 import { pieceScreenMessages } from "@/i18n/messages/pieceScreen";
@@ -30,7 +31,7 @@ import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { ListSkeleton } from "@/components/xpot/ListSkeleton";
 import { RetryButton } from "@/components/xpot/RetryButton";
-import { routeDisplayName, routeStatusLabel as sharedRouteStatusLabel, routeStatusTone, routeStopProgress, todayRouteOf } from "./prospectingUi";
+import { routeDisplayName, routeStatusLabel as sharedRouteStatusLabel, routeStatusTone, routeStopFocus, routeVisitProgress, todayRouteOf } from "./prospectingUi";
 import { prospectingMessages } from "@/i18n/messages/prospecting";
 import { Pill } from "@/components/xpot/StatusPill";
 
@@ -83,6 +84,8 @@ function DashboardOverview() {
   const tu = useT(visitsUiMessages);
   const metrics = dashboardQuery.data?.metrics;
   const { failedEvents, retryMutation } = useSyncStatus();
+  // A seller sells and collects: profit is the owner's number, so a seller's day shows what was sold.
+  const showProfit = useShowProfit();
   const [periodDays, setPeriodDays] = useState(7);
   const [activityMetric, setActivityMetric] = useState<ActivityMetric>("visits");
   // The Dashboard is the person's own day (its visits and tasks are theirs in
@@ -100,10 +103,28 @@ function DashboardOverview() {
     enabled: Boolean(todayRoute),
   });
   const routeStops = routeDetailQuery.data?.stops ?? [];
-  const stopProgress = routeStopProgress(routeStops);
-  const completedStops = stopProgress.done;
-  const nextStop = routeStops.find((stop) => stop.status === "en_route")
-    ?? routeStops.find((stop) => stop.status === "planned");
+  // One count with the Route screen: only finished visits, a skipped stop told apart.
+  const stopProgress = routeVisitProgress(routeStops);
+  const { now: openStop, next: nextStop } = routeStopFocus(routeStops);
+  const progressLine = stopProgress.skipped > 0
+    ? tp.plural("routeVisitedSkipped", stopProgress.skipped, { skipped: stopProgress.skipped, visited: stopProgress.visited, total: stopProgress.total })
+    : tp("routeVisitedLine", { visited: stopProgress.visited, total: stopProgress.total });
+  const checkInAtNextStop = useMutation({
+    mutationFn: async ({ routeId, stopId, draft }: { routeId: number; stopId: number; draft: boolean }) => {
+      // A draft is published by the same tap, so its visits land on today's agenda.
+      if (draft) await apiRequest("PATCH", `/api/xpot/prospecting/routes/${routeId}/status`, { status: "published" });
+      return (await apiRequest("POST", `/api/xpot/prospecting/routes/${routeId}/stops/${stopId}/prepare-check-in`, {})).json() as Promise<{ leadId: number; visitId: number }>;
+    },
+    onSuccess: async ({ leadId, visitId }) => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["/api/xpot/prospecting/routes"] }),
+        queryClient.invalidateQueries({ queryKey: ["/api/xpot/visits"] }),
+        queryClient.invalidateQueries({ queryKey: ["/api/xpot/leads"] }),
+      ]);
+      setLocation(`/route/check-in?leadId=${leadId}&visitId=${visitId}`);
+    },
+    onError: (error: Error) => toast({ title: tp("checkInUnavailable"), description: error.message, variant: "destructive" }),
+  });
   const tasksToday = dashboardQuery.data?.tasksToday ?? [];
   const completeTask = useMutation({
     mutationFn: async (taskId: number) => (await apiRequest("POST", `/api/xpot/tasks/${taskId}/complete`)).json(),
@@ -120,7 +141,7 @@ function DashboardOverview() {
   const activityOptions = [
     { value: "visits" as const, label: t("activityVisits"), swatchClassName: ACTIVITY_TONES.visits.swatch },
     { value: "revenue" as const, label: t("activityRevenue"), swatchClassName: ACTIVITY_TONES.revenue.swatch },
-    { value: "profit" as const, label: t("activityProfit"), swatchClassName: ACTIVITY_TONES.profit.swatch },
+    ...(showProfit ? [{ value: "profit" as const, label: t("activityProfit"), swatchClassName: ACTIVITY_TONES.profit.swatch }] : []),
     { value: "sales" as const, label: t("activitySales"), swatchClassName: ACTIVITY_TONES.sales.swatch },
   ];
   const activityLabel = activityOptions.find((option) => option.value === activityMetric)?.label ?? t("activityVisits");
@@ -131,7 +152,7 @@ function DashboardOverview() {
       value: activityMetric === "revenue"
         ? day.revenueCents / 100
         : activityMetric === "profit"
-          ? day.profitCents / 100
+          ? (day.profitCents ?? 0) / 100
           : day.salesCount,
     }));
   const chartDaily = activityDaily.slice(-periodDays);
@@ -261,13 +282,15 @@ function DashboardOverview() {
         >
           <div className="flex items-center justify-between">
             <div>
-              <div className={EYEBROW}>{t("salesKeptMonth")}</div>
+              <div className={EYEBROW}>{showProfit ? t("salesKeptMonth") : t("salesSoldMonth")}</div>
               <div className="mt-0.5 text-2xl font-bold tabular-nums text-emerald-300">
-                {formatCents(salesSummary.data.profit.monthToDateCents)}
+                {formatCents(showProfit ? salesSummary.data.profit?.monthToDateCents ?? 0 : salesSummary.data.revenue.monthToDateCents)}
               </div>
-              <div className="text-[11px] text-white/35">
-                {t("salesBilled", { amount: formatCents(salesSummary.data.revenue.monthToDateCents) })}
-              </div>
+              {showProfit ? (
+                <div className="text-[11px] text-white/35">
+                  {t("salesBilled", { amount: formatCents(salesSummary.data.revenue.monthToDateCents) })}
+                </div>
+              ) : null}
             </div>
             <div className="text-right">
               <div className={EYEBROW}>{t("salesOnStreet")}</div>
@@ -294,16 +317,12 @@ function DashboardOverview() {
       title={t("yourDay")}
       icon={CalendarClock}
       bodyClassName="p-0"
-      action={(
-        <Button type="button" variant="ghost" size="sm" onClick={() => setLocation(todayRoute ? `/route?routeId=${todayRoute.id}` : "/route")} className="text-blue-300">
-          {t("viewRoute")} <ChevronRight aria-hidden="true" />
-        </Button>
-      )}
     >
+      <div className="border-b border-white/[0.06] bg-gradient-to-r from-indigo-500/[0.075] via-blue-500/[0.035] to-transparent">
       <button
         type="button"
         onClick={() => setLocation(todayRoute ? `/route?routeId=${todayRoute.id}` : "/route")}
-        className="group w-full border-b border-white/[0.06] bg-gradient-to-r from-indigo-500/[0.075] via-blue-500/[0.035] to-transparent px-4 py-4 text-left transition-colors hover:from-indigo-500/[0.11] lg:px-5"
+        className="group w-full px-4 py-4 text-left transition-colors hover:bg-white/[0.02] lg:px-5"
       >
         <div className="flex items-start gap-3.5">
           <span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${todayRoute ? "bg-indigo-500/15 text-indigo-300" : "bg-white/[0.045] text-white/35"}`}>
@@ -317,11 +336,13 @@ function DashboardOverview() {
             <span className="mt-1 block truncate text-base font-bold text-white/90 first-letter:uppercase">{todayRoute ? routeDisplayName(todayRoute, t.locale) : t("routeNotCreated")}</span>
             {todayRoute && routeStops.length ? (
               <>
-                <span className="mt-1 block text-xs text-white/40">{nextStop ? t("routeNextStop", { stop: nextStop.name }) : t("routeProgress", { completed: completedStops, total: routeStops.length })}</span>
+                <span className="mt-1 block truncate text-xs text-white/55">
+                  {openStop ? tp("stopNow", { name: openStop.name }) : nextStop ? tp("stopNext", { name: nextStop.name }) : progressLine}
+                </span>
                 <span className="mt-3 block h-1.5 overflow-hidden rounded-full bg-white/[0.06]">
                   <span className="block h-full rounded-full bg-gradient-to-r from-blue-400 to-indigo-400 transition-[width]" style={{ width: `${stopProgress.percent}%` }} />
                 </span>
-                <span className="mt-1.5 block text-[10px] font-medium tabular-nums text-white/30">{t("routeProgress", { completed: completedStops, total: routeStops.length })}</span>
+                <span className="mt-1.5 block text-[11px] font-medium tabular-nums text-white/45" data-testid="dashboard-route-progress">{progressLine}</span>
               </>
             ) : (
               <span className="mt-1 block text-xs text-white/35">{todayRoute ? routeStatusLabel(todayRoute.status) : t("routeMissingHint")}</span>
@@ -330,6 +351,28 @@ function DashboardOverview() {
           <ChevronRight className="mt-3 h-4 w-4 shrink-0 text-white/20 transition group-hover:translate-x-0.5 group-hover:text-white/50" aria-hidden="true" />
         </div>
       </button>
+      {!todayRoute ? (
+        <div className="px-4 pb-4 lg:px-5">
+          <Button type="button" variant="brand" onClick={() => setLocation("/route")} className="w-full font-bold sm:w-auto" data-testid="dashboard-build-route">
+            <RouteIcon aria-hidden="true" />{tp("openBuilder")}
+          </Button>
+        </div>
+      ) : null}
+      {todayRoute && !openStop && nextStop && ["draft", "published", "in_progress"].includes(todayRoute.status) ? (
+        <div className="px-4 pb-4 lg:px-5">
+          <Button
+            type="button"
+            variant="brand"
+            onClick={() => checkInAtNextStop.mutate({ routeId: todayRoute.id, stopId: nextStop.id, draft: todayRoute.status === "draft" })}
+            loading={checkInAtNextStop.isPending}
+            className="min-h-12 w-full min-w-0 justify-center whitespace-normal text-base font-bold"
+            data-testid="dashboard-check-in"
+          >
+            <MapPinCheck aria-hidden="true" /><span className="truncate">{t("checkInAt", { name: nextStop.name })}</span>
+          </Button>
+        </div>
+      ) : null}
+      </div>
 
       <div className="flex items-center justify-between gap-3 px-4 pb-2 pt-4 lg:px-5">
         <div className="flex items-center gap-2">
@@ -387,12 +430,11 @@ function DashboardOverview() {
 
   const attentionBlock = (
     <DashboardSection title={t("needsAttention")} icon={AlertTriangle} bodyClassName="p-0">
-      {sectionPending(2, salesSummary.isLoading) ?? ((metrics?.overdueTasks ?? 0) > 0 || (salesSummary.data?.consignment.dueCount ?? 0) > 0 || (metrics?.openOpportunities ?? 0) > 0 ? (
+      {sectionPending(2, salesSummary.isLoading) ?? ((metrics?.overdueTasks ?? 0) > 0 || (salesSummary.data?.consignment.dueCount ?? 0) > 0 ? (
         <AttentionList>
           {/* Late is red, as on the sales card above and TASK_TONE.overdue; amber is only "needs a step". */}
-          {(metrics?.overdueTasks ?? 0) > 0 ? <AttentionItem icon={Clock3} eyebrow={t("taskOverdue")} title={t("overdueTasksTitle")} detail={t.plural("overdueTasksDetail", metrics?.overdueTasks ?? 0)} tone="red" onClick={() => setLocation("/tasks")} /> : null}
-          {(salesSummary.data?.consignment.dueCount ?? 0) > 0 ? <AttentionItem icon={DollarSign} eyebrow={t("salesOnStreet")} title={t("settlementsDueTitle")} detail={t.plural("settlementsDueDetail", salesSummary.data?.consignment.dueCount ?? 0)} tone={MONEY_DUE_TONE.overdue} onClick={() => setLocation(salesPath("consignments"))} /> : null}
-          {(metrics?.openOpportunities ?? 0) > 0 ? <AttentionItem icon={Target} eyebrow={t("metricOpportunities")} title={t("openOpportunitiesTitle")} detail={t.plural("openOpportunitiesDetail", metrics?.openOpportunities ?? 0)} tone="blue" onClick={() => setLocation(salesPath("pipeline"))} /> : null}
+          {(metrics?.overdueTasks ?? 0) > 0 ? <AttentionItem icon={Clock3} title={t.plural("overdueTasksTitle", metrics?.overdueTasks ?? 0)} tone="red" onClick={() => setLocation("/tasks")} /> : null}
+          {(salesSummary.data?.consignment.dueCount ?? 0) > 0 ? <AttentionItem icon={DollarSign} title={t.plural("settlementsDueTitle", salesSummary.data?.consignment.dueCount ?? 0)} tone={MONEY_DUE_TONE.overdue} onClick={() => setLocation(salesPath("consignments"))} /> : null}
         </AttentionList>
       ) : (
         <EmptyState compact dense icon={Check} title={t("attentionClear")} hint={t("attentionClearHint")} cardStyle={SECTION_EMPTY} />
@@ -485,7 +527,7 @@ function DashboardOverview() {
       <KpiTile label={t("metricVisitsToday")} value={metrics?.visitsToday ?? 0} icon={MapPinned} accent="blue" detail={t.plural("metricVisitsRemaining", metrics?.remainingVisitsToday ?? 0)} loading={dashboardQuery.isLoading} onClick={() => setLocation("/route")} />
       <KpiTile label={t("metricCompletedToday")} value={metrics?.completedVisitsToday ?? 0} icon={Check} accent="blue" detail={t.plural("metricVisitsCompleted", metrics?.completedVisitsToday ?? 0)} loading={dashboardQuery.isLoading} onClick={() => setLocation("/dashboard/history?view=day")} />
       <KpiTile label={t("metricTasksToday")} value={metrics?.tasksToday ?? 0} icon={ListTodo} accent="amber" detail={t.plural("metricTasksOverdue", metrics?.overdueTasks ?? 0)} loading={dashboardQuery.isLoading} onClick={() => setLocation("/tasks")} />
-      <KpiTile label={t("metricSalesToday")} value={salesSummary.data ? formatCents(salesSummary.data.revenue.todayCents) : "—"} icon={DollarSign} accent="emerald" detail={salesSummary.data ? t("metricSalesProfit", { amount: formatCents(salesSummary.data.profit.todayCents) }) : undefined} loading={salesSummary.isLoading} onClick={() => setLocation("/sales")} />
+      <KpiTile label={t("metricSalesToday")} value={salesSummary.data ? formatCents(salesSummary.data.revenue.todayCents) : "—"} icon={DollarSign} accent="emerald" detail={salesSummary.data && showProfit ? t("metricSalesProfit", { amount: formatCents(salesSummary.data.profit?.todayCents ?? 0) }) : undefined} loading={salesSummary.isLoading} onClick={() => setLocation("/sales")} />
     </div>
   );
 
@@ -496,6 +538,13 @@ function DashboardOverview() {
         {tpiece("moreDetails")}
       </summary>
       {kpiGrid}
+      {(metrics?.openOpportunities ?? 0) > 0 ? (
+        <button type="button" onClick={() => setLocation(salesPath("pipeline"))} className="group flex min-h-11 w-full items-center gap-2 rounded-xl px-1 text-left text-sm font-semibold text-white/65 transition-colors hover:text-white/90" data-testid="dashboard-open-deals">
+          <Target className="h-4 w-4 shrink-0 text-blue-300" aria-hidden="true" />
+          <span className="min-w-0 flex-1 truncate">{t.plural("openDealsLink", metrics?.openOpportunities ?? 0)}</span>
+          <ChevronRight className="h-4 w-4 shrink-0 text-white/25 transition group-hover:text-white/50" aria-hidden="true" />
+        </button>
+      ) : null}
       {isDesktop ? (
         <>
           <div className="grid grid-cols-[minmax(0,1fr)_360px] items-start gap-6">

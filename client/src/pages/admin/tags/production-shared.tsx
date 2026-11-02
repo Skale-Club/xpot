@@ -1,15 +1,21 @@
-import { useQuery } from "@tanstack/react-query";
+import { useState } from "react";
+import { useMutation, useQuery } from "@tanstack/react-query";
+import { Download, FileUp } from "lucide-react";
 import { isSuperAdmin } from "@shared/modules";
 import { productionOrganizations } from "@shared/organizations";
-import type { PrintBed, PrintJobItem, PrintJobStatus, PrintModelItem, PrintModelStatus, PrintRequestItem } from "@shared/printProduction";
+import type { PrintBed, PrintJobDetail, PrintJobFileItem, PrintJobItem, PrintJobStatus, PrintModelItem, PrintModelStatus, PrintRequestItem } from "@shared/printProduction";
+import type { ProvisionerDeviceItem } from "@shared/tagsApi";
 import type { XpotMeResponse } from "@/pages/xpot/types";
+import { Button } from "@/components/ui/button";
+import { useToast } from "@/hooks/use-toast";
 import { Pill, toneOf, type PillTone } from "@/components/xpot/StatusPill";
 import { translate, useT, type Translate } from "@/i18n";
 import { commonMessages } from "@/i18n/messages/common";
 import { productionMessages } from "@/i18n/messages/production";
 import { productionBoardMessages } from "@/i18n/messages/productionBoard";
 import { serverErrorText } from "@/lib/apiErrors";
-import { AdminHttpError, ADMIN_TAGS_KEY, STALE_MS, getJson, withQuery } from "./api";
+import { AdminHttpError, ADMIN_TAGS_KEY, STALE_MS, errorMessage, getJson, invalidateAdminTags, sendJson, withQuery } from "./api";
+import { printComputers, type BuildState } from "./production-workflow";
 
 // Tags › Production (docs/PRINT_EXECUTION_PLAN.md): the queries, pills and the upload shared by the catalog, the
 // model page, the queue of requests and the plate page. Every query key starts with ADMIN_TAGS_KEY, so
@@ -51,6 +57,124 @@ export function usePrintRequests(filter: JobFilter, model?: string, organization
     // The bench builds the files while the request is on screen.
     refetchInterval: 20_000,
   });
+}
+
+/** The paired computers that make print files, and whether each is on (heard from in the last few minutes). */
+/** The sentence for a plate being built (see buildState): who is on it and whether there is anything to do, the same on the board, the list and the page. */
+export function useBuildSentence() {
+  const t = useT(productionMessages);
+  return (job: Pick<PrintJobItem, "deviceName">, state: BuildState): string => {
+    const device = job.deviceName ?? t("buildDeviceGeneric");
+    return t(`build_${state}` as never, { device: state === "computerOff" ? device : device.charAt(0).toUpperCase() + device.slice(1) });
+  };
+}
+
+export function usePrintComputers() {
+  const { data: devices } = useQuery<ProvisionerDeviceItem[]>({
+    queryKey: [ADMIN_TAGS_KEY, "provisioners"],
+    queryFn: () => getJson("/api/xpot/admin/tag-provisioners"),
+    staleTime: STALE_MS,
+    refetchInterval: 60_000,
+  });
+  return { loaded: devices !== undefined, computers: printComputers(devices ?? [], Date.now()) };
+}
+
+/**
+ * A print file, taken with a check first: the endpoint answers a redirect to the file or a JSON error (storage off,
+ * file gone, session over). The error becomes a message on the screen instead of a tab full of JSON.
+ */
+export function useFileDownload() {
+  const t = useT(productionMessages);
+  const { toast } = useToast();
+  const [busy, setBusy] = useState<string | null>(null);
+  const download = async (id: string): Promise<boolean> => {
+    setBusy(id);
+    const href = `/api/xpot/admin/print-files/${id}`;
+    try {
+      const res = await fetch(href, { credentials: "include", redirect: "manual" });
+      if (res.type !== "opaqueredirect" && !res.ok) throw new Error(String(res.status));
+      const link = document.createElement("a");
+      link.href = href;
+      link.download = "";
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      return true;
+    } catch {
+      toast({ title: t("downloadFailed"), description: t("downloadFailedHint"), variant: "destructive" });
+      return false;
+    } finally {
+      setBusy(null);
+    }
+  };
+  return { download, busy };
+}
+
+/** "Download file": the main action of a job that is ready, a quiet one once it is on the printer. */
+export function DownloadFileButton({ id, label, quiet = false, onDownloaded }: { id: string; label: string; quiet?: boolean; onDownloaded?: () => void }) {
+  const { download, busy } = useFileDownload();
+  return (
+    <Button
+      type="button"
+      variant={quiet ? "ghost" : "brand"}
+      accent="tags"
+      size="sm"
+      loading={busy === id}
+      onClick={() => void download(id).then((ok) => { if (ok) onDownloaded?.(); })}
+      data-testid="production-plate-download"
+    >
+      <Download />
+      {label}
+    </Button>
+  );
+}
+
+/** The moves of a print job that are one click: say it is on the printer, send a file by hand. */
+export function usePlateMoves() {
+  const t = useT(productionMessages);
+  const { toast } = useToast();
+  const move = useMutation({
+    mutationFn: ({ id, action }: { id: string; action: "start" }) => sendJson<PrintJobDetail>("POST", `/api/xpot/admin/print-jobs/${id}/transition`, { action }),
+    onSuccess: async (updated) => {
+      await invalidateAdminTags();
+      toast({ title: t("orderNow", { status: t(`jobStatus_${updated.status}` as never) }) });
+    },
+    onError: (err) => toast({ title: t("couldNotUpdateOrder"), description: errorMessage(err), variant: "destructive" }),
+  });
+  const upload = useMutation({
+    mutationFn: ({ id, file }: { id: string; file: File }) => uploadFile<PrintJobFileItem>(`/api/xpot/admin/print-jobs/${id}/files`, file),
+    onSuccess: async () => {
+      await invalidateAdminTags();
+      toast({ title: t("fileUploaded") });
+    },
+    onError: (err) => toast({ title: t("couldNotUpload"), description: errorMessage(err), variant: "destructive" }),
+  });
+  return { start: (id: string) => move.mutate({ id, action: "start" }), starting: move.isPending ? move.variables?.id ?? null : null, upload: upload.mutate, uploading: upload.isPending ? upload.variables?.id ?? null : null };
+}
+
+/** The file picker behind "Upload file": one hidden input, opened by the button. */
+export function UploadFileButton({ loading, onFile, quiet = false }: { loading: boolean; onFile: (file: File) => void; quiet?: boolean }) {
+  const t = useT(productionMessages);
+  const [input, setInput] = useState<HTMLInputElement | null>(null);
+  return (
+    <>
+      <Button type="button" variant={quiet ? "secondary" : "brand"} accent="tags" size="sm" loading={loading} onClick={() => input?.click()} data-testid="production-upload">
+        <FileUp />
+        {t("uploadFile")}
+      </Button>
+      <input
+        ref={setInput}
+        type="file"
+        accept=".3mf,.csv,.json,.png"
+        className="hidden"
+        onChange={(event) => {
+          const file = event.target.files?.[0];
+          event.target.value = "";
+          if (file) onFile(file);
+        }}
+      />
+    </>
+  );
 }
 
 /** The newest file of each kind a plate offers: the Bambu Studio project and the checked slice. */

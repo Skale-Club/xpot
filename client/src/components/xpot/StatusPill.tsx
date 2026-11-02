@@ -251,6 +251,8 @@ export const HEALTH_TONE: Record<string, PillTone> = {
   running: "blue",
   starting: "blue",
   slow: "amber",
+  // Nobody set it up: nothing broke, so it is not an alarm colour.
+  off: "slate",
   stuck: "amber",
   failed: "red",
   stalled: "red",

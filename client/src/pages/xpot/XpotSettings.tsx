@@ -10,15 +10,15 @@ import {
   EyeOff,
   KeyRound,
   Languages,
+  LogOut,
   Save,
-  Shield,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { AppLoader } from "@/components/ui/spinner";
+import { SessionGate } from "@/components/xpot/SessionGate";
 import { Field, FIELD_CONTROL, Input } from "@/components/xpot/Field";
 import { FormFooter } from "@/components/xpot/FormFooter";
 import { PageHeader } from "@/components/xpot/PageHeader";
-import { CopyButton } from "@/components/xpot/CopyButton";
 import { Pill } from "@/components/xpot/StatusPill";
 import { useAvatarUpload } from "@/components/xpot/useAvatarUpload";
 import { ACCENT_SELECTED, BRAND_GRADIENT, EYEBROW, GLASS_CLASS, SURFACE_MODAL_CLASS } from "@/components/xpot/surface";
@@ -33,9 +33,8 @@ import { useIsDesktop } from "@/hooks/use-is-desktop";
 import { commonMessages } from "@/i18n/messages/common";
 import { settingsMessages } from "@/i18n/messages/settings";
 import { navIaMessages } from "@/i18n/messages/navIa";
-import { workspacesMessages } from "@/i18n/messages/workspaces";
-import { usePanelNames } from "@/components/xpot/panelNames";
-import { tagsMessages } from "@/i18n/messages/tags";
+import { shellMessages } from "@/i18n/messages/shell";
+import { SignOutConfirm } from "@/components/xpot/AccountMenu";
 import { addPersonMessages } from "@/i18n/messages/addPerson";
 import { runsATeam } from "@shared/organizations";
 import type { XpotMeResponse } from "./types";
@@ -64,22 +63,21 @@ const COUNTRIES = [
   { code: "CN", dial: "+86", name: "China" },
 ];
 
-// Settings is the person's own: Profile (photo, names, contact phone, the Tags
-// wholesale code), My organization (where they work and their role there; the
-// owner adds people here, so someone selling alone needs no panel for it), Sign-in (the sign-in phone, read-only; the password only for
-// an email login) and Language. Administration follows only for someone who
-// can manage: the management-mode switch, and with the mode on, their access
-// (role, modules, organizations) and the admin pages.
+// Settings is the person's own: Profile (photo, names, contact phone; the Tags
+// wholesale code is in My pieces), My company (where they work and their role there; someone
+// selling alone adds the first colleague here), Sign-in (the sign-in phone as
+// text; the password only for an email login) and Language. The panel is not
+// here: "My company" in the area switch is its door. Sign out is the last row
+// of the phone's list, and the avatar menu's on desktop.
 //
 // On a phone it is a list like the phone's own settings (the person's card,
 // Install app, then one row per section showing where it stands), each row
 // opening its own screen. On desktop it is one page, top to bottom.
-const SETTINGS_SECTIONS = ["profile", "organization", "signin", "language", "administration"] as const;
+const SETTINGS_SECTIONS = ["profile", "organization", "signin", "language"] as const;
 type SettingsSection = (typeof SETTINGS_SECTIONS)[number];
 
-/** `?tab=` from older links: "memberships" now lives under Administration. */
+/** `?tab=` of a link; one that names no section (the old "administration", "memberships") opens the list. */
 function sectionFromParam(value: string | null): SettingsSection | null {
-  if (value === "memberships") return "administration";
   return SETTINGS_SECTIONS.find((id) => id === value) ?? null;
 }
 
@@ -123,11 +121,12 @@ function CountryPhoneInput({
   const t = useT(settingsMessages);
   const parsed = parsePhone(value);
   const active = COUNTRIES.find((c) => c.dial === parsed.dial) ?? COUNTRIES[1];
-  const [local, setLocal] = useState(parsed.local);
+  // Shown masked even when saved bare ("6175550106" reads (617) 555-0106), as the sign-in phone below it does.
+  const [local, setLocal] = useState(maskLocal(parsed.dial, parsed.local));
 
   useEffect(() => {
     const { dial, local: l } = parsePhone(value);
-    setLocal(l);
+    setLocal(maskLocal(dial, l));
     const found = COUNTRIES.find((c) => c.dial === dial) ?? COUNTRIES[1];
     if (found.code !== active.code) {
       // country changed externally
@@ -215,11 +214,10 @@ export function XpotSettings() {
   const t = useT(settingsMessages);
   const tc = useT(commonMessages);
   const tn = useT(navIaMessages);
-  const tw = useT(workspacesMessages);
-  const tt = useT(tagsMessages);
+  const ts = useT(shellMessages);
   const tp = useT(addPersonMessages);
   const access = useViewerAccess();
-  const { panelName } = usePanelNames();
+  const [signingOut, setSigningOut] = useState(false);
   const avatar = useAvatarUpload();
   const [initialized, setInitialized] = useState(false);
   const isDesktop = useIsDesktop();
@@ -242,6 +240,12 @@ export function XpotSettings() {
   }, [linkedSection, meQuery.isLoading, isDesktop]);
 
   const [displayName, setDisplayName] = useState("");
+  // The name shown to the team is the first and last name, unless it was written differently (it then stays as written).
+  const followName = (first: string, last: string) => {
+    const joined = [first, last].map((part) => part.trim()).filter(Boolean).join(" ");
+    const derived = [firstName, lastName].map((part) => part.trim()).filter(Boolean).join(" ");
+    if (joined && (!displayName.trim() || displayName === derived)) setDisplayName(joined);
+  };
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
   const [phone, setPhone] = useState("");
@@ -323,6 +327,8 @@ export function XpotSettings() {
   };
 
   if (meQuery.isLoading) return <AppLoader />;
+  // A failed /api/xpot/me must not mount the layout below: its children ask for /me again, which restarts the loader above, forever.
+  if (!me) return <SessionGate error={meQuery.error} />;
 
   const profileDirty = !!me && (
     displayName !== me.rep.displayName ||
@@ -351,15 +357,15 @@ export function XpotSettings() {
   // The password is only for the legacy email sign-in: an account without an email has none.
   const hasEmailLogin = Boolean(me?.user.email);
   const signInPhone = me?.user.phone ? formatPhone(me.user.phone) : null;
-  // Administration: someone who can manage sees the management-mode switch; the
-  // admin pages and their access details only with the mode on.
-  const canManage = !!access.reach;
-  // My organization: the one the person works in (a team before their own one-person workspace), and their role in it.
+  // My company: the one the person works in (a team before their own one-person workspace), and their role in it.
   const myOrganizations = (me?.organizations ?? [])
     .map((organization) => ({ organization, membership: me?.organizationMemberships?.find((item) => item.organizationId === organization.id && item.isActive && !item.blockedAt) }))
     .filter((item) => item.membership);
   const mine = myOrganizations.find((item) => !item.organization.personal) ?? myOrganizations[0];
   const isOwner = mine?.membership?.role === "admin";
+  // Someone in several teams (an owner of two organizations) sees every one with their role in it, not just the first.
+  const teams = myOrganizations.filter((item) => !item.organization.personal);
+  const several = teams.length > 1;
   // One section's content. On a phone it is the inner screen, whose header
   // already carries the title (`titled` false); on desktop the stacked page.
   const renderSection = (id: SettingsSection, titled: boolean) => {
@@ -390,7 +396,7 @@ export function XpotSettings() {
               <input {...avatar.inputProps} />
               <div className="min-w-0 flex-1">
                 <p className="text-sm font-semibold text-white">{tn("photo")}</p>
-                <p className="text-xs text-white/45">{tn("photoHint")}</p>
+                <p className="text-xs text-white/45">{tn(modules.includes("visits") ? "photoHint" : "photoHintTeam")}</p>
                 <Button type="button" variant="secondary" size="sm" className="mt-2" onClick={avatar.pick} loading={avatar.pending}>
                   <Camera />
                   {avatar.label}
@@ -398,30 +404,30 @@ export function XpotSettings() {
               </div>
             </div>
             <div className="grid gap-4 sm:grid-cols-2">
+              {/* One name, not three: the name shown to the team follows the first and last name until it is set by hand below. */}
               <Field label={t("firstName")}>
-                <Input value={firstName} onChange={(e) => setFirstName(e.target.value)} placeholder={t("firstNamePlaceholder")} />
+                <Input value={firstName} onChange={(e) => { setFirstName(e.target.value); followName(e.target.value, lastName); }} placeholder={t("firstNamePlaceholder")} />
               </Field>
               <Field label={t("lastName")}>
-                <Input value={lastName} onChange={(e) => setLastName(e.target.value)} placeholder={t("lastNamePlaceholder")} />
-              </Field>
-              <Field label={t("displayName")}>
-                <Input value={displayName} onChange={(e) => setDisplayName(e.target.value)} placeholder={t("displayNamePlaceholder")} />
+                <Input value={lastName} onChange={(e) => { setLastName(e.target.value); followName(firstName, e.target.value); }} placeholder={t("lastNamePlaceholder")} />
               </Field>
               <div className="sm:col-span-2">
                 <Field label={tn("contactPhone")}>
                   <CountryPhoneInput value={phone} onChange={setPhone} />
                 </Field>
               </div>
-            </div>
-            {me?.rep.wholesaleCode && (
-              <div>
-                <p className={EYEBROW}>{tt("wholesaleCode")}</p>
-                <div className="mt-1.5 flex items-center gap-2">
-                  <span className="font-mono text-base font-bold tracking-[0.12em] text-white" data-testid="settings-wholesale-code">{me.rep.wholesaleCode}</span>
-                  <CopyButton value={me.rep.wholesaleCode} iconOnly />
+              <details className="group sm:col-span-2" data-testid="settings-more-name">
+                <summary className="flex min-h-10 cursor-pointer list-none items-center gap-1.5 text-sm font-medium text-white/55 hover:text-white [&::-webkit-details-marker]:hidden">
+                  {tn("moreProfile")}
+                  <ChevronDown className="h-4 w-4 transition-transform group-open:rotate-180" aria-hidden="true" />
+                </summary>
+                <div className="pt-2">
+                  <Field label={t("displayName")}>
+                    <Input value={displayName} onChange={(e) => setDisplayName(e.target.value)} placeholder={t("displayNamePlaceholder")} />
+                  </Field>
                 </div>
-              </div>
-            )}
+              </details>
+            </div>
             <FormFooter dirty={profileDirty} onCancel={profileDirty ? resetProfile : undefined}>
               <Button variant="brand" onClick={handleSaveProfile} disabled={!profileDirty || !displayName.trim()} loading={isSaving}>
                 <Save />
@@ -435,17 +441,23 @@ export function XpotSettings() {
         if (!mine) return null;
         return (
           <Section key={id} id={id} title={tp("sectionTitle")} titled={titled}>
-            <div className="flex flex-wrap items-center gap-3" data-testid="settings-organization">
-              <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white/[0.06] text-white/70"><Building2 className="h-5 w-5" aria-hidden="true" /></span>
-              <div className="min-w-0 flex-1">
-                <p className="truncate text-sm font-semibold text-white" data-testid="settings-organization-name">{mine.organization.name}</p>
-                <p className="text-xs text-white/45">{tp("yourRole")}</p>
+            {(several ? teams : [mine]).map(({ organization, membership }) => (
+              <div key={organization.id} className="flex flex-wrap items-center gap-3" data-testid="settings-organization">
+                <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white/[0.06] text-white/70"><Building2 className="h-5 w-5" aria-hidden="true" /></span>
+                <div className="min-w-[9rem] flex-1">
+                  <p className="truncate text-sm font-semibold text-white" data-testid="settings-organization-name">{organization.name}</p>
+                  <p className="text-xs text-white/45">{tp("yourRole")}</p>
+                </div>
+                <Pill tone="slate" data-testid="settings-organization-role">{tp(membership?.role === "admin" ? "roleOwner" : "roleEmployee")}</Pill>
+                {several && membership?.role === "admin" ? (
+                  <Button asChild variant="secondary" size="sm"><Link href={`/organizations/${organization.id}?tab=team`} data-testid="settings-open-team">{tp("openTeam")}</Link></Button>
+                ) : null}
               </div>
-              <Pill tone="slate" data-testid="settings-organization-role">{tp(isOwner ? "roleOwner" : "roleEmployee")}</Pill>
-            </div>
-            <p className="text-sm leading-relaxed text-white/50">{tp(isOwner ? (mine.organization.personal ? "soloHint" : "ownerHint") : "employeeHint")}</p>
-            {isOwner && <AddPersonForm organizationId={mine.organization.id} hint={false} />}
-            {isOwner && runsATeam(me?.organizations) && (
+            ))}
+            {!several && <p className="text-sm leading-relaxed text-white/50">{tp(isOwner ? (mine.organization.personal ? "soloHint" : "ownerHint") : "employeeHint")}</p>}
+            {/* Someone selling alone adds the first colleague here; a team is managed in Team. */}
+            {!several && isOwner && !runsATeam(me?.organizations) && <AddPersonForm organizationId={mine.organization.id} hint={false} />}
+            {!several && isOwner && runsATeam(me?.organizations) && (
               <Button asChild variant="secondary"><Link href={`/organizations/${mine.organization.id}?tab=team`} data-testid="settings-open-team"><Building2 className="h-4 w-4" />{tp("openTeam")}</Link></Button>
             )}
           </Section>
@@ -455,9 +467,13 @@ export function XpotSettings() {
         return (
           <div key={id} className="space-y-8">
             <Section id={id} title={tn("tabSignIn")} titled={titled}>
-              <Field label={tn("signInPhone")} hint={tn("signInPhoneHint")}>
-                <Input value={signInPhone ?? tn("signInPhoneNone")} readOnly disabled data-testid="settings-sign-in-phone" />
-              </Field>
+              <div>
+                <p className={EYEBROW}>{tn("signInPhone")}</p>
+                <p className="mt-1.5 text-base font-semibold text-white" data-testid="settings-sign-in-phone">{signInPhone ?? tn("signInPhoneNone")}</p>
+                <p className="mt-1 text-xs text-white/45">
+                  {access.profile === "platform" ? <Link href="/admin/reps" className="underline underline-offset-2">{tn("signInPhoneAdminHint")}</Link> : tn("signInPhoneHint")}
+                </p>
+              </div>
               {hasEmailLogin && (
                 <Field label={tn("signInEmail")}>
                   <Input value={me?.user.email ?? ""} readOnly disabled />
@@ -519,13 +535,6 @@ export function XpotSettings() {
             <LanguageList />
           </Section>
         );
-
-      case "administration":
-        if (!canManage) return null;
-        return <Section key={id} id={id} title={panelName(access.profile)} titled={titled}>
-          <p className="text-sm leading-relaxed text-white/50">{tw(access.profile === "platform" ? "platformHint" : access.profile === "partner" ? "productionHint" : "teamHint")}</p>
-          <Button asChild variant="secondary"><Link href="/admin" data-testid="settings-open-panel"><Shield className="h-4 w-4" />{tw("openPanel")}</Link></Button>
-        </Section>;
     }
   };
 
@@ -534,7 +543,6 @@ export function XpotSettings() {
     organization: tp("sectionTitle"),
     signin: tn("tabSignIn"),
     language: tc("language"),
-    administration: panelName(access.profile),
   };
 
   // Desktop: the whole page, top to bottom.
@@ -566,10 +574,9 @@ export function XpotSettings() {
 
   // Phone: the list, like a phone's own settings. Each row says where it stands.
   const rows: Array<{ id: SettingsSection; icon: typeof Languages; value?: string }> = [
-    ...(mine ? [{ id: "organization" as const, icon: Building2, value: mine.organization.name }] : []),
+    ...(mine ? [{ id: "organization" as const, icon: Building2, value: several ? tp.plural("companiesCount", teams.length) : mine.organization.name }] : []),
     { id: "signin", icon: KeyRound, value: signInPhone ?? undefined },
     { id: "language", icon: Languages, value: LANG_LABELS[lang] },
-    ...(canManage ? [{ id: "administration" as const, icon: Shield, value: tw("openPanel") }] : []),
   ];
 
   return (
@@ -621,6 +628,17 @@ export function XpotSettings() {
             </button>
           ))}
         </nav>
+
+        <button
+          type="button"
+          onClick={() => setSigningOut(true)}
+          className={`flex min-h-14 w-full items-center gap-3 rounded-2xl ${GLASS_CLASS} px-4 py-3 text-left text-[15px] font-medium text-red-300 transition-colors active:bg-red-500/10`}
+          data-testid="settings-sign-out"
+        >
+          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-red-500/10"><LogOut className="h-4 w-4" /></span>
+          {ts("signOut")}
+        </button>
+        <SignOutConfirm open={signingOut} onOpenChange={setSigningOut} />
       </div>
     </AppLayout>
   );

@@ -43,7 +43,7 @@ const en = {
   // Access (Settings › Administration, management mode on)
   role: "Role",
   role_rep: "Rep",
-  role_admin: "Platform",
+  role_admin: "Platform team",
 
   saveFailed: "Failed to save",
 
@@ -87,7 +87,7 @@ export const settingsMessages: Dictionary<typeof en> = {
     showPassword: "Mostrar senha",
     hidePassword: "Ocultar senha",
 
-    role: "Papel",
+    role: "Função",
     role_rep: "Vendedor",
     role_admin: "Plataforma",
 

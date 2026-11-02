@@ -1,6 +1,7 @@
 // Distribution (Hand out, Stuscle orders, Take back): the view names in the URL, the code list a station
 // builds, and the message key for every reason a code is refused. Pure, unit-tested (tests/admin-tags-distribution.test.ts).
 
+import type { OrderRefusal } from "@shared/tagAcquisition";
 import type { HandOutBlocker, ReceiveBlocker, SellBlocker, TakeBackBlocker } from "@shared/tagDistribution";
 import type { adminTagsFlowMessages } from "@/i18n/messages/adminTagsFlow";
 
@@ -61,10 +62,16 @@ export const SELL_BLOCKER_KEYS = {
   wholesale_code: "sellNoWholesaleCode",
 } as const satisfies Record<SellBlocker, FlowKey>;
 
+/** Separating a wholesale order adds two refusals to Hand out's: a piece of a product the order does not have, or one too many of it. */
+export const ORDER_REASON_KEYS = {
+  not_in_order: "reasonNotInOrder",
+  order_full: "reasonOrderFull",
+} as const satisfies Record<OrderRefusal, FlowKey>;
+
 /** The message key for a refused code; null for an accepted one or a reason this screen does not know. */
 export function reasonKey(kind: "handOut" | "takeBack", reason: string | null): FlowKey | null {
   if (!reason) return null;
-  const map: Record<string, FlowKey> = kind === "handOut" ? HAND_OUT_REASON_KEYS : TAKE_BACK_REASON_KEYS;
+  const map: Record<string, FlowKey> = kind === "handOut" ? { ...HAND_OUT_REASON_KEYS, ...ORDER_REASON_KEYS } : TAKE_BACK_REASON_KEYS;
   return map[reason] ?? "reasonUnknown";
 }
 

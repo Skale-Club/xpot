@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { Button } from "@/components/ui/button";
+import { useViewerAccess } from "@/lib/adminMode";
 import { useLocation } from "wouter";
 import { useQuery } from "@tanstack/react-query";
-import { Building2, ChevronRight, Nfc, Package, ScanLine, Shapes, SlidersHorizontal } from "lucide-react";
+import { Building2, ChevronRight, Nfc, Package, Pause, ScanLine, Shapes, SlidersHorizontal } from "lucide-react";
 import { matchesPieceFilters, parsePieceFilters, type PieceSaleFilter, type PieceStatusFilter } from "@shared/tagApp";
 import { useIsDesktop } from "@/hooks/use-is-desktop";
 import { MasterDetail } from "@/components/xpot/MasterDetail";
@@ -18,17 +20,18 @@ import { useT } from "@/i18n";
 import { commonMessages } from "@/i18n/messages/common";
 import { tagsMessages } from "@/i18n/messages/tags";
 import { manageTagsMessages } from "@/i18n/messages/manageTags";
-import { APP_BASE, errorText, shortUrl, tagPath, tagsGet } from "./lib";
+import { APP_BASE, errorText, MY_PIECES_LIMIT, myPiecesQuery, shortUrl, tagPath } from "./lib";
 import { countMorePieceFilters, morePiecesOpen } from "./piecesFilters";
+import { useFirstPieceLine } from "./FirstSteps";
 import { CARD, ChipMark, PieceStatusPills, ScanCounts, TopBar } from "./ui";
-import { WholesaleCard } from "./WholesaleCard";
 
 // Two separate axes: where the piece is in its life, and whether a sale was recorded.
-const STATUS_CHIPS: ReadonlyArray<{ id: PieceStatusFilter; key: "filterAll" | "filterSetup" | "filterActive" | "filterOff" }> = [
+// Paused is the rare one: it waits behind "More filters" so the four that matter fit a phone's row.
+const STATUS_CHIPS: ReadonlyArray<{ id: PieceStatusFilter; key: "filterAll" | "filterFinish" | "filterSetup" | "filterActive" }> = [
   { id: "all", key: "filterAll" },
+  { id: "finish", key: "filterFinish" },
   { id: "setup", key: "filterSetup" },
   { id: "active", key: "filterActive" },
-  { id: "off", key: "filterOff" },
 ];
 const SALE_CHIPS: ReadonlyArray<{ id: PieceSaleFilter; key: "filterAll" | "filterSold" | "filterUnsold" }> = [
   { id: "all", key: "filterAll" },
@@ -39,9 +42,6 @@ const SALE_CHIPS: ReadonlyArray<{ id: PieceSaleFilter; key: "filterAll" | "filte
 type ScanFilter = "all" | "with" | "without";
 
 const CHIP_ROW_LABEL = "w-14 shrink-0 text-[10px] font-semibold uppercase tracking-widest text-white/35 lg:w-auto";
-
-/** The list endpoint's ceiling: everything a reseller holds fits under it. */
-const LIST_LIMIT = 2000;
 
 /** The reseller's own pieces: kit stock, live and switched off. */
 export default function PiecesScreen({ selectedCode = null }: { selectedCode?: string | null }) {
@@ -69,15 +69,8 @@ export default function PiecesScreen({ selectedCode = null }: { selectedCode?: s
   const leadFilter = Number.isInteger(leadId) && leadId > 0 ? { id: leadId, name: filters.values.name } : null;
 
   const { data, isLoading, error, refetch } = useQuery({
-    // Every status at once (filtered here): "Not set up" spans two of them.
-    queryKey: ["tags", "list", null, leadFilter?.id ?? null],
-    queryFn: () => {
-      // "My pieces": the viewer's own, even for an admin who can reach every piece.
-      const params = new URLSearchParams({ mine: "1", limit: String(LIST_LIMIT) });
-      if (leadFilter) params.set("leadId", String(leadFilter.id));
-      return tagsGet<TagListItem[]>(`/api/xpot/tags?${params}`);
-    },
-    staleTime: 15_000,
+    // Every status at once, filtered here; the viewer's own, even for an admin who can reach every piece.
+    ...myPiecesQuery(leadFilter?.id ?? null),
     // Keep the table while a new filter loads, so the open piece stays put.
     placeholderData: (previous) => previous,
   });
@@ -126,8 +119,17 @@ export default function PiecesScreen({ selectedCode = null }: { selectedCode?: s
 
   const listLoading = <ListSkeleton rows={6} rowClassName="h-[88px] rounded-2xl" />;
   const listError = <ErrorState message={errorText(error, tc("requestFailed"))} onRetry={() => void refetch()} />;
+  // Whoever manages is not told to ask a manager: the company's pieces are in Stock.
+  const { reach } = useViewerAccess();
+  const firstPieceLine = useFirstPieceLine();
+  const nothingYet = (data ?? []).length === 0 && !hasListFilters;
   const listEmpty = (
-    <EmptyState tone="tags" icon={Package} title={(data ?? []).length === 0 && !hasListFilters ? t("piecesEmpty") : t("piecesNoMatch")} />
+    <EmptyState
+      tone="tags"
+      icon={Package}
+      title={nothingYet ? (reach ? t("piecesEmptyManager") : firstPieceLine) : t("piecesNoMatch")}
+      action={nothingYet && reach ? <Button type="button" variant="secondary" onClick={() => navigate("/admin/tags/pieces")} data-testid="button-open-stock">{t("openStock")}</Button> : undefined}
+    />
   );
 
   return (
@@ -136,105 +138,115 @@ export default function PiecesScreen({ selectedCode = null }: { selectedCode?: s
         <TopBar title={t("piecesTitle")} eyebrow={data ? t.plural("pieces", data.length) : undefined} />
       </div>
 
-      <FilterBar
-        testId="pieces-filters"
-        search={<FilterSearch value={search} onChange={(q) => filters.set({ q })} placeholder={t("searchPieces")} testId="input-pieces-search" />}
-        controls={
-          <FilterToggle
-            pressed={moreOpen}
-            onChange={setMoreOpened}
-            icon={SlidersHorizontal}
-            label={moreActive ? tg("moreFiltersCount", { count: moreActive }) : tg("moreFilters")}
-            testId="pieces-more"
-          />
-        }
-        secondary={
-          <div className="flex flex-col gap-2.5">
-            <div className="flex flex-col gap-2.5 lg:flex-row lg:items-center">
-              {leadFilter ? (
-                <FilterToken
-                  label={t("piecesOf", { name: leadFilter.name || `#${leadFilter.id}` })}
-                  onRemove={() => filters.set({ lead: null, name: null })}
-                  testId="lead-filter"
-                />
+      {/* A list with nothing in it has nothing to search or filter: the empty state says what to do. */}
+      {!nothingYet && (
+        <FilterBar
+          testId="pieces-filters"
+          search={<FilterSearch value={search} onChange={(q) => filters.set({ q })} placeholder={t("searchPieces")} testId="input-pieces-search" />}
+          controls={
+            <FilterToggle
+              pressed={moreOpen}
+              onChange={setMoreOpened}
+              icon={SlidersHorizontal}
+              label={moreActive ? tg("moreFiltersCount", { count: moreActive }) : tg("moreFilters")}
+              testId="pieces-more"
+            />
+          }
+          secondary={
+            <div className="flex flex-col gap-2.5">
+              <div className="flex flex-col gap-2.5 lg:flex-row lg:items-center">
+                {leadFilter ? (
+                  <FilterToken
+                    label={t("piecesOf", { name: leadFilter.name || `#${leadFilter.id}` })}
+                    onRemove={() => filters.set({ lead: null, name: null })}
+                    testId="lead-filter"
+                  />
+                ) : null}
+                <div className="flex min-w-0 flex-1 flex-col gap-2 lg:flex-row lg:items-center lg:gap-4">
+                  <div className="flex min-w-0 items-center gap-2">
+                    <span className={`${CHIP_ROW_LABEL} hidden lg:block`} aria-hidden="true">{t("filterStatusGroup")}</span>
+                    <div className="min-w-0 flex-1">
+                      <FilterChips
+                        items={STATUS_CHIPS.map((f) => ({ id: f.id, label: t(f.key), testId: `filter-${f.id}` }))}
+                        value={pieceFilters.status}
+                        onChange={(status) => filters.set({ status })}
+                        ariaLabel={t("filterStatusGroup")}
+                        accent="tags"
+                      />
+                    </div>
+                  </div>
+                </div>
+              </div>
+              {moreOpen ? (
+                <div className="flex flex-col gap-2.5 lg:flex-row lg:flex-wrap lg:items-center" data-testid="pieces-more-filters">
+                  <FilterToggle
+                    pressed={pieceFilters.status === "off"}
+                    onChange={(on) => filters.set({ status: on ? "off" : "all" })}
+                    icon={Pause}
+                    label={t("filterOff")}
+                    testId="filter-paused"
+                  />
+                  <div className="flex min-w-0 items-center gap-2">
+                    <span className={CHIP_ROW_LABEL} aria-hidden="true">{t("filterSaleGroup")}</span>
+                    <div className="min-w-0 flex-1">
+                      <FilterChips
+                        items={SALE_CHIPS.map((f) => ({ id: f.id, label: t(f.key), testId: `filter-sale-${f.id}` }))}
+                        value={pieceFilters.sale}
+                        onChange={(sale) => filters.set({ sale })}
+                        ariaLabel={t("filterSaleGroup")}
+                        accent="tags"
+                      />
+                    </div>
+                  </div>
+                  <FilterSelect
+                    value={companyFilter}
+                    onChange={(company) => filters.set({ company })}
+                    placeholder={t("filterAllCompanies")}
+                    icon={Building2}
+                    options={companyOptions}
+                    testId="filter-company"
+                  />
+                  <FilterSelect
+                    value={faceFilter}
+                    onChange={(face) => filters.set({ face })}
+                    placeholder={t("filterAllChannels")}
+                    icon={Shapes}
+                    options={faceOptions}
+                    testId="filter-face"
+                  />
+                  <FilterSelect
+                    value={scanFilter === "all" ? "" : scanFilter}
+                    onChange={(scan) => filters.set({ scan })}
+                    placeholder={t("filterAnyActivity")}
+                    icon={ScanLine}
+                    options={[
+                      { value: "with", label: t("filterWithScans") },
+                      { value: "without", label: t("filterWithoutScans") },
+                    ]}
+                    testId="filter-scan-activity"
+                  />
+                  <FilterSelect
+                    value={pieceFilters.chip === "missing" ? "missing" : ""}
+                    onChange={(chip) => filters.set({ chip })}
+                    placeholder={t("filterAnyChip")}
+                    icon={Nfc}
+                    options={[{ value: "missing", label: t("filterChipMissing") }]}
+                    testId="filter-chip"
+                  />
+                </div>
               ) : null}
-              <div className="flex min-w-0 flex-1 flex-col gap-2 lg:flex-row lg:items-center lg:gap-4">
-                <div className="flex min-w-0 items-center gap-2">
-                  <span className={CHIP_ROW_LABEL} aria-hidden="true">{t("filterStatusGroup")}</span>
-                  <div className="min-w-0 flex-1">
-                    <FilterChips
-                      items={STATUS_CHIPS.map((f) => ({ id: f.id, label: t(f.key), testId: `filter-${f.id}` }))}
-                      value={pieceFilters.status}
-                      onChange={(status) => filters.set({ status })}
-                      ariaLabel={t("filterStatusGroup")}
-                      accent="tags"
-                    />
-                  </div>
-                </div>
-              </div>
             </div>
-            {moreOpen ? (
-              <div className="flex flex-col gap-2.5 lg:flex-row lg:flex-wrap lg:items-center" data-testid="pieces-more-filters">
-                <div className="flex min-w-0 items-center gap-2">
-                  <span className={CHIP_ROW_LABEL} aria-hidden="true">{t("filterSaleGroup")}</span>
-                  <div className="min-w-0 flex-1">
-                    <FilterChips
-                      items={SALE_CHIPS.map((f) => ({ id: f.id, label: t(f.key), testId: `filter-sale-${f.id}` }))}
-                      value={pieceFilters.sale}
-                      onChange={(sale) => filters.set({ sale })}
-                      ariaLabel={t("filterSaleGroup")}
-                      accent="tags"
-                    />
-                  </div>
-                </div>
-                <FilterSelect
-                  value={companyFilter}
-                  onChange={(company) => filters.set({ company })}
-                  placeholder={t("filterAllCompanies")}
-                  icon={Building2}
-                  options={companyOptions}
-                  testId="filter-company"
-                />
-                <FilterSelect
-                  value={faceFilter}
-                  onChange={(face) => filters.set({ face })}
-                  placeholder={t("filterAllChannels")}
-                  icon={Shapes}
-                  options={faceOptions}
-                  testId="filter-face"
-                />
-                <FilterSelect
-                  value={scanFilter === "all" ? "" : scanFilter}
-                  onChange={(scan) => filters.set({ scan })}
-                  placeholder={t("filterAnyActivity")}
-                  icon={ScanLine}
-                  options={[
-                    { value: "with", label: t("filterWithScans") },
-                    { value: "without", label: t("filterWithoutScans") },
-                  ]}
-                  testId="filter-scan-activity"
-                />
-                <FilterSelect
-                  value={pieceFilters.chip === "missing" ? "missing" : ""}
-                  onChange={(chip) => filters.set({ chip })}
-                  placeholder={t("filterAnyChip")}
-                  icon={Nfc}
-                  options={[{ value: "missing", label: t("filterChipMissing") }]}
-                  testId="filter-chip"
-                />
-              </div>
-            ) : null}
-          </div>
-        }
-        summary={{
-          shown: items.length,
-          total: data?.length,
-          active: hasListFilters,
-          onClear: () => filters.reset(),
-        }}
-      />
+          }
+          summary={{
+            shown: items.length,
+            total: data?.length,
+            active: hasListFilters,
+            onClear: () => filters.reset(),
+          }}
+        />
+      )}
 
-      {(data?.length ?? 0) >= LIST_LIMIT ? <p className="mt-2 px-1 text-xs text-white/40">{t("piecesListCapped", { limit: LIST_LIMIT })}</p> : null}
+      {(data?.length ?? 0) >= MY_PIECES_LIMIT ? <p className="mt-2 px-1 text-xs text-white/40">{t("piecesListCapped", { limit: MY_PIECES_LIMIT })}</p> : null}
 
       <div className="mt-4">
         {isDesktop ? (
@@ -267,6 +279,7 @@ export default function PiecesScreen({ selectedCode = null }: { selectedCode?: s
                   onClick={() => openPiece(tag.publicCode)}
                   className="flex min-h-[88px] w-full items-center gap-3 px-4 py-3 text-left active:bg-white/10"
                 >
+                  {/* Three floors: the customer on a row of its own, then the code and badges, then the state. */}
                   <span className="min-w-0 flex-1">
                     <TagPieceMention
                       publicCode={tag.publicCode}
@@ -274,22 +287,15 @@ export default function PiecesScreen({ selectedCode = null }: { selectedCode?: s
                       face={tag.face}
                       batchCode={tag.batchCode}
                       customer={tag.leadName}
+                      details={tag.label}
                       className="w-full"
                     />
-                    {(tag.label || tag.destinationUrl) && (
-                      <span className="mt-1 block truncate pl-12 text-xs text-white/35">
-                        {[tag.label, tag.destinationUrl && shortUrl(tag.destinationUrl)].filter(Boolean).join(" · ")}
-                      </span>
-                    )}
-                  </span>
-                  {/* At most half the row: with Live, Sold and "Chip not written" on one line the customer's name was cut to one letter on a phone; the pills wrap instead. */}
-                  <span className="flex max-w-[50%] shrink-0 flex-col items-end gap-1">
-                    <span className="flex flex-wrap justify-end gap-1">
+                    <span className="mt-2 flex flex-wrap items-center gap-1 pl-12">
                       <PieceStatusPills tag={tag} />
                       <ChipMark tag={tag} />
+                      {/* All-time scans, live or not: a switched-off piece keeps what it had. The same counts as the desktop table. */}
+                      {tag.qrInteractions + tag.nfcInteractions > 0 && <ScanCounts qr={tag.qrInteractions} nfc={tag.nfcInteractions} align="left" />}
                     </span>
-                    {/* All-time scans, live or not: a switched-off piece keeps what it had. The same counts as the desktop table. */}
-                    {tag.qrInteractions + tag.nfcInteractions > 0 && <ScanCounts qr={tag.qrInteractions} nfc={tag.nfcInteractions} />}
                   </span>
                   <ChevronRight className="h-4 w-4 shrink-0 text-white/25" />
                 </button>
@@ -301,9 +307,6 @@ export default function PiecesScreen({ selectedCode = null }: { selectedCode?: s
         )}
       </div>
 
-      <div className="mt-6">
-        <WholesaleCard />
-      </div>
     </>
   );
 }
@@ -365,7 +368,7 @@ function PiecesTable({ items, selectedCode, onSelect, onCustomer }: {
                       <span className="truncate group-hover:underline">{tag.leadName}</span>
                     </button>
                   ) : (
-                    <span className="text-white/35">{t("noCustomer")}</span>
+                    <span className="text-white/35" aria-label={t("noCustomer")}>—</span>
                   )}
                   {tag.label && <div className="mt-0.5 truncate text-xs text-white/35">{tag.label}</div>}
                 </td>

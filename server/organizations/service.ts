@@ -1,5 +1,5 @@
 import { randomBytes } from "crypto";
-import { and, asc, desc, eq, inArray, sql, isNull } from "drizzle-orm";
+import { and, asc, desc, eq, getTableColumns, inArray, sql, isNull } from "drizzle-orm";
 import { db } from "../db.js";
 import {
   organizationAuditLog,
@@ -12,6 +12,7 @@ import {
   tags,
   users,
 } from "#shared/schema.js";
+import { countsTowardTeam } from "#shared/teamActivity.js";
 import {
   COMPANY_ORGANIZATION_SLUG,
   canManageOrganization,
@@ -163,6 +164,32 @@ export async function managedOrganizationIds(actor: OrganizationActor): Promise<
   return memberships
     .filter((membership) => membership.role === "admin" && membership.isActive && !membership.blockedAt)
     .map((membership) => membership.organizationId);
+}
+
+/**
+ * The field team of these organizations: rep id → the first of the organizations they are active in. Only living
+ * accounts that use Visits (countsTowardTeam). Team results and the visits history of a Rep Admin both start from it,
+ * so the numbers and the list behind them are one set.
+ */
+export async function teamMembers(organizationIds: readonly number[]): Promise<Map<number, number>> {
+  if (!organizationIds.length) return new Map();
+  const rows = await db
+    .select({
+      repId: organizationMemberships.repId,
+      organizationId: organizationMemberships.organizationId,
+      modules: salesReps.modules,
+      role: salesReps.role,
+      isActive: salesReps.isActive,
+      blockedAt: salesReps.blockedAt,
+      deletedAt: salesReps.deletedAt,
+    })
+    .from(organizationMemberships)
+    .innerJoin(salesReps, eq(salesReps.id, organizationMemberships.repId))
+    .where(and(inArray(organizationMemberships.organizationId, [...organizationIds]), eq(organizationMemberships.isActive, true), isNull(organizationMemberships.blockedAt)))
+    .orderBy(asc(organizationMemberships.organizationId));
+  const members = new Map<number, number>();
+  for (const row of rows) if (countsTowardTeam(row) && !members.has(row.repId)) members.set(row.repId, row.organizationId);
+  return members;
 }
 
 export async function canManageOrganizationForActor(actor: OrganizationActor, organizationId: number): Promise<boolean> {
@@ -360,6 +387,8 @@ export async function listOrganizationMembers(organizationId: number, actor: Org
       isActive: organizationMemberships.isActive,
       blockedAt: organizationMemberships.blockedAt,
       blockedReason: organizationMemberships.blockedReason,
+      /** The person's own block (People): the team says "Blocked" and sends to People, not to Reactivate. */
+      personBlockedAt: salesReps.blockedAt,
       modules: salesReps.modules,
       createdAt: organizationMemberships.createdAt,
     })
@@ -402,7 +431,7 @@ async function assertNotLastAdmin(organizationId: number, repId: number) {
     sql`${organizationMemberships.blockedAt} IS NULL`,
   ));
   if (admins.length === 1 && admins[0].repId === repId) {
-    throw new OrganizationError("Make someone else org admin before removing or suspending the last one.", 409, "organization_last_admin");
+    throw new OrganizationError("Make someone else an owner before removing or suspending the last one.", 409, "organization_last_admin");
   }
 }
 
@@ -473,16 +502,16 @@ export async function getOrganizationWorkspace(organizationId: number, actor: Or
 export async function listOrganizationInventory(organizationId: number, actor: OrganizationActor) {
   const { memberships } = await assertOrganizationAccess(actor, organizationId);
   const organizationWide = canManageOrganization(actor, memberships, organizationId);
-  return db.select().from(tags).where(organizationWide
-    ? eq(tags.organizationId, organizationId)
-    : and(eq(tags.organizationId, organizationId), eq(tags.repId, actor.rep.id)))
-    .orderBy(desc(tags.updatedAt)).limit(500);
+  // The pieces as every Tags list gives them (with their sale and print), so each one reads as it does everywhere else.
+  const { listTags } = await import("../tags/repository.js");
+  return listTags({ organizationId, repId: organizationWide ? undefined : actor.rep.id, limit: 500 });
 }
 
 export async function listOrganizationKits(organizationId: number, actor: OrganizationActor) {
   const { memberships } = await assertOrganizationAccess(actor, organizationId);
   const organizationWide = canManageOrganization(actor, memberships, organizationId);
-  return db.select().from(tagKits).where(organizationWide
+  // pieceCount: what the kit held when it went out (the rows stay when a piece comes back), so a list can say how many.
+  return db.select({ ...getTableColumns(tagKits), pieceCount: sql<number>`(SELECT count(*)::int FROM tag_kit_items i WHERE i.kit_id = ${tagKits.id})` }).from(tagKits).where(organizationWide
     ? eq(tagKits.organizationId, organizationId)
     : and(eq(tagKits.organizationId, organizationId), eq(tagKits.repId, actor.rep.id)))
     .orderBy(desc(tagKits.createdAt)).limit(200);

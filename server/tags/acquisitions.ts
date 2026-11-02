@@ -16,6 +16,8 @@ import {
 } from "#shared/schema.js";
 import { allocateAcquisitionUnitCosts, type StuscleWholesaleOrderInput } from "#shared/tagSales.js";
 import { normalizeTagCode } from "#shared/tags.js";
+import { matchOrderPieces, type AcquisitionCheck, type OrderMatch } from "#shared/tagAcquisition.js";
+import { checkHandOut } from "./repository.js";
 import { TagSaleError } from "./sales.js";
 
 type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
@@ -117,7 +119,8 @@ async function lockFulfillmentTags(tx: Tx, rawCodes: string[]) {
     .from(tags)
     .leftJoin(tagBatches, eq(tags.batchId, tagBatches.id))
     .where(inArray(tags.publicCode, normalized))
-    .for("update");
+    // Only the pieces are locked: Postgres refuses FOR UPDATE on the nullable side of the batch join.
+    .for("update", { of: tags });
   if (rows.length !== normalized.length) throw new TagSaleError("One or more pieces were not found", 404, "tag_not_found");
   // Orders are fulfilled from the company's stock: another organization's house pieces are not ours to hand over.
   const companyId = await companyOrganizationId();
@@ -136,10 +139,15 @@ export async function fulfillAcquisition(acquisitionId: string, codes: string[],
     const quantity = lines.reduce((sum, line) => sum + line.quantity, 0);
     if (codes.length !== quantity) throw new TagSaleError(`This acquisition needs exactly ${quantity} pieces`, 400, "acquisition_quantity_mismatch", { count: quantity });
     const picked = await lockFulfillmentTags(tx, codes);
+    // Every piece must fit a line before the kit exists: tag_kits.kit_number is a sequence, and a kit inserted and then
+    // rolled back would still use up its number (K-0012 missing from the packing lists).
+    const match = matchOrderPieces(lines, picked.map((tag) => ({ code: tag.publicCode, productId: tag.ownProductId ?? tag.batchProductId })));
+    if (!match.complete) throw new TagSaleError("The selected pieces do not match this order's products", 409, "acquisition_product_mismatch");
     const organizationId = await organizationIdForRep(acquisition.repId);
 
     const [kit] = await tx.insert(tagKits).values({
       organizationId,
+      sourceOrganizationId: await companyOrganizationId(),
       repId: acquisition.repId,
       note: acquisition.source === "stuscle" ? `Stuscle order ${acquisition.externalRef}` : "Manual acquisition",
       createdByUserId: userId,
@@ -149,12 +157,8 @@ export async function fulfillAcquisition(acquisitionId: string, codes: string[],
       kitId: kit.id, tagId: tag.id, publicCode: tag.publicCode, batchId: tag.batchId, handedOutAt: kit.createdAt,
     }))).onConflictDoNothing();
 
-    const remaining = new Map(picked.map((tag) => [tag.id, tag]));
     for (const line of lines) {
-      const matches = Array.from(remaining.values()).filter((tag) => (tag.ownProductId ?? tag.batchProductId) === line.salesProductId).slice(0, line.quantity);
-      if (matches.length !== line.quantity) {
-        throw new TagSaleError(`The selected pieces do not match acquisition line ${line.externalSku ?? line.id}`, 409, "acquisition_product_mismatch");
-      }
+      const matches = picked.filter((tag) => match.lineOf.get(tag.publicCode) === line.id);
       const costs = allocateAcquisitionUnitCosts(line.subtotalCents, line.quantity);
       await tx.insert(tagAcquisitionUnits).values(matches.map((tag, index) => ({
         acquisitionLineId: line.id,
@@ -184,9 +188,7 @@ export async function fulfillAcquisition(acquisitionId: string, codes: string[],
         referenceId: acquisition.id,
         actorUserId: userId,
       })));
-      matches.forEach((tag) => remaining.delete(tag.id));
     }
-    if (remaining.size) throw new TagSaleError("Some selected pieces do not match any acquisition line", 409, "acquisition_product_mismatch");
     await tx.update(tagAcquisitions).set({ status: "fulfilled", kitId: kit.id, fulfilledFromOrganizationId: await companyOrganizationId(), updatedAt: new Date() }).where(eq(tagAcquisitions.id, acquisition.id));
   });
   return acquisitionView(acquisitionId);
@@ -212,9 +214,56 @@ export async function listAcquisitions(filter: { repId?: number; organizationIds
     .from(salesReps)
     .where(inArray(salesReps.id, Array.from(new Set(acquisitions.map((item) => item.repId)))));
   const repNames = new Map(reps.map((rep) => [rep.id, rep.displayName]));
+  // The product's own name ("Large Plate"), so the screen never shows the store's SKU.
+  const productIds = Array.from(new Set(lines.map((line) => line.salesProductId).filter((id): id is number => id !== null)));
+  const products = productIds.length ? await db.select({ id: salesProducts.id, name: salesProducts.name }).from(salesProducts).where(inArray(salesProducts.id, productIds)) : [];
+  const productNames = new Map(products.map((product) => [product.id, product.name]));
   return acquisitions.map((acquisition) => ({
     acquisition,
     repName: repNames.get(acquisition.repId) ?? null,
-    lines: lines.filter((line) => line.acquisitionId === acquisition.id).map((line) => ({ ...line, fulfilledUnits: countByLine.get(line.id) ?? 0 })),
+    lines: lines.filter((line) => line.acquisitionId === acquisition.id).map((line) => ({
+      ...line,
+      fulfilledUnits: countByLine.get(line.id) ?? 0,
+      productName: line.salesProductId !== null ? productNames.get(line.salesProductId) ?? null : null,
+    })),
   }));
+}
+
+/**
+ * Dry run of separating an order: each code is checked as Hand out checks it (company stock, unsold, unset), and a
+ * piece of a product the order does not have, or beyond the quantity it asks, is refused by name. Nothing moves; the
+ * same rule (matchOrderPieces) decides in fulfillAcquisition.
+ */
+export async function checkAcquisition(acquisitionId: string, codes: string[]): Promise<AcquisitionCheck> {
+  const view = await acquisitionView(acquisitionId);
+  if (!view) throw new TagSaleError("Acquisition not found", 404, "acquisition_not_found");
+  const base = await checkHandOut({ codes }, [await companyOrganizationId()], true);
+  const productOf = new Map<string, number | null>();
+  const readable = base.items.filter((item) => item.ok).map((item) => item.code);
+  if (readable.length) {
+    const rows = await db
+      .select({ code: tags.publicCode, own: tags.salesProductId, batch: tagBatches.salesProductId })
+      .from(tags)
+      .leftJoin(tagBatches, eq(tags.batchId, tagBatches.id))
+      .where(inArray(tags.publicCode, readable));
+    for (const row of rows) productOf.set(row.code, row.own ?? row.batch);
+  }
+  const match: OrderMatch = matchOrderPieces(view.lines, readable.map((code) => ({ code, productId: productOf.get(code) ?? null })));
+  const items = base.items.map((item) => {
+    const refusal = match.refused.get(item.code);
+    return refusal ? { ...item, ok: false, reason: refusal } : item;
+  });
+  const productIds = Array.from(new Set(view.lines.map((line) => line.salesProductId).filter((id): id is number => id !== null)));
+  const products = productIds.length ? await db.select({ id: salesProducts.id, name: salesProducts.name }).from(salesProducts).where(inArray(salesProducts.id, productIds)) : [];
+  const names = new Map(products.map((product) => [product.id, product.name]));
+  return {
+    items,
+    okCount: items.filter((item) => item.ok).length,
+    lines: view.lines.map((line) => ({
+      lineId: line.id,
+      productName: line.salesProductId !== null ? names.get(line.salesProductId) ?? null : null,
+      quantity: line.quantity,
+      filled: match.filled.get(line.id) ?? 0,
+    })),
+  };
 }

@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useMutation } from "@tanstack/react-query";
-import { Building2, Layers, PackagePlus, ScanLine, ShoppingBag, Type } from "lucide-react";
+import { Building2, ChevronRight, Layers, PackagePlus, ScanLine, ShoppingBag } from "lucide-react";
 import type { TagKitItem } from "@shared/tagsApi";
 import type { DistributionCheck } from "@shared/tagDistribution";
 import { receiveBlockers } from "@shared/tagDistribution";
@@ -61,7 +61,7 @@ export function parseCodes(text: string): { codes: string[]; invalid: string[] }
   return { codes, invalid };
 }
 
-type PieceMode = "scan" | "type" | "batch";
+type PieceMode = "scan" | "batch";
 /** A mode's icon over its name on a phone (the three share a narrow row and "Next from a batch" wraps), beside it from sm. */
 const MODE_LABEL = "inline-flex flex-col items-center gap-1 sm:flex-row sm:gap-1.5";
 
@@ -83,20 +83,16 @@ function Step({ n, title, done, disabled, children, testId }: { n: number; title
   );
 }
 
-/** What the chosen reseller's cost rule means, and whether they can receive pieces now. */
+/** What stops the chosen person from receiving pieces now; nothing at all in the normal case. */
 function ResellerCard({ rep }: { rep: Reseller }) {
   const t = useT(adminTagsFlowMessages);
   const ts = useT(shellMessages);
   const blockers = receiveBlockers(rep);
   const configured = !!rep.costPolicyConfiguredAt;
+  if (configured && blockers.length === 0) return null;
   return (
     <div className="mt-3 space-y-2" data-testid="handout-reseller-card">
-      <div className="flex flex-wrap items-center gap-2 text-sm">
-        <Pill tone="violet">{rep.costPolicy === "zero" ? t("policyZero") : t("policyAcquisition")}</Pill>
-        {!configured ? <Pill tone="amber">{t("policyNotSet")}</Pill> : null}
-        {blockers.length === 0 ? <Pill tone="slate">{t("canReceive")}</Pill> : null}
-      </div>
-      <p className="text-xs text-white/50">{rep.costPolicy === "zero" ? t("policyZeroHint") : t("policyAcquisitionHint")}</p>
+      {!configured ? <Pill tone="amber">{t("policyNotSet")}</Pill> : null}
       {blockers.map((b) => (
         <InlineAlert key={b} tone={b === "tags_off" ? "warning" : "error"}>
           {t(RECEIVE_BLOCKER_KEYS[b], { name: rep.displayName, screen: ts("orgPeople") })}
@@ -125,10 +121,10 @@ export function HandOutFlow() {
   const [ownershipChoice, setOwnershipChoice] = useState<KitOwnership | null>(null);
   const [unitCost, setUnitCost] = useState("");
   const [note, setNote] = useState("");
+  const priceRef = useRef<HTMLInputElement>(null);
   const [mode, setMode] = useState<PieceMode>(url.values.batch ? "batch" : "scan");
   const [camera, setCamera] = useState(false);
   const [codes, setCodes] = useState<string[]>([]);
-  const [typed, setTyped] = useState("");
   const [batchId, setBatchId] = useState(url.values.batch);
   const [quantity, setQuantity] = useState("10");
   const [entryError, setEntryError] = useState<string | null>(null);
@@ -140,12 +136,16 @@ export function HandOutFlow() {
   useEffect(() => setOwnershipChoice(null), [repId]);
   const ownership: KitOwnership = ownershipChoice ?? kitOwnership(policy);
   const costRequired = kitCostRequired(policy, ownership);
-  const cost = parseKitUnitCost(unitCost, costRequired);
+  // A price typed for a purchase is not kept when the choice goes back to "they pay when they sell".
+  const cost = parseKitUnitCost(costRequired ? unitCost : "", costRequired);
   const blockers = rep ? receiveBlockers(rep).filter((b) => b !== "tags_off") : [];
+  const repName = rep?.displayName ?? "";
 
   const check = useCodeCheck("handOut", codes);
   const okCodes = useMemo(() => codes.filter((code) => check.data?.items.find((i) => i.code === code)?.ok), [codes, check.data]);
   const checked = !check.isFetching && !!check.data && codes.every((code) => check.data!.items.some((i) => i.code === code));
+  // The price is only asked for once there is something to hand out; then it is the one thing missing.
+  const needPrice = !!rep && blockers.length === 0 && okCodes.length > 0 && !cost.ok && cost.reason === "required";
 
   const batchOptions = batches.filter((b) => b.handOutCount > 0 || b.id === batchId);
   const chosenBatch = batches.find((b) => b.id === batchId) ?? null;
@@ -206,12 +206,11 @@ export function HandOutFlow() {
 
   const left = codes.length - okCodes.length;
   const ready = !!rep && blockers.length === 0 && cost.ok && okCodes.length > 0 && checked && !give.isPending;
-  const repName = rep?.displayName ?? "";
 
   return (
     <div className="space-y-3" data-testid="admin-tags-hand-out">
       <Step n={1} title={t("stepReseller")} done={!!rep} testId="handout-step-reseller">
-        <Field label={tm("colReseller")}>
+        <Field label={<span className="sr-only">{tm("colReseller")}</span>}>
           <ResellerSelect value={repId} onChange={setRepId} />
         </Field>
         {rep ? <ResellerCard rep={rep} /> : null}
@@ -220,26 +219,30 @@ export function HandOutFlow() {
       <Step n={2} title={t("stepOwnership")} done={!!rep && cost.ok} disabled={!rep} testId="handout-step-ownership">
         <div className="grid gap-2 sm:grid-cols-2" role="radiogroup" aria-label={t("stepOwnership")}>
           {(["company", "rep"] as const).map((value) => (
-            <label
+            <div
               key={value}
-              className={`cursor-pointer rounded-xl border p-3 transition-colors ${ownership === value ? "border-violet-400/40 bg-violet-500/[0.1]" : "border-white/10 hover:bg-white/[0.03]"}`}
+              className={`rounded-xl border p-3 transition-colors ${ownership === value ? "border-violet-400/40 bg-violet-500/[0.1]" : "border-white/10 hover:bg-white/[0.03]"}`}
             >
+            <label className="block cursor-pointer">
               <span className="flex items-center gap-2 text-sm font-semibold text-white">
                 <input type="radio" name="ownership" value={value} checked={ownership === value} onChange={() => setOwnershipChoice(value)} className="h-4 w-4 accent-violet-500" />
                 {value === "company" ? <Building2 className="h-4 w-4 text-white/50" /> : <ShoppingBag className="h-4 w-4 text-white/50" />}
                 {value === "company" ? t("ownershipCompany") : t("ownershipRep")}
-                {value === kitOwnership(policy) ? <span className="text-xs font-normal text-white/40">{t("ownershipDefault")}</span> : null}
+                {value === kitOwnership(policy) ? <span className="text-xs font-normal text-white/40">{t("ownershipDefault", { name: repName })}</span> : null}
               </span>
-              <span className="mt-1 block text-xs text-white/45">{value === "company" ? t("ownershipCompanyHint") : t("ownershipRepHint")}</span>
+              <span className="mt-1 block text-xs text-white/45">
+                {value === "company" ? (kitCostRequired(policy, "company") ? t("ownershipCompanyNeedsPrice", { name: repName }) : t("ownershipCompanyHint")) : t("ownershipRepHint", { name: repName })}
+              </span>
             </label>
-          ))}
-        </div>
-        <div className="mt-3 grid gap-3 sm:grid-cols-2">
+            {/* The price belongs to the option it is for: it opens inside the one chosen. */}
+            {ownership === value && costRequired ? (
           <Field
-            label={`${tb(costRequired ? "fieldUnitCost" : "fieldUnitCostOptional")} (${KIT_COST_CURRENCY})`}
-            hint={!cost.ok && cost.reason === "invalid" ? <span className="text-red-300">{tb("unitCostInvalid")}</span> : t(costRequired ? "costRequiredHint" : "costOptionalHint")}
+            className="mt-3"
+            label={`${t("pricePerPiece", { name: repName })} (${KIT_COST_CURRENCY})`}
+            error={!cost.ok && cost.reason === "invalid" ? tb("unitCostInvalid") : needPrice ? t("costMissing") : undefined}
           >
             <Input
+              ref={priceRef}
               type="number"
               min="0"
               step="0.01"
@@ -247,14 +250,14 @@ export function HandOutFlow() {
               value={unitCost}
               onChange={(e) => setUnitCost(e.target.value)}
               placeholder="0.00"
-              required={costRequired}
+              required
               className="tabular-nums"
               data-testid="input-kit-unit-cost"
             />
           </Field>
-          <Field label={tb("fieldNoteOptional")} hint={tb("noteHint")}>
-            <Input value={note} onChange={(e) => setNote(e.target.value)} maxLength={500} placeholder={tb("notePlaceholder")} />
-          </Field>
+            ) : null}
+            </div>
+          ))}
         </div>
       </Step>
 
@@ -262,7 +265,6 @@ export function HandOutFlow() {
         <Segmented<PieceMode>
           items={[
             { id: "scan", label: <span className={MODE_LABEL}><ScanLine className="h-3.5 w-3.5" />{t("modeScan")}</span> },
-            { id: "type", label: <span className={MODE_LABEL}><Type className="h-3.5 w-3.5" />{t("modeType")}</span> },
             { id: "batch", label: <span className={MODE_LABEL}><Layers className="h-3.5 w-3.5" />{t("modeBatch")}</span> },
           ]}
           value={mode}
@@ -284,34 +286,6 @@ export function HandOutFlow() {
               <CameraButton on={camera} onToggle={() => setCamera((v) => !v)} />
             </div>
             {camera ? <ContinuousCamera onRead={(text) => addReads([text], true)} onClose={() => setCamera(false)} /> : null}
-          </div>
-        ) : mode === "type" ? (
-          <div className="space-y-2">
-            <Textarea
-              value={typed}
-              onChange={(e) => setTyped(e.target.value)}
-              rows={4}
-              placeholder={"A7K3P9X2\nB8M4Q1Z3, C9N5R2Y4"}
-              aria-label={tb("fieldCodes")}
-              className="font-mono"
-              autoCapitalize="characters"
-              autoCorrect="off"
-              spellCheck={false}
-            />
-            <div className="flex justify-end">
-              <Button
-                type="button"
-                variant="secondary"
-                disabled={!typed.trim()}
-                onClick={() => {
-                  const parsed = parseCodes(typed);
-                  addReads([...parsed.codes, ...parsed.invalid]);
-                  setTyped("");
-                }}
-              >
-                {t("addToList")}
-              </Button>
-            </div>
           </div>
         ) : (
           <div className="grid gap-3 sm:grid-cols-[1fr_140px]">
@@ -365,13 +339,21 @@ export function HandOutFlow() {
               {left > 0 ? <span className={MODULE_ACCENT.tags.text}>{` · ${t.plural("confirmLeftOut", left)}`}</span> : null}
             </p>
           </div>
-          <Button type="button" variant="brand" accent="tags" disabled={!ready} loading={give.isPending} onClick={() => give.mutate()} data-testid="admin-tags-give-kit-submit">
+          {/* Without the price the button says what is missing and takes the person to it. */}
+          <Button type="button" variant="brand" accent="tags" disabled={!ready && !needPrice} loading={give.isPending}
+            onClick={() => (needPrice ? priceRef.current?.focus() : give.mutate())} data-testid="admin-tags-give-kit-submit">
             <PackagePlus className="h-4 w-4" />
-            {okCodes.length ? t.plural("confirmButton", okCodes.length, { name: repName }) : t("confirmButtonNone")}
+            {needPrice ? t("costMissing") : okCodes.length ? t.plural("confirmButton", okCodes.length, { name: repName }) : t("confirmButtonNone")}
           </Button>
         </div>
         {blockers.length > 0 ? <p className="mt-2 text-xs text-red-300">{t("cannotReceive", { name: repName })}</p> : null}
-        {!cost.ok && cost.reason === "required" ? <p className="mt-2 text-xs text-amber-300">{t("costMissing")}</p> : null}
+        <details className="group mt-3">
+          <summary className="flex min-h-11 cursor-pointer list-none items-center gap-1.5 text-xs font-semibold text-white/60 [&::-webkit-details-marker]:hidden">
+            <ChevronRight className="h-3.5 w-3.5 transition-transform group-open:rotate-90" aria-hidden="true" />
+            {tb("fieldNoteOptional")}
+          </summary>
+          <Input value={note} onChange={(e) => setNote(e.target.value)} maxLength={500} placeholder={tb("notePlaceholder")} aria-label={tb("fieldNoteOptional")} className="mt-1 sm:max-w-md" />
+        </details>
       </Step>
 
       <PackingListDialog kit={packing} onOpenChange={(open) => { if (!open) setPacking(null); }} />

@@ -11,6 +11,7 @@ import { adminTagsFlowMessages } from "@/i18n/messages/adminTagsFlow";
 import { AdminHttpError, deleteJson, errorMessage, formatTime, invalidateAdminTags, sendJson } from "./api";
 import { intakeKey, readCode, readErrorStatus, STATION_READS, type ReadStatus } from "./batches-model";
 import { CameraButton, CodeEntry, ContinuousCamera, feedback } from "./scan-station";
+import { useIsDesktop } from "@/hooks/use-is-desktop";
 
 interface ScanResult {
   tag: { id: string; publicCode: string };
@@ -70,6 +71,7 @@ export interface ReceiveBatch {
  */
 export function BatchReceiveStation({ batch, onRequestClose }: { batch: ReceiveBatch; onRequestClose?: () => void }) {
   const t = useT(adminTagsFlowMessages);
+  const isDesktop = useIsDesktop();
   const tb = useT(manageTagsBatchesMessages);
   const { toast } = useToast();
   const [reads, setReads] = useState<Read[]>([]);
@@ -179,14 +181,16 @@ export function BatchReceiveStation({ batch, onRequestClose }: { batch: ReceiveB
               <ScanLine className={`h-4 w-4 ${MODULE_ACCENT.tags.text}`} />
               {t("receiveTitle", { code: batch.batchCode })}
             </p>
-            <p className="mt-1 text-xs text-white/45">{issued ? tb("receiveIntro") : tb("addPiecesIntro")}</p>
+            <p className="mt-1 hidden text-xs text-white/45 sm:block">{issued ? tb("receiveIntro") : tb("addPiecesIntro")}</p>
           </div>
           <span className="flex items-center gap-2">
             <span className="rounded-full bg-violet-400/10 px-3 py-1 text-sm font-semibold tabular-nums text-violet-200" data-testid="intake-progress">
               {issued ? tb("receivedCount", { received: counts.received, total: counts.total }) : tb("registeredCount", { count: counts.total })}
             </span>
-            <Button type="button" variant="ghost" size="icon" onClick={() => setFull((v) => !v)} aria-label={full ? t("exitFullScreen") : t("fullScreen")} aria-pressed={full}>
+            <Button type="button" variant="ghost" size="sm" onClick={() => setFull((v) => !v)} aria-pressed={full}>
               {full ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
+              <span className="hidden sm:inline">{full ? t("exitFullScreen") : t("fullScreen")}</span>
+              <span className="sr-only sm:hidden">{full ? t("exitFullScreen") : t("fullScreen")}</span>
             </Button>
           </span>
         </div>
@@ -195,7 +199,8 @@ export function BatchReceiveStation({ batch, onRequestClose }: { batch: ReceiveB
           <div className="min-w-0 flex-1 basis-64">
             <CodeEntry onReads={enqueue} placeholder={tb("scanPlaceholder")} testId="admin-tags-batch-scan-input" />
           </div>
-          <CameraButton on={camera} onToggle={() => setCamera((v) => !v)} />
+          {/* On a phone the camera is the way to read: first, full width, in colour. */}
+          <CameraButton on={camera} onToggle={() => setCamera((v) => !v)} primary={!isDesktop} className="order-first w-full sm:order-none sm:w-auto" />
         </div>
         {camera ? <ContinuousCamera onRead={(text) => enqueue([text])} onClose={() => setCamera(false)} /> : null}
 
@@ -228,6 +233,7 @@ export function BatchReceiveStation({ batch, onRequestClose }: { batch: ReceiveB
 
       {/* Close batch stays at hand, with what is still missing. */}
       {/* Above the phone's tab bar (components/xpot/MobileTabBar.tsx) unless full screen covers it. */}
+      {!onRequestClose && counts.total === 0 ? <p className="mx-auto mt-3 w-full max-w-3xl text-xs text-white/50">{t("scanFirstPiece")}</p> : null}
       {onRequestClose ? <div className="sticky bottom-[max(env(safe-area-inset-bottom),8px)] z-10 mx-auto mt-3 w-full max-w-3xl">
         <div className={`flex flex-wrap items-center justify-between gap-2 rounded-2xl ${GLASS_SUBTLE_CLASS} bg-background/95 px-3 py-2 backdrop-blur`}>
           <p className="text-xs text-white/60">{issued && pending ? <span className="text-amber-300">{t.plural("stillToReceive", pending)}</span> : t("closeWhenDone")}</p>

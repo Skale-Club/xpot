@@ -8,6 +8,7 @@ import { Field, Input, Select } from "@/components/xpot/Field";
 import { useToast } from "@/hooks/use-toast";
 import { useT } from "@/i18n";
 import { commonMessages } from "@/i18n/messages/common";
+import { productionMessages } from "@/i18n/messages/production";
 import { partnerMaterialsMessages } from "@/i18n/messages/partnerMaterials";
 import { errorMessage, invalidateAdminTags, sendJson } from "./api";
 
@@ -16,9 +17,18 @@ import { errorMessage, invalidateAdminTags, sendJson } from "./api";
 // Generate steps and the Print dialog show it whenever the model has any).
 
 /** "What you need": the model's materials, one line each with its supplier and buy link. Nothing when it has none. */
-export function MaterialsNeeded({ materials }: { materials: readonly PrintMaterial[] | null | undefined }) {
+export function MaterialsNeeded({ materials, filaments = [], assembly = [] }: {
+  materials: readonly PrintMaterial[] | null | undefined;
+  /** The filament of the version ("White PLA"), when the materials list does not name it. */
+  filaments?: readonly string[];
+  /** Parts one piece takes when assembled ("1 Stand base · Large"). */
+  assembly?: readonly string[];
+}) {
   const m = useT(partnerMaterialsMessages);
-  if (!materials?.length) return null;
+  const t = useT(productionMessages);
+  const named = (materials ?? []).map((material) => `${material.name} ${material.spec ?? ""}`.toLowerCase());
+  const extraFilaments = Array.from(new Set(filaments)).filter((colour) => !named.some((text) => text.includes(colour.toLowerCase())));
+  if (!materials?.length && !extraFilaments.length && !assembly.length) return null;
   return (
     <section className="space-y-2 rounded-xl border border-amber-300/20 bg-amber-400/[0.05] p-3.5" aria-label={m("needTitle")} data-testid="production-materials-needed">
       <div>
@@ -29,7 +39,7 @@ export function MaterialsNeeded({ materials }: { materials: readonly PrintMateri
         <p className="mt-0.5 text-xs text-white/50">{m("needIntro")}</p>
       </div>
       <ul className="divide-y divide-white/[0.06]">
-        {materials.map((material, index) => (
+        {(materials ?? []).map((material, index) => (
           <li key={index} className="flex flex-wrap items-start justify-between gap-x-3 gap-y-1 py-2 first:pt-0 last:pb-0" data-testid="production-material">
             <div className="min-w-0">
               <p className="text-sm font-medium text-white">
@@ -37,8 +47,9 @@ export function MaterialsNeeded({ materials }: { materials: readonly PrintMateri
                 {material.spec ? <span className="font-normal text-white/60"> · {material.spec}</span> : null}
               </p>
               <p className="text-xs text-white/45">
-                {m(`kind_${material.kind}` as "kind_other")}
-                {material.supplier ? ` · ${m("needSupplier", { supplier: material.supplier })}` : ""}
+                {/* The kind says what the line is; when the name already says it, it says nothing new. */}
+                {material.name.toLowerCase().includes(m(`kind_${material.kind}` as "kind_other").toLowerCase()) ? null : m(`kind_${material.kind}` as "kind_other")}
+                {material.supplier ? `${material.name.toLowerCase().includes(m(`kind_${material.kind}` as "kind_other").toLowerCase()) ? "" : " · "}${m("needSupplier", { supplier: material.supplier })}` : ""}
               </p>
               {material.note ? <p className="mt-0.5 text-xs text-white/55">{material.note}</p> : null}
             </div>
@@ -55,6 +66,18 @@ export function MaterialsNeeded({ materials }: { materials: readonly PrintMateri
             ) : null}
           </li>
         ))}
+        {extraFilaments.length ? (
+          <li className="py-2 last:pb-0">
+            <p className="text-sm font-medium text-white">{t("needFilament")}</p>
+            <p className="text-xs text-white/55">{extraFilaments.join(" · ")}</p>
+          </li>
+        ) : null}
+        {assembly.length ? (
+          <li className="py-2 last:pb-0">
+            <p className="text-sm font-medium text-white">{t("needAssembly")}</p>
+            <p className="text-xs text-white/55">{assembly.join(" · ")}</p>
+          </li>
+        ) : null}
       </ul>
     </section>
   );

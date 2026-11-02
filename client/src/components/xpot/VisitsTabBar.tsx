@@ -6,7 +6,6 @@ import { useViewerAccess } from "@/lib/adminMode";
 import { tabs } from "@/pages/xpot/utils";
 import { MobileTabBar } from "./MobileTabBar";
 import { activeVisitsTab } from "./moduleNav";
-import { MANAGE_HOME } from "./AdminMode";
 
 // The Visits module's bottom bar on a phone, in the sidebar's order (moduleNav
 // VISITS_TAB_ORDER). Managers in management mode get a Manage tab, as in Tags
@@ -26,7 +25,7 @@ export function VisitsTabBar() {
       module="visits"
       tabs={items}
       activeId={activeVisitsTab(location) ?? ""}
-      onSelect={(id) => navigate(id === "manage" ? MANAGE_HOME.visits : `/${id}`)}
+      onSelect={(id) => navigate(id === "manage" ? "/admin" : `/${id}`)}
     />
   );
 }

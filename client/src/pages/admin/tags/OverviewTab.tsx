@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useCallback, useState } from "react";
+import { useLocation, useSearchParams } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import {
   Activity,
@@ -8,8 +9,10 @@ import {
   CalendarRange,
   ClipboardCheck,
   Layers,
+  Network,
   Package,
   ScanLine,
+  SlidersHorizontal,
   UserRound,
   Users,
 } from "lucide-react";
@@ -19,21 +22,28 @@ import { TagPieceMention } from "@/components/xpot/TagProductThumbnail";
 import { useReasonText } from "@/components/piece/reasonText";
 import { KpiTile, SectionCard } from "@/components/xpot/DashboardKit";
 import { EmptyState } from "@/components/xpot/EmptyState";
-import { FilterBar, FilterChips, FilterSelect } from "@/components/xpot/filters";
+import { FilterBar, FilterChips, FilterSelect, FilterToggle } from "@/components/xpot/filters";
+import { MasterDetail } from "@/components/xpot/MasterDetail";
 import { BackLink } from "@/components/xpot/PageHeader";
 import { Pill } from "@/components/xpot/StatusPill";
+import { useIsDesktop } from "@/hooks/use-is-desktop";
 import { useUrlFilters } from "@/hooks/use-url-filters";
+import { useViewerAccess } from "@/lib/adminMode";
 import { useT } from "@/i18n";
 import { manageTagsMessages } from "@/i18n/messages/manageTags";
 import { adminTagsFlowMessages } from "@/i18n/messages/adminTagsFlow";
+import { commonMessages } from "@/i18n/messages/common";
+import { workspacesMessages } from "@/i18n/messages/workspaces";
 import { ADMIN_TAGS_KEY, formatShare, getJson, STALE_MS, withQuery } from "./api";
 import { formatDate } from "@/lib/format";
-import { Loading, LoadError, useBatchOptions, useLeads, useReps } from "./pieces-shared";
+import { Loading, LoadError, organizationFilterOptions, uniqueOptions, useBatchOptions, useLeads, useOrganizations, useReps } from "./pieces-shared";
+import { PieceDetail } from "./PieceDetail";
 import { useTagLabels } from "./labels";
 import { PieceTable } from "./piece-table";
 import { AnalyticsPanel, RangePicker, useDeviceLabel, type AnalyticsRange } from "./pieces-analytics";
 import {
   ACTIVITY_FILTERS,
+  ACTIVITY_PREVIEW,
   activityFeed,
   pieceQueueCard,
   type ActivityFilter,
@@ -46,25 +56,6 @@ const FEED_ROW = "flex w-full min-w-0 items-center gap-3 py-2 text-left transiti
 const FEED_DATE = "shrink-0 whitespace-nowrap text-[11px] tabular-nums text-white/40";
 /** "Oct 17, 8:38 PM": the feed is recent, and on a phone the year ("17 de out. de 2026, 20:38") left the details one letter. */
 const feedDate = (at: string) => formatDate(at, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
-
-/** Scans (kept from the old Overview). */
-function Scans({ overview }: { overview: TagOverview }) {
-  const t = useT(manageTagsMessages);
-  const tf = useT(adminTagsFlowMessages);
-  const { interactions, split30 } = overview;
-  const split = split30.qr + split30.nfc;
-  return (
-    <SectionCard accent="tags" icon={ScanLine} title={t("scansTaps")}>
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <KpiTile accent="violet" icon={ScanLine} label={t("ovToday")} value={interactions.today} detail={tf("localDay")} />
-        <KpiTile accent="violet" icon={CalendarDays} label={t("ovLast7")} value={interactions.last7} />
-        <KpiTile accent="violet" icon={CalendarRange} label={t("ovLast30")} value={interactions.last30} detail={`QR ${formatShare(split30.qr, split)} · NFC ${formatShare(split30.nfc, split)}`} />
-        <KpiTile accent="violet" icon={UserRound} label={t("ovApproxUnique")} value={overview.approxUnique30} detail={t("ovApproxHint")} />
-      </div>
-      <p className="mt-3 text-xs text-white/40">{tf("scansFootnote")}</p>
-    </SectionCard>
-  );
-}
 
 /** The fleet analytics (moved from Resellers): range, scope, daily chart, devices and the one Top pieces list. */
 function FleetAnalytics({ go }: { go: Go }) {
@@ -79,22 +70,30 @@ function FleetAnalytics({ go }: { go: Go }) {
   const { data: leads = [] } = useLeads();
   const { data: batches = [] } = useBatchOptions();
   const scope = { productType: product || undefined, repId: rep || undefined, leadId: lead || undefined, batchId: batch || undefined };
+  // The filters wait behind one button until one is in use, and a filter with one choice is not offered.
+  const [filtersOpen, setFiltersOpen] = useState(false);
+  const showFilters = filtersOpen || filters.activeCount() > 0;
+  const resellerOptions = uniqueOptions(reps.map((r) => ({ value: String(r.id), label: labels.repOption(r) })));
+  const customerOptions = uniqueOptions(leads.map((l) => ({ value: String(l.id), label: l.name })));
+  const batchOptions = uniqueOptions(batches.map((b) => ({ value: b.id, label: b.batchCode })));
+  const choice = (selected: string, options: readonly unknown[]) => selected !== "" || options.length > 1;
   return (
     <SectionCard accent="tags" icon={BarChart3} title={tf("analyticsTitle")} actions={<RangePicker value={range} onChange={setRange} />} testId="overview-analytics">
       <div className="min-w-0 space-y-4">
         <FilterBar
           testId="admin-overview-analytics-filters"
-          controls={
+          actions={<FilterToggle pressed={showFilters} onChange={setFiltersOpen} label={tf("filterButton")} icon={SlidersHorizontal} testId="overview-filters-toggle" />}
+          controls={!showFilters ? undefined : (
             <>
-              <FilterSelect value={product} onChange={(next) => filters.set({ product: next })} placeholder={t("allProducts")} options={labels.productOptions} icon={Package} />
-              <FilterSelect value={rep} onChange={(next) => filters.set({ rep: next })} placeholder={t("allResellers")} options={reps.map((r) => ({ value: String(r.id), label: labels.repOption(r) }))} icon={Users} />
-              <FilterSelect value={lead} onChange={(next) => filters.set({ lead: next })} placeholder={t("allCustomers")} options={leads.map((l) => ({ value: String(l.id), label: l.name }))} icon={Building2} />
-              <FilterSelect value={batch} onChange={(next) => filters.set({ batch: next })} placeholder={t("allBatches")} options={batches.map((b) => ({ value: b.id, label: b.batchCode }))} icon={Layers} />
+              {choice(product, labels.productOptions) ? <FilterSelect value={product} onChange={(next) => filters.set({ product: next })} placeholder={t("allProducts")} options={labels.productOptions} icon={Package} /> : null}
+              {choice(rep, resellerOptions) ? <FilterSelect value={rep} onChange={(next) => filters.set({ rep: next })} placeholder={t("allResellers")} options={resellerOptions} icon={Users} /> : null}
+              {choice(lead, customerOptions) ? <FilterSelect value={lead} onChange={(next) => filters.set({ lead: next })} placeholder={t("allCustomers")} options={customerOptions} icon={Building2} /> : null}
+              {choice(batch, batchOptions) ? <FilterSelect value={batch} onChange={(next) => filters.set({ batch: next })} placeholder={t("allBatches")} options={batchOptions} icon={Layers} /> : null}
             </>
-          }
+          )}
           summary={{ active: filters.activeCount() > 0, onClear: () => filters.reset() }}
         />
-        <AnalyticsPanel scopeUrl="/api/xpot/admin/tags/analytics" scope={scope} range={range} showTopTags onOpenTag={(id) => go(`/pieces/${id}`)} />
+        <AnalyticsPanel scopeUrl="/api/xpot/admin/tags/analytics" scope={scope} range={range} showTopTags onOpenTag={(id) => go(`/pieces/${id}`)} onOpenNotLive={() => go("/overview/scannedNotLive")} />
       </div>
     </SectionCard>
   );
@@ -110,7 +109,9 @@ function ActivityFeed({ overview, go }: { overview: TagOverview; go: Go }) {
   const reasonText = useReasonText();
   const deviceLabel = useDeviceLabel();
   const [filter, setFilter] = useState<ActivityFilter>("all");
-  const items = activityFeed(overview, filter);
+  const [all, setAll] = useState(false);
+  const feed = activityFeed(overview, filter);
+  const items = all ? feed : feed.slice(0, ACTIVITY_PREVIEW);
   return (
     <SectionCard
       accent="tags"
@@ -134,7 +135,7 @@ function ActivityFeed({ overview, go }: { overview: TagOverview; go: Go }) {
                     face={item.event.face}
                     batchCode={item.event.batchCode}
                     customer={item.event.leadName}
-                    details={[labels.event(item.event.eventType), item.event.deviceType && deviceLabel(item.event.deviceType)].filter(Boolean).join(" · ")}
+                    details={item.count > 1 ? tf.plural("activityScansN", item.count) : [labels.event(item.event.eventType), item.event.deviceType && deviceLabel(item.event.deviceType)].filter(Boolean).join(" · ")}
                     className="min-w-0 flex-1"
                   />
                   <span className="flex shrink-0 flex-col items-end gap-1">
@@ -160,7 +161,7 @@ function ActivityFeed({ overview, go }: { overview: TagOverview; go: Go }) {
                 </button>
               ) : (
                 <button type="button" className={`${FEED_ROW} flex-wrap`} onClick={() => go(`/pieces/${item.change.tagId}`)}>
-                  <TagPieceMention publicCode={item.change.publicCode} productType={item.change.productType} face={item.change.face} batchCode={item.change.batchCode} className="min-w-0 flex-1" />
+                  <TagPieceMention publicCode={item.change.publicCode} productType={item.change.productType} face={item.change.face} batchCode={item.change.batchCode} customer={item.change.leadName} className="min-w-0 flex-1" />
                   <span className="flex shrink-0 flex-col items-end gap-1">
                     <Pill tone="slate">{tf("activityDestinationPill")}</Pill>
                     <span className={FEED_DATE}>{feedDate(item.at)}</span>
@@ -179,39 +180,86 @@ function ActivityFeed({ overview, go }: { overview: TagOverview; go: Go }) {
           ))}
         </ul>
       )}
+      {!all && feed.length > ACTIVITY_PREVIEW ? <button type="button" onClick={() => setAll(true)} className="mb-1 mt-1 min-h-10 w-full rounded-xl text-sm font-medium text-white/60 hover:bg-white/[0.04] hover:text-white" data-testid="activity-see-all">{tf("activitySeeAll", { count: feed.length })}</button> : null}
     </SectionCard>
   );
 }
 
-/** /admin/tags/overview/<queue>: the pieces behind a Today count, by the same rule (GET /api/xpot/tags?queue=). */
+/** A queue's rows in the order they are worked: a chip write that failed first, it is the one somebody already tried. */
+const byChipTrouble = (a: TagListItem, b: TagListItem) => Number(b.nfcStatus === "failed") - Number(a.nfcStatus === "failed");
+
+/**
+ * /admin/tags/overview/<queue>: the pieces behind a Today count, by the same rule (GET /api/xpot/tags?queue=). The
+ * platform sees every organization's, which is what its Today counts, with the organization filter in view; a piece
+ * opens in the pop-up over the list (a phone gets its page), so resolving seven chips never leaves the queue.
+ */
 export function OverviewQueue({ queue, go }: { queue: TagPieceQueue; go: Go }) {
   const t = useT(adminTagsFlowMessages);
+  const tw = useT(workspacesMessages);
+  const tg = useT(manageTagsMessages);
+  const tc = useT(commonMessages);
+  const [, navigate] = useLocation();
   const card = pieceQueueCard(queue);
-  const url = withQuery("/api/xpot/tags", { queue, limit: 2000 });
+  const { canManage } = useViewerAccess();
+  const { data: organizations = [] } = useOrganizations(canManage);
+  const filters = useUrlFilters({ org: "" });
+  const org = filters.values.org;
+  const isDesktop = useIsDesktop();
+  const [params, setParams] = useSearchParams();
+  const paneId = params.get("piece") || null;
+  const setPane = useCallback(
+    (id: string | null) => setParams((current) => {
+      const next = new URLSearchParams(current);
+      if (id) next.set("piece", id);
+      else next.delete("piece");
+      return next;
+    }, { replace: !id || new URLSearchParams(window.location.search).has("piece") }),
+    [setParams],
+  );
+  const url = withQuery("/api/xpot/tags", { queue, limit: 2000, organizationId: /^\d+$/.test(org) ? org : undefined });
   const { data = [], isLoading, error, refetch } = useQuery<TagListItem[]>({
     queryKey: [ADMIN_TAGS_KEY, "pieces", url],
     queryFn: () => getJson(url),
     staleTime: STALE_MS,
   });
+  const rows = queue === "chipPending" ? [...data].sort(byChipTrouble) : data;
+  const open = (id: string) => (isDesktop ? setPane(id) : go(`/pieces/${id}?from=${queue}`));
+  // A phone has no pop-up: a shared ?piece= link shows the piece's page.
+  if (!isDesktop && paneId) return <PieceDetail id={paneId} go={go} />;
+  const list = (
+    <SectionCard
+      accent="tags"
+      icon={ClipboardCheck}
+      title={`${t(card.labelKey)} (${isLoading ? "…" : data.length})`}
+      actions={canManage ? (
+        <FilterSelect value={org} onChange={(next) => filters.set({ org: next })} placeholder={tg("allOrganizations")} options={organizationFilterOptions(organizations, org, (id) => tg("organizationNumber", { id }))} icon={Network} testId="admin-queue-org" />
+      ) : undefined}
+    >
+      <p className="mb-3 text-sm text-white/60">{t(card.actionKey)}</p>
+      {isLoading ? (
+        <Loading rows={4} />
+      ) : error ? (
+        <LoadError what={t("thePieces")} error={error} onRetry={() => void refetch()} />
+      ) : (
+        <PieceTable
+          pieces={rows}
+          onOpen={open}
+          selectedId={paneId}
+          columns={[...(canManage && !/^\d+$/.test(org) && organizations.length > 1 ? (["organization"] as const) : []), ...(queue === "chipPending" ? (["customer", "reseller", "chip"] as const) : queue === "scannedNotLive" ? (["customer", "reseller", "scanned"] as const) : (["reseller", "batch"] as const))]}
+          pageSize={50}
+          empty={t("queueEmpty")}
+        />
+      )}
+    </SectionCard>
+  );
   return (
     <div className="min-w-0 space-y-4" data-testid={`admin-tags-queue-${queue}`}>
-      <BackLink onBack={() => go("/overview")}>{t("backToOverview")}</BackLink>
-      <SectionCard accent="tags" icon={ClipboardCheck} title={`${t(card.labelKey)} (${isLoading ? "…" : data.length})`}>
-        <p className="mb-3 text-xs text-white/50">{t(card.hintKey)}</p>
-        {isLoading ? (
-          <Loading rows={4} />
-        ) : error ? (
-          <LoadError what={t("thePieces")} error={error} onRetry={() => void refetch()} />
-        ) : (
-          <PieceTable
-            pieces={data}
-            onOpen={(id) => go(`/pieces/${id}`)}
-            columns={queue === "chipPending" ? ["customer", "reseller", "chip"] : queue === "scannedNotLive" ? ["customer", "reseller", "lastInteraction"] : ["reseller", "batch"]}
-            pageSize={50}
-            empty={t("queueEmpty")}
-          />
-        )}
-      </SectionCard>
+      <BackLink onBack={() => navigate("/admin")}>{tw("todayTitle")}</BackLink>
+      {isDesktop ? (
+        <MasterDetail popup closeLabel={tc("close")} onClose={() => setPane(null)} list={list} detail={paneId ? <PieceDetail key={paneId} id={paneId} go={go} onClose={() => setPane(null)} /> : null} />
+      ) : (
+        list
+      )}
     </div>
   );
 }
@@ -242,7 +290,6 @@ export function OverviewTab({ go }: { go: Go }) {
 
   return (
     <div className="min-w-0 space-y-4" data-testid="admin-tags-overview">
-      <Scans overview={data} />
       <FleetAnalytics go={go} />
       <ActivityFeed overview={data} go={go} />
     </div>

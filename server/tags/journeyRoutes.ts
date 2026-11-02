@@ -71,7 +71,8 @@ export const journeyQuerySchema = z.object({
   repId: z.coerce.number().int().positive().optional(),
   leadId: z.coerce.number().int().positive().optional(),
   planId: z.string().uuid().optional(),
-  kind: z.enum(JOURNEY_ENTRY_KINDS).optional(),
+  // "notes": everything the team wrote or decided, without the lines the system writes on its own (kind "execution").
+  kind: z.enum([...JOURNEY_ENTRY_KINDS, "notes"]).optional(),
   includeArchived: z.preprocess((v) => v === true || v === "1" || v === "true", z.boolean()).optional(),
   before: z.string().datetime({ offset: true }).optional().transform((v) => (v ? new Date(v) : undefined)),
   limit: z.coerce.number().int().min(1).max(500).optional(),

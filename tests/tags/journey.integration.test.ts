@@ -342,6 +342,11 @@ test.skipIf(!enabled)("journey: trail, stories, plans, append-only, admin-only A
     assert.deepEqual(printed.metadata, { minutes: 163.8 });
     assert.equal(printed.source, "mcp");
     assert.equal(printed.actor, "ai");
+    // History's default is "notes": what the team wrote or decided, not the lines the system writes (execution); paged by the server.
+    const notes = (await story(`batchId=${batch.id}`, "&kind=notes")) as Array<{ kind: string }>;
+    assert.ok(notes.every((e) => e.kind !== "execution"));
+    assert.ok((await story(`batchId=${batch.id}`)).some((e) => e.kind === "execution"));
+    assert.equal((await api("GET", "/api/xpot/admin/tag-journey?kind=bogus", "jt-admin")).status, 400);
 
     const proposed = await api("POST", "/api/xpot/admin/tag-journey", "jt-admin", {
       kind: "insight", title: "QR reads from 30 cm", tagId: untouched.id, proposed: true,

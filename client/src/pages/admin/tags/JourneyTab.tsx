@@ -44,7 +44,7 @@ function JourneyTabBody() {
           <>
             <FilterSelect value={batch} onChange={(next) => filters.set({ batch: next })} placeholder={t("allBatches")} options={batchOptions} icon={Layers} testId="journey-filter-batch" />
             <FilterSelect value={rep} onChange={(next) => filters.set({ rep: next })} placeholder={t("allResellers")} options={repOptions} icon={Users} testId="journey-filter-reseller" />
-            <FilterSelect value={kind} onChange={(next) => filters.set({ kind: next })} placeholder={t("allKinds")} options={journeyLabels.kindOptions} icon={Shapes} testId="journey-filter-kind" />
+            <FilterSelect value={kind} onChange={(next) => filters.set({ kind: next })} placeholder={t("journeyNotes")} options={[{ value: "all", label: t("journeyEverything") }, ...journeyLabels.kindOptions]} icon={Shapes} testId="journey-filter-kind" />
             <FilterToggle pressed={includeArchived} onChange={(on) => filters.set({ archived: on ? "1" : null })} label={t("showArchived")} icon={Archive} testId="journey-filter-archived" />
           </>
         }
@@ -52,7 +52,8 @@ function JourneyTabBody() {
       />
       <JourneyPanel
         scope={{ batchId: batch || undefined }}
-        filters={{ repId: rep ? Number(rep) : undefined, kind: kind || undefined, includeArchived }}
+        title={t("journeyHappened")}
+        filters={{ repId: rep ? Number(rep) : undefined, kind: kind === "all" ? undefined : kind || "notes", includeArchived }}
         search={q}
       />
     </div>

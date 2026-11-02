@@ -3,6 +3,10 @@ import { classifyScan, TAGS_APP_PATH, type ScanClassification } from "@shared/ta
 import { viewHeaders } from "@/lib/adminMode";
 import { currentPlatform } from "@/lib/device";
 import { serverErrorText } from "@/lib/apiErrors";
+import { translate } from "@/i18n";
+import { commonMessages } from "@/i18n/messages/common";
+import { signInPath } from "@/lib/xpot";
+import type { TagListItem } from "@shared/tagsApi";
 
 export const APP_BASE = TAGS_APP_PATH;
 const RECENTS_KEY = "xpot.tags.recents";
@@ -146,10 +150,13 @@ export function ageOf(at: number): { key: "justNow" | "minutesAgo" | "hoursAgo" 
 
 export class HttpError extends Error {
   status: number;
-  constructor(status: number, message: string) {
+  /** The server's stable `code` for the error, when it sends one. */
+  code: string | null;
+  constructor(status: number, message: string, code: string | null = null) {
     super(message);
     this.name = "HttpError";
     this.status = status;
+    this.code = code;
   }
 }
 
@@ -162,18 +169,21 @@ async function call<T>(method: "GET" | "POST", url: string, body?: unknown, extr
     signal,
   });
   if (res.status === 401) {
-    // Session gone: back to the sign-in screen.
-    window.location.assign("/");
+    // Session gone: sign in again and come back to this page.
+    window.location.assign(signInPath(`${window.location.pathname}${window.location.search}`, { ended: true }));
     throw new HttpError(401, "Authentication required");
   }
   if (!res.ok) {
     let message = res.statusText;
+    let code: string | null = null;
     try {
-      message = serverErrorText(await res.json(), message);
+      const body = await res.json();
+      message = serverErrorText(body, message);
+      code = typeof body?.code === "string" ? body.code : null;
     } catch {
       // Not JSON: keep the status text.
     }
-    throw new HttpError(res.status, message);
+    throw new HttpError(res.status, message, code);
   }
   return (await res.json()) as T;
 }
@@ -183,7 +193,28 @@ export const tagsPost = <T,>(url: string, body: unknown = {}, signal?: AbortSign
 export const tagsPostIdempotent = <T,>(url: string, body: unknown, key: string) =>
   call<T>("POST", url, body, { "Idempotency-Key": key });
 
+/** The list endpoint's ceiling: everything a reseller holds fits under it. */
+export const MY_PIECES_LIMIT = 2000;
+
+/**
+ * "My pieces": the viewer's own, every status at once (the screens filter), optionally one customer's. The list and
+ * Home's "To do" ask with this one definition, so they share the cached answer and count the same pieces.
+ */
+export function myPiecesQuery(leadId: number | null = null) {
+  return {
+    queryKey: ["tags", "list", null, leadId] as const,
+    queryFn: () => {
+      const params = new URLSearchParams({ mine: "1", limit: String(MY_PIECES_LIMIT) });
+      if (leadId) params.set("leadId", String(leadId));
+      return tagsGet<TagListItem[]>(`/api/xpot/tags?${params}`);
+    },
+    staleTime: 15_000,
+  };
+}
+
 export function errorText(err: unknown, fallback: string): string {
+  // fetch rejects with a TypeError ("Failed to fetch") when there is no signal: say that, not the browser's words.
+  if (err instanceof TypeError) return translate(commonMessages, "sessionFailed");
   return err instanceof Error && err.message ? err.message : fallback;
 }
 
@@ -196,7 +227,8 @@ export async function lookupTag(code: string): Promise<LookupResult> {
     return { ok: true, ...found };
   } catch (err) {
     if (err instanceof HttpError && err.status === 404) return { ok: false, reason: "not_found" };
-    if (err instanceof HttpError && err.status === 403 && /kit/i.test(err.message)) return { ok: false, reason: "not_yours" };
+    // By the server's code: its sentence is translated, so the words ("kit") are only the English fallback.
+    if (err instanceof HttpError && err.status === 403 && (err.code === "tag_not_yours" || /kit/i.test(err.message))) return { ok: false, reason: "not_yours" };
     throw err;
   }
 }

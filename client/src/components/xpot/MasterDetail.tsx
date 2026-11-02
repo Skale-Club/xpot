@@ -25,6 +25,7 @@ export function MasterDetail({
   onClose,
   closeLabel,
   popup = false,
+  bareWhenEmpty = false,
 }: {
   list: ReactNode;
   /** null when nothing is selected. */
@@ -33,6 +34,8 @@ export function MasterDetail({
   onClose: () => void;
   closeLabel: string;
   popup?: boolean;
+  /** With nothing selected the list takes the whole width and the placeholder is not shown (a table that needs the room). */
+  bareWhenEmpty?: boolean;
 }) {
   const open = detail != null;
   const asideRef = useRef<HTMLElement>(null);
@@ -84,7 +87,7 @@ export function MasterDetail({
   }, [open, onClose]);
 
   return (
-    <div className={popup ? "" : "grid items-start gap-6 xl:grid-cols-[minmax(0,1fr)_420px]"}>
+    <div className={popup || (bareWhenEmpty && !open) ? "" : "grid items-start gap-6 xl:grid-cols-[minmax(0,1fr)_420px]"}>
       <div ref={listRef} className="min-w-0 space-y-2">{list}</div>
       {open ? (
         <>
@@ -98,7 +101,7 @@ export function MasterDetail({
             {detail}
           </aside>
         </>
-      ) : placeholder && !popup ? (
+      ) : placeholder && !popup && !bareWhenEmpty ? (
         <aside className="sticky top-[88px] hidden xl:block">{placeholder}</aside>
       ) : null}
     </div>

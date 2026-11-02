@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { CalendarClock, Check, Circle, Clock3, Flag, Pencil, Plus, RotateCcw, Users, X } from "lucide-react";
+import { CalendarClock, Check, Flag, MoreVertical, Pencil, Plus, RotateCcw, Users, X } from "lucide-react";
+import { Link, useRouter } from "wouter";
 import { FilterBar, FilterChips, FilterSearch, FilterSelect, FilterToggle } from "@/components/xpot/filters";
 import { useUrlFilters } from "@/hooks/use-url-filters";
 import { ListPager, useOffsetPages } from "@/components/xpot/pagination";
@@ -53,7 +54,28 @@ function bucket(task: EnrichedTask): BucketKey {
   return "bucketUpcoming";
 }
 
+/** The less used actions of a task (edit, cancel) behind one menu, so the card shows only what is done in the field. */
+function TaskMenu({ label, items }: { label: string; items: Array<{ key: string; label: string; icon: typeof X; run: () => void }> }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="relative -mr-2 -mt-2 shrink-0" onBlur={(event) => { if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setOpen(false); }}>
+      <Button type="button" variant="ghost" size="icon" onClick={() => setOpen((value) => !value)} aria-label={label} title={label} aria-expanded={open} className="text-white/40"><MoreVertical aria-hidden="true" /></Button>
+      {open ? (
+        <div role="menu" className="absolute right-0 top-full z-30 mt-1 min-w-[10rem] overflow-hidden rounded-xl border border-white/10 bg-[#0d1322] py-1 shadow-[0_16px_40px_rgba(0,0,0,0.5)]">
+          {items.map(({ key, label: itemLabel, icon: Icon, run }) => (
+            <button key={key} type="button" role="menuitem" onClick={() => { setOpen(false); run(); }} className="flex min-h-10 w-full items-center gap-2.5 px-3 text-left text-sm text-white/80 hover:bg-white/[0.06]">
+              <Icon className="h-4 w-4" aria-hidden="true" />{itemLabel}
+            </button>
+          ))}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 export function XpotTasks() {
+  // Inside the management panel the panel already names the screen.
+  const inPanel = useRouter().base.startsWith("/admin");
   const { me } = useXpotQueries();
   const { toast } = useToast();
   const t = useT(tasksMessages);
@@ -72,7 +94,9 @@ export function XpotTasks() {
   const organizationId = (reach === "organization"
     ? me?.organizations?.find((organization) => organization.membershipRole === "admin" && !organization.personal)
     : me?.organizations?.[0])?.id;
-  const team = canManage && filters.values.team === "1";
+  // Inside the management panel the list is the team's from the start (the tile that opens it counts the team's
+  // tasks), and "Only mine" narrows it; in My work the list is the person's own and "Whole team" widens it.
+  const team = canManage && (filters.values.team === "1" || (inPanel && filters.values.team !== "0"));
 
   const taskParams = new URLSearchParams({ status: status === "open" ? "pending,in_progress" : status });
   if (priority) taskParams.set("priority", priority);
@@ -120,7 +144,8 @@ export function XpotTasks() {
   }, [tasks.items]);
 
   function statusLabel(value: string) {
-    if (value === "pending") return t("statusPending");
+    // "Pending" is every task that has not started: it says nothing, so only the exceptions are named.
+    if (value === "pending") return "";
     if (value === "in_progress") return t("statusInProgress");
     if (value === "completed") return t("statusCompleted");
     if (value === "cancelled") return t("statusCancelled");
@@ -149,19 +174,24 @@ export function XpotTasks() {
   }
 
   return <div className="space-y-5">
-    <PageHeader
-      safeArea={false}
-      className="!mb-0"
-      accent="visits"
-      eyebrow={t("eyebrow")}
-      title={t("title")}
-      description={t("subtitle")}
-      actions={(
-        <Button type="button" variant="brand" onClick={newTask} aria-label={t("newTask")} className="w-11 px-0 sm:w-auto sm:px-4">
-          <Plus aria-hidden="true" /> <span className="hidden sm:inline">{t("newTask")}</span>
-        </Button>
-      )}
-    />
+    {/* Inside the management panel the panel already names the screen: only the action stays. */}
+    {inPanel ? (
+      <div className="flex justify-end">
+        <Button type="button" variant="brand" onClick={newTask}><Plus aria-hidden="true" /> {t("newTask")}</Button>
+      </div>
+    ) : (
+      <PageHeader
+        safeArea={false}
+        className="!mb-0"
+        accent="visits"
+        title={t("title")}
+        actions={(
+          <Button type="button" variant="brand" onClick={newTask} aria-label={t("newTask")} className="w-11 px-0 sm:w-auto sm:px-4">
+            <Plus aria-hidden="true" /> <span className="hidden sm:inline">{t("newTask")}</span>
+          </Button>
+        )}
+      />
+    )}
 
     <FilterBar
       testId="tasks-filters"
@@ -175,7 +205,9 @@ export function XpotTasks() {
             icon={Flag}
             options={priorityOptions.map((option) => ({ value: option.value, label: t(option.labelKey) }))}
           />
-          {canManage ? <FilterToggle pressed={team} onChange={(on) => filters.set({ team: on ? "1" : null })} label={t("wholeTeam")} icon={Users} /> : null}
+          {canManage ? (inPanel
+            ? <FilterToggle pressed={!team} onChange={(on) => filters.set({ team: on ? "0" : null })} label={t("onlyMine")} icon={Users} />
+            : <FilterToggle pressed={team} onChange={(on) => filters.set({ team: on ? "1" : null })} label={t("wholeTeam")} icon={Users} />) : null}
         </>
       }
       secondary={
@@ -199,7 +231,9 @@ export function XpotTasks() {
       // A failed read is not an empty queue.
       <ErrorState message={t("loadFailed")} onRetry={() => void tasks.refetch()} />
     ) : groups.length === 0 ? (
-      <EmptyState icon={Circle} title={t("noTasks")} />
+      <EmptyState icon={Check} title={t("noTasks")}>
+        <Button type="button" variant="brand" size="sm" onClick={newTask}><Plus aria-hidden="true" /> {t("newTask")}</Button>
+      </EmptyState>
     ) : groups.map((group) => <section key={group.key} className="space-y-2">
       <div className="flex items-center gap-2 px-1">
         <h2 className={EYEBROW}>{t(group.key)}</h2>
@@ -207,11 +241,28 @@ export function XpotTasks() {
       </div>
       <div className="grid gap-2 lg:grid-cols-2">{group.tasks.map((task) => <article key={task.id} className={`group rounded-2xl p-4 transition ${group.key === "bucketOverdue" ? "border border-red-400/20 bg-red-500/[0.04]" : `${GLASS_SUBTLE_CLASS} hover:border-white/15`}`}>
         <div className="flex items-start gap-2">
-          <button type="button" aria-label={task.status === "completed" ? t("reopen") : t("complete")} title={task.status === "completed" ? t("reopen") : t("complete")} onClick={() => changeStatus.mutate({ id: task.id, action: task.status === "completed" ? "reopen" : "complete" })} disabled={changeStatus.isPending && changeStatus.variables?.id === task.id} className="-ml-1.5 -mt-1.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-full disabled:opacity-50">
-            <span className={`flex h-7 w-7 items-center justify-center rounded-full border ${task.status === "completed" ? "border-emerald-400 bg-emerald-500 text-white" : "border-white/20 text-transparent hover:border-emerald-400 hover:text-emerald-400"}`}>
-              <Check className="h-4 w-4" aria-hidden="true" />
+          {task.status === "completed" || task.status === "cancelled" ? (
+            <span className="-ml-1.5 -mt-1.5 flex h-10 w-10 shrink-0 items-center justify-center" aria-hidden="true">
+              <span className={`flex h-7 w-7 items-center justify-center rounded-full border ${task.status === "completed" ? "border-emerald-400 bg-emerald-500 text-white" : "border-white/20 text-white/40"}`}>
+                {task.status === "completed" ? <Check className="h-4 w-4" /> : <X className="h-4 w-4" />}
+              </span>
             </span>
-          </button>
+          ) : (
+            // An empty circle, like the Dashboard's: a tick and "Done" read as a stamp on a task that is not done yet.
+            <button
+              type="button"
+              onClick={() => changeStatus.mutate({ id: task.id, action: "complete" })}
+              disabled={changeStatus.isPending && changeStatus.variables?.id === task.id}
+              aria-label={`${t("markDone")}: ${task.title}`}
+              title={t("markDone")}
+              className="group/done -ml-1.5 -mt-1.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-transparent transition-colors hover:text-emerald-300"
+              data-testid={`task-done-${task.id}`}
+            >
+              <span className="flex h-7 w-7 items-center justify-center rounded-full border border-white/20 transition-colors group-hover/done:border-white/35">
+                <Check className="h-3.5 w-3.5" aria-hidden="true" />
+              </span>
+            </button>
+          )}
           <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-center gap-2">
               <h3 className={`font-semibold ${task.status === "completed" ? "text-white/35 line-through" : "text-white"}`}>{task.title}</h3>
@@ -219,18 +270,20 @@ export function XpotTasks() {
             </div>
             <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-white/40">
               {task.dueAt && <span className="flex items-center gap-1"><CalendarClock className="h-3 w-3" aria-hidden="true" />{formatDateTime(task.dueAt)}</span>}
-              {task.lead && <span>{task.lead.name}</span>}
+              {task.lead && (task.leadId ? <Link href={`/leads/${task.leadId}`} className="text-blue-300/80 hover:text-blue-200">{task.lead.name}</Link> : <span>{task.lead.name}</span>)}
               {team && task.assignee && <span>→ {task.assignee.displayName}</span>}
-              <span>{statusLabel(task.status)}</span>
+              {statusLabel(task.status) ? <span>{statusLabel(task.status)}</span> : null}
             </div>
             {task.description && <p className="mt-2 line-clamp-2 text-sm text-white/50">{task.description}</p>}
           </div>
-          <Button type="button" variant="ghost" size="icon" onClick={() => editTask(task)} aria-label={t("edit")} title={t("edit")} className="-mr-2 -mt-2 text-white/40"><Pencil aria-hidden="true" /></Button>
+          <TaskMenu
+            label={t("moreActions")}
+            items={[
+              { key: "edit", label: t("edit"), icon: Pencil, run: () => editTask(task) },
+              ...(task.status !== "completed" && task.status !== "cancelled" ? [{ key: "cancel", label: t("cancel"), icon: X, run: () => changeStatus.mutate({ id: task.id, action: "cancel" }) }] : []),
+            ]}
+          />
         </div>
-        {task.status !== "completed" && task.status !== "cancelled" && <div className="mt-3 flex justify-end gap-2 border-t border-white/5 pt-3">
-          {task.status === "pending" && <button onClick={() => changeStatus.mutate({ id: task.id, action: "start" })} className="flex items-center gap-1 rounded-lg px-2 py-1 text-xs text-indigo-300 hover:bg-indigo-500/10"><Clock3 className="h-3 w-3" /> {t("start")}</button>}
-          <button onClick={() => changeStatus.mutate({ id: task.id, action: "cancel" })} className="flex items-center gap-1 rounded-lg px-2 py-1 text-xs text-white/35 hover:bg-white/5"><X className="h-3 w-3" /> {t("cancel")}</button>
-        </div>}
         {(task.status === "completed" || task.status === "cancelled") && <div className="mt-3 flex justify-end border-t border-white/5 pt-3"><button onClick={() => changeStatus.mutate({ id: task.id, action: "reopen" })} className="flex items-center gap-1 rounded-lg px-2 py-1 text-xs text-indigo-300 hover:bg-indigo-500/10"><RotateCcw className="h-3 w-3" /> {t("reopen")}</button></div>}
       </article>)}</div>
     </section>)}

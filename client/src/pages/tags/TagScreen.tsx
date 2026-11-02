@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo } from "react";
 import { useLocation } from "wouter";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { ScanLine, X } from "lucide-react";
+import { ScanLine, WifiOff, X } from "lucide-react";
 import type { TagDetail, TagLimitedView } from "@shared/tagsApi";
 import { CODE_HEADING_TOPBAR, TagPieceVisual } from "@/components/xpot/TagProductThumbnail";
 import { Button } from "@/components/ui/button";
@@ -20,6 +20,7 @@ import { pieceCustodyMessages } from "@/i18n/messages/pieceCustody";
 import { nfcMode } from "./webNfc";
 import { cameFromInApp } from "@/lib/inAppHistory";
 import { APP_BASE, errorText, lookupTag, pushRecent, tagsGet, useBanner } from "./lib";
+import { pieceLoadView } from "./pieceLoad";
 import { Banner, Spinner, TopBar } from "./ui";
 import { LimitedPiece } from "./LimitedPiece";
 
@@ -60,7 +61,7 @@ export default function TagScreen({ code, onClose }: {
   const queryKey = ["tags", "piece", code];
   // A phone without Web NFC (iPhone): written with NFC Tools, confirmed by a real tap.
   const manualFlow = nfcMode() === "app";
-  const { data, isLoading, error, refetch } = useQuery({
+  const { data, error, fetchStatus, refetch } = useQuery({
     queryKey,
     queryFn: () => fetchTag(code),
     staleTime: 0,
@@ -71,6 +72,8 @@ export default function TagScreen({ code, onClose }: {
     },
   });
   const tag = data?.kind === "ok" ? data.tag : null;
+  // Looking up, no signal (also a lookup that never started offline), a failure, or what the server answered.
+  const view = pieceLoadView({ data, error, fetchStatus });
 
   useEffect(() => {
     if (tag) pushRecent({ kind: "xpot", value: tag.publicCode });
@@ -98,7 +101,7 @@ export default function TagScreen({ code, onClose }: {
   const back = onClose ? undefined : `${APP_BASE}/pieces`;
   const goBack = () => (cameFromInApp() ? window.history.back() : navigate(`${APP_BASE}/pieces`));
 
-  if (isLoading) {
+  if (view === "loading") {
     return (
       <>
         <TopBar title={code} back={back} onBack={back ? goBack : undefined} right={closeButton} />
@@ -131,7 +134,7 @@ export default function TagScreen({ code, onClose }: {
     );
   }
 
-  if (error || !tag) {
+  if (!tag) {
     const readAnother = !onClose ? (
       <Button type="button" variant="secondary" onClick={() => navigate(APP_BASE)}>
         <ScanLine />
@@ -141,13 +144,21 @@ export default function TagScreen({ code, onClose }: {
     return (
       <>
         <TopBar title={code} back={back} onBack={back ? goBack : undefined} right={closeButton} />
-        {error ? (
+        {view === "offline" ? (
+          <ErrorState
+            icon={WifiOff}
+            title={<span data-testid="text-tag-offline">{t("offlineTitle")}</span>}
+            message={t("offlineHint")}
+            onRetry={() => void refetch()}
+          />
+        ) : view === "failed" ? (
           <ErrorState title={<span data-testid="text-tag-error">{t("loadFailed")}</span>} message={errorText(error, tc("requestFailed"))} onRetry={() => void refetch()} />
         ) : (
           <EmptyState
             tone="tags"
             icon={ScanLine}
-            title={<span data-testid="text-tag-error">{data?.kind === "not_yours" ? t("notYours") : t("notFound", { code })}</span>}
+            title={<span data-testid="text-tag-error">{view === "not_yours" ? t("notYoursTitle") : t("pieceNotFoundTitle")}</span>}
+            hint={view === "not_yours" ? t("notYoursHint") : t("pieceNotFoundHint")}
             action={readAnother}
           />
         )}

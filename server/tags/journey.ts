@@ -282,7 +282,8 @@ export async function listJourneyEntries(filters: JourneyFilters): Promise<TagJo
   if (filters.repId !== undefined) where.push(sql`j.rep_id = ${filters.repId}`);
   if (filters.leadId !== undefined) where.push(sql`j.lead_id = ${filters.leadId}`);
   if (filters.planId) where.push(sql`j.plan_id = ${filters.planId}`);
-  if (filters.kind) where.push(sql`j.kind = ${filters.kind}`);
+  if (filters.kind === "notes") where.push(sql`j.kind <> 'execution'`);
+  else if (filters.kind) where.push(sql`j.kind = ${filters.kind}`);
   if (!filters.includeArchived) where.push(sql`j.status IN ('active', 'needs_review')`);
   if (filters.before) where.push(sql`j.occurred_at < ${filters.before}`);
   const clause = where.length ? sql.join(where, sql` AND `) : sql`TRUE`;

@@ -353,8 +353,11 @@ Vale por cima da tabela acima, em toda a interface. Só texto: código, banco e 
 |---|---|---|---|---|
 | Estoque de quem é dono das peças | Company stock | Estoque da empresa | Stock de la empresa | House stock, The house |
 | Peça com quem clicou | With me | Comigo | Conmigo | My stock |
-| Mesa que vai à impressora | Print job | Impressão | Impresión | Plate, quando não é o produto |
-| PC que gera os arquivos | Print computer | Computador da impressora | Ordenador de la impresora | Bench |
+| Mesa que vai à impressora | Print | Impressão | Impresión | Plate, Print job (2026-11-02: "Print 1 of 9", "9 prints"; "print job" some da interface) |
+| Um pedido de peças | order | pedido | pedido | O que se pediu; uma ou várias impressões. O código (LPLATE-2026-009) só aparece na página do pedido e na lista de pedidos |
+| Computador gerando o arquivo | Being made by the computer | O computador está gerando | La computadora lo está generando | Building, e nunca "Waiting for the file" (que é só o que o operador precisa enviar) |
+| Lote de fornecedor | batch | lote | lote | Pendente: "supplier order" (pedido a fornecedor) só se o dono confirmar; hoje fica "batch" |
+| PC que gera os arquivos | Print computer | Computador da impressora | Computadora de la impresora | Bench |
 | Tela de estoque | Stock | Estoque | Stock | Inventory |
 | Tela de entrega | Hand out | Entregar peças | Entregar piezas | Distribution, Kits |
 | Pedidos da Stuscle | Wholesale orders | Pedidos de atacado | Pedidos mayoristas | Stuscle orders |
@@ -362,7 +365,7 @@ Vale por cima da tabela acima, em toda a interface. Só texto: código, banco e 
 | Resultado das peças | Pieces results | Resultado das peças | Resultados de piezas | Overview (Tags), Tags overview |
 | Início de Tags | Home | Início | Inicio | Dashboard (Tags) |
 | Histórico de produção | History | Histórico | Historial | Production log |
-| Gravadores | Chip writers | Gravadores de chip | Grabadores de chip | NFC writers |
+| Computadores | Computers | Computadores | Computadoras | Chip writers (2026-11-02: a página lista também os computadores que geram arquivos de impressão) |
 | Peça sem entrada | Not in stock yet | Ainda fora do estoque | Aún fuera del stock | Not received |
 | Peça sem cliente | No customer yet | Sem cliente | Sin cliente | Not set up |
 | Configurada | Ready, not live | Pronta, fora do ar | Lista, sin activar | Set up, not live |
@@ -370,6 +373,10 @@ Vale por cima da tabela acima, em toda a interface. Só texto: código, banco e 
 | Desativada | Deactivated | Desativada | Desactivada | Retired |
 | Empresas em trabalho | In progress | Em andamento | En curso | Filtro Leads |
 | Área do dono | My company | Minha empresa | Mi empresa | My organization, My workspace |
+| Área do dono de várias empresas | My companies | Minhas empresas | Mis empresas | Team (lista), Organizations |
+| Empresa que já conversou, ainda não cliente | In talks | Em negociação | En negociación | Lead (filtro e status) |
+| Aba de negócios abertos de uma empresa | Deals | Negócios | Negocios | Pipeline |
+| Computador da impressora (ES) | Print computer | Computador da impressora | Computadora de la impresora | Em espanhol é sempre "computadora", nunca "ordenador" nem "PC"; em pt, "computador" |
 
 "Plate" e "Stand" ficam só para os produtos. "Kit" fica só no nome do pacote (K-0001). "Workspace" não aparece na interface.
 

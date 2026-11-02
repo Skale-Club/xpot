@@ -1,7 +1,7 @@
 import { useState, useCallback, useMemo } from "react";
 import { useLocation, useRoute } from "wouter";
 import { useQuery } from "@tanstack/react-query";
-import { CalendarDays, UserRound } from "lucide-react";
+import { CalendarDays, UserRound, Users } from "lucide-react";
 import { useVisits } from "./hooks/useVisits";
 import { VisitRow, VisitDeleteConfirm, VisitSummaryPage } from "./components/VisitRow";
 import { VisitsTable } from "./components/VisitsTable";
@@ -13,10 +13,12 @@ import { useIsDesktop } from "@/hooks/use-is-desktop";
 import type { EnrichedSalesVisit } from "./types";
 import { useT, type Translate } from "@/i18n";
 import { visitsMessages } from "@/i18n/messages/visits";
-import { Segmented } from "@/components/xpot/Segmented";
+import { manageMessages } from "@/i18n/messages/manage";
+import { peopleWorkspaceMessages } from "@/i18n/messages/peopleWorkspace";
+import { teamVisitsFilterFromQuery, visitCountsInTeamResults } from "@shared/teamActivity";
 import { EmptyState, ErrorState } from "@/components/xpot/EmptyState";
 import { ListSkeleton } from "@/components/xpot/ListSkeleton";
-import { FilterBar, FilterChips, FilterDay, FilterSelect, fromDayKey, toDayKey } from "@/components/xpot/filters";
+import { FilterBar, FilterChips, FilterDay, FilterSelect, fromDayKey, toDayKey, FilterToggle } from "@/components/xpot/filters";
 import { useViewerAccess } from "@/lib/adminMode";
 import { apiRequest } from "@/lib/queryClient";
 import { currentSearch, useUrlFilters } from "@/hooks/use-url-filters";
@@ -62,9 +64,13 @@ const visitDay = (visit: EnrichedSalesVisit) => {
 export function XpotVisits({ basePath = "/dashboard/history" }: { basePath?: string }) {
   const t = useT(visitsMessages);
   const tStatus = useT(checkinMessages);
+  const tManage = useT(manageMessages);
+  const tPeople = useT(peopleWorkspaceMessages);
   const { visitsQuery: everyVisitQuery } = useVisits();
   // ?view=day&day=2026-10-12&status=sale_made&rep=12
-  const filters = useUrlFilters({ view: "all", day: "", status: "all", rep: "" });
+  // ?period=30&show=finished|away: the visits a Team results number counts (Visits › Manage › Overview opens them).
+  const filters = useUrlFilters({ view: "all", day: "", status: "all", rep: "", period: "", show: "" });
+  const teamFilter = useMemo(() => teamVisitsFilterFromQuery({ period: filters.values.period, show: filters.values.show }), [filters.values.period, filters.values.show]);
   // A manager in management mode sees everyone's visits and may narrow them to
   // one seller (People's "Their visits" opens it with ?rep=); the server only
   // honours ?repId= for them, so the filter is not offered to anyone else.
@@ -93,7 +99,12 @@ export function XpotVisits({ basePath = "/dashboard/history" }: { basePath?: str
   const [deleteId, setDeleteId] = useState<number | null>(null);
   const isToday = selectedKey === toDayKey(new Date());
 
-  const allVisits = visitsQuery.data || [];
+  // A visit stays openable (and a list with nothing in it stays clearable) whatever the Team results filter hides.
+  const everyVisit = visitsQuery.data || [];
+  const allVisits = useMemo(
+    () => (teamFilter ? everyVisit.filter((visit) => visitCountsInTeamResults(visit, teamFilter)) : everyVisit),
+    [everyVisit, teamFilter],
+  );
 
   const visitsForDay = useMemo(
     () =>
@@ -131,7 +142,7 @@ export function XpotVisits({ basePath = "/dashboard/history" }: { basePath?: str
     return map;
   }, [allVisits]);
 
-  const selectedVisit = routeId ? allVisits.find((v) => v.id === routeId) ?? null : null;
+  const selectedVisit = routeId ? everyVisit.find((v) => v.id === routeId) ?? null : null;
   // Moving between visits and closing replace history; only the first open
   // pushes. The query string rides along so the filters stay put.
   const closeVisit = useCallback(() => navigate(`${basePath}${currentSearch()}`, { replace: true }), [basePath, navigate]);
@@ -183,6 +194,7 @@ export function XpotVisits({ basePath = "/dashboard/history" }: { basePath?: str
         {deleteId != null && (
           <VisitDeleteConfirm
             visitId={deleteId}
+            sales={everyVisit.find((visit) => visit.id === deleteId)?.visitSales}
             open
             onOpenChange={(open) => { if (!open) setDeleteId(null); }}
             onDeleted={() => { setDeleteId(null); closeVisit(); }}
@@ -192,20 +204,30 @@ export function XpotVisits({ basePath = "/dashboard/history" }: { basePath?: str
     );
   }
 
+  // No visit yet: one message and the way to the first one, with no filters over nothing.
+  if (!visitsQuery.isLoading && !visitsQuery.isError && everyVisit.length === 0) return <div className="space-y-4">{emptyVisits}</div>;
+
   return (
     <div className="space-y-4">
       <FilterBar
         testId="visits-filters"
         controls={<>
-          <Segmented
-            className="col-span-2 sm:w-72"
-            items={[
-              { id: "all" as const, label: t("allVisits"), count: allVisits.length },
-              { id: "day" as const, label: t("byDay"), count: visitsForDay.length },
-            ]}
-            value={viewMode}
-            onChange={(view) => filters.set({ view, day: view === "day" ? filters.values.day : null })}
+          <FilterToggle
+            pressed={viewMode === "day"}
+            onChange={(on) => filters.set({ view: on ? "day" : "all", day: on ? filters.values.day : null })}
+            label={t("byDay")}
+            icon={CalendarDays}
+            testId="visits-filter-day"
           />
+          {teamFilter ? (
+            <FilterToggle
+              pressed
+              onChange={() => filters.set({ period: null, show: null })}
+              label={`${teamFilter.show === "finished" ? tManage("metricCompletedVisits") : teamFilter.show === "away" ? tPeople("kpiExceptions") : tPeople("kpiVisits")} · ${teamFilter.period === "today" ? tPeople("periodToday") : tPeople("periodDays", { days: teamFilter.period })}`}
+              icon={Users}
+              testId="visits-filter-team"
+            />
+          ) : null}
           {canManage ? (
             <FilterSelect
               className="col-span-2 sm:w-56"
@@ -234,8 +256,8 @@ export function XpotVisits({ basePath = "/dashboard/history" }: { basePath?: str
         summary={{
           shown: visitsToRender.length,
           total: viewVisits.length,
-          active: statusFilter !== "all" || repFilter !== null,
-          onClear: () => filters.set({ status: null, rep: null }),
+          active: statusFilter !== "all" || repFilter !== null || teamFilter !== null,
+          onClear: () => filters.set({ status: null, rep: null, period: null, show: null }),
         }}
       />
 
@@ -266,6 +288,7 @@ export function XpotVisits({ basePath = "/dashboard/history" }: { basePath?: str
       {deleteId != null && (
         <VisitDeleteConfirm
           visitId={deleteId}
+          sales={everyVisit.find((visit) => visit.id === deleteId)?.visitSales}
           open
           onOpenChange={(o) => { if (!o) setDeleteId(null); }}
           onDeleted={() => { setDeleteId(null); closeVisit(); }}

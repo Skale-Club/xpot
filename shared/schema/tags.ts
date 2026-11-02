@@ -47,6 +47,8 @@ export const tagBatches = pgTable("tag_batches", {
 export const tagKits = pgTable("tag_kits", {
   id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
   organizationId: integer("organization_id").notNull().references(() => organizations.id, { onDelete: "restrict" }),
+  /** The organization whose stock the pieces came from, where Take back returns them (migrations/0072); null on older kits. */
+  sourceOrganizationId: integer("source_organization_id").references(() => organizations.id, { onDelete: "restrict" }),
   repId: integer("rep_id").notNull().references(() => salesReps.id),
   /** Short sequential number, shown as K-0001 (shared/tagKits.ts kitCode); migrations/0054_tag_kit_items.sql. */
   kitNumber: integer("kit_number").notNull().default(sql`nextval('tag_kits_kit_number_seq')`),
@@ -187,6 +189,8 @@ export const tagShowcaseItems = pgTable("tag_showcase_items", {
   description: text("description"),
   /** What is in the box: a list of short lines. */
   includes: jsonb("includes").$type<string[]>().notNull().default(sql`'[]'::jsonb`),
+  /** The same three texts in other languages (shared/tagShowcase.ts); a language with nothing typed uses the main ones. migrations/0072. */
+  translations: jsonb("translations").$type<Partial<Record<"pt" | "es", { title?: string; description?: string; includes?: string[] }>>>().notNull().default(sql`'{}'::jsonb`),
   imageUrl: text("image_url"),
   /** A kit's Stuscle SKUs and quantities (what the link puts in the cart). */
   items: jsonb("items").$type<Array<{ sku: string; quantity: number }>>().notNull().default(sql`'[]'::jsonb`),
@@ -474,6 +478,8 @@ export const printRequests = pgTable("print_requests", {
   notes: text("notes"),
   source: text("source").notNull().default("admin"),
   requestedByUserId: text("requested_by_user_id"),
+  // The printed plate whose damaged pieces this request prints again (migrations/0074); one live replacement at most.
+  replacesJobId: uuid("replaces_job_id"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 }, (table) => ({
   createdIdx: index("print_requests_created_idx").on(table.createdAt),
