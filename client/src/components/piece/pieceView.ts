@@ -1,5 +1,6 @@
 import { OPEN_PRINT_JOB_STATUSES } from "@shared/printProduction";
 import { planTransition, type TagAction } from "@shared/tags";
+import { chipNeedsWriting } from "@shared/tagApp";
 import type { PieceCustodyActions } from "@shared/tagCustody";
 import type { TagDailyPoint, TagHistoryEntry, TagJourneyEntryItem, TagPieceSale, TagStockMovementItem } from "@shared/tagsApi";
 import { CHIP_STATUS_TONE, PIECE_STATUS_TONE, SOLD_TONE, STOCK_STATUS_TONE, toneOf, type PillTone } from "@/components/xpot/StatusPill";
@@ -117,7 +118,8 @@ export function pieceSituation(tag: SituationTag, viewer: PieceViewer): PieceSit
     return { key: "pending", tone: "amber", action: null, hint: "askManager" };
   }
 
-  if (status === "active") return act("live", "green", { kind: "viewPerformance" });
+  // Live with its chip still empty: a phone tap opens nothing yet, so the chip is the next step, not the numbers.
+  if (status === "active") return act("live", "green", { kind: chipNeedsWriting(tag) ? "writeChip" : "viewPerformance" });
   const canActivate = planTransition(tag, "activate").ok;
   if (status === "disabled") return act("paused", "amber", canActivate ? { kind: "reactivate" } : null);
   if (status === "assigned") {

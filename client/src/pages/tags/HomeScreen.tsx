@@ -34,6 +34,7 @@ import {
 import { mapNfcError, nfcMode, scanOnce } from "./webNfc";
 import { useIsComputer, useIsDesktop } from "@/hooks/use-is-desktop";
 import { useViewerAccess } from "@/lib/adminMode";
+import { TAG_CODE_LENGTH } from "@shared/tags";
 
 // "read" is the chooser behind the single Read button: QR, chip or typed code.
 type Sheet = { kind: "read" } | { kind: "empty" } | { kind: "nfc" } | null;
@@ -142,6 +143,14 @@ export default function HomeScreen() {
     }
   };
 
+  // On a phone a code is whole at its 8th character: open the piece then, without a tap on the arrow.
+  useEffect(() => {
+    if (isDesktop || sheet?.kind !== "read") return;
+    const typed = classify(code);
+    if (typed.kind === "xpot" && code.replace(/[s-]/g, "").length === TAG_CODE_LENGTH) void openCode(typed.code);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [code]);
+
   const submitCode = () => {
     if (isDesktop) {
       const raw = code.trim();
@@ -199,6 +208,8 @@ export default function HomeScreen() {
         </Button>
       </div>
       {isDesktop && <p className="mt-2 text-xs text-white/35">{t("scannerHint")}</p>}
+      {/* The arrow stays off until the code is whole; say what a whole one is. */}
+      {!isDesktop && code.trim().length > 0 && code.trim().length < 8 && <p className="mt-2 text-xs text-white/50" data-testid="code-hint">{t("invalidCode")}</p>}
     </form>
   );
 
@@ -309,7 +320,19 @@ export default function HomeScreen() {
           )}
         </div>
         <div className="mt-5 border-t border-white/10 pt-4">{codeForm}</div>
-        <Button type="button" variant="ghost" size="lg" onClick={() => setSheet(null)} className="mt-4 w-full">
+        {/* Rare, so a link and not a tile: the way in to a chip that holds the customer's own link. */}
+        <button
+          type="button"
+          onClick={() => {
+            setSheet(null);
+            navigate(directPath());
+          }}
+          className="mt-4 min-h-10 w-full text-center text-sm text-white/50 underline-offset-2 hover:text-white/80 hover:underline"
+          data-testid="link-write-direct"
+        >
+          {t("navDirect")}
+        </button>
+        <Button type="button" variant="ghost" size="lg" onClick={() => setSheet(null)} className="mt-1 w-full">
           {tc("cancel")}
         </Button>
       </BottomSheet>
