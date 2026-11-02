@@ -4,6 +4,8 @@ import type { Dictionary } from "../index";
 // components/VisitRow.tsx). Lead field labels live in leads.ts.
 
 const en = {
+  visitExpired: "Closed automatically",
+  visitExpiredHint: "The {hours}-hour limit was reached without a check-out. The actual departure time and duration are unknown. No visit outcome was recorded.",
   // List and filters
   byDay: "By day",
   filterAll: "All",
@@ -103,6 +105,8 @@ const en = {
 export const visitsMessages: Dictionary<typeof en> = {
   en,
   pt: {
+    visitExpired: "Encerrada automaticamente",
+    visitExpiredHint: "O limite de {hours} horas foi atingido sem check-out. A saída real e a duração são desconhecidas. Nenhum resultado de visita foi registrado.",
     byDay: "Por dia",
     filterAll: "Todas",
     filterByStatus: "Filtrar por resultado",
@@ -196,6 +200,8 @@ export const visitsMessages: Dictionary<typeof en> = {
     removeSocial: "Remover rede social",
   },
   es: {
+    visitExpired: "Cerrada automáticamente",
+    visitExpiredHint: "Se alcanzó el límite de {hours} horas sin check-out. La hora de salida real y la duración son desconocidas. No se registró un resultado de visita.",
     byDay: "Por día",
     filterAll: "Todas",
     filterByStatus: "Filtrar por resultado",

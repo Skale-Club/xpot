@@ -13,6 +13,8 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import type { XpotModule } from "@shared/modules";
+import { VISIT_MAX_SECONDS, visitTimeLimitReached } from "@shared/visit-time-limit";
+import { checkinMessages } from "@/i18n/messages/checkin";
 import { formatTitle } from "@shared/seo";
 import { ownedOrganizationId, useViewerAccess } from "@/lib/adminMode";
 import { AdminBadge } from "./AdminBadge";
@@ -382,7 +384,7 @@ function DesktopTopBar({ title, crumb, actions, onSearch, management = false }: 
 
 function elapsedLabel(since: string | Date | null | undefined) {
   if (!since) return "";
-  const minutes = Math.max(0, Math.floor((Date.now() - new Date(since).getTime()) / 60000));
+  const minutes = Math.min(VISIT_MAX_SECONDS / 60, Math.max(0, Math.floor((Date.now() - new Date(since).getTime()) / 60000)));
   const h = Math.floor(minutes / 60);
   return h ? `${h}h ${String(minutes % 60).padStart(2, "0")}m` : `${minutes}m`;
 }
@@ -390,8 +392,9 @@ function elapsedLabel(since: string | Date | null | undefined) {
 /** Persistent resume strip while a visit is active, on phone and desktop. */
 function ActiveVisitBanner() {
   const t = useT(shellMessages);
+  const tc = useT(checkinMessages);
   const [location] = useLocation();
-  const { data: me } = useQuery<XpotMeResponse>({ queryKey: ["/api/xpot/me"], retry: false });
+  const { data: me } = useQuery<XpotMeResponse>({ queryKey: ["/api/xpot/me"], retry: false, refetchInterval: (query) => query.state.data?.activeVisit ? 30_000 : false });
   const visit = me?.activeVisit;
   const [, tick] = useState(0);
   useEffect(() => {
@@ -418,7 +421,7 @@ function ActiveVisitBanner() {
           {/* On a phone the company is what matters; "visit in progress" would push its name off the strip. */}
           {lead ? <><span className="sm:hidden">{lead}</span><span className="hidden sm:inline">{t("activeVisitAt", { lead })}</span></> : t("activeVisit")}
         </span>
-        <span className="tabular-nums text-emerald-200/70">{elapsedLabel(visit.checkedInAt)}</span>
+        <span className="tabular-nums text-emerald-200/70">{visitTimeLimitReached(visit.checkedInAt) ? tc("visitLimitReached") : elapsedLabel(visit.checkedInAt)}</span>
         <span className="shrink-0 font-semibold text-emerald-300">{t("openVisit")} →</span>
       </Link>
     </div>

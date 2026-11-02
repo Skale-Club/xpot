@@ -13,7 +13,7 @@ import { productionMessages } from "@/i18n/messages/production";
 import { errorMessage, formatDate, invalidateAdminTags, sendJson } from "./api";
 import { Loading, LoadError } from "./pieces-shared";
 import { Pill } from "@/components/xpot/StatusPill";
-import { DownloadFileButton, JobStatusPill, PRODUCTION_BASE, UploadFileButton, plateDownloads, useBuildSentence, usePlateMoves, usePrintComputers, usePrintModels, usePrintRequests, useProductionAccess, type JobFilter } from "./production-shared";
+import { DownloadFileButton, JobStatusPill, PRODUCTION_BASE, plateDownloads, useBuildSentence, usePlateMoves, usePrintComputers, usePrintModels, usePrintRequests, useProductionAccess, type JobFilter } from "./production-shared";
 import { ProductionIdentity } from "./production-identity";
 import { PrintedDialog } from "./production-printed-dialog";
 
@@ -135,7 +135,7 @@ function CollapsedPrints({ plates, waiting, children }: { plates: PrintJobItem[]
       <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 px-3 py-2.5">
         <p className="text-sm text-white/70">{line}</p>
         <Button type="button" variant="secondary" size="sm" aria-expanded={open} onClick={() => setOpen((value) => !value)} data-testid="production-collapsed-toggle">
-          {open ? t("hidePrints") : t(waiting ? "uploadFiles" : "showPrints")}
+          {open ? t("hidePrints") : t("showPrints")}
         </Button>
       </div>
       {open ? <ul className="divide-y divide-white/[0.06] border-t border-white/[0.06]">{children}</ul> : null}
@@ -220,8 +220,6 @@ function PlateRow({ plate, go, showStatus, rows }: { plate: PrintJobItem; go: Go
   const renderAction = (action: PlateAction, index: number) => {
     const primary = index === 0;
     switch (action) {
-      case "uploadFile":
-        return <UploadFileButton key={action} quiet loading={rows.moves.uploading === plate.id} onFile={(next) => rows.moves.upload({ id: plate.id, file: next })} />;
       case "download":
         return file ? <DownloadFileButton key={action} id={file.id} label={t("downloadSliced")} quiet={!primary} /> : null;
       case "start":

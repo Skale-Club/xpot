@@ -25,6 +25,8 @@ vi.mock("../server/db.js", async () => {
 
 const { createVisitsRouter } = await import("../server/routes/xpot/visits.js");
 const { createAuthRouter } = await import("../server/routes/xpot/auth.js");
+const { expireOverdueVisits } = await import("../server/visit-timeout.js");
+const { VISIT_MAX_SECONDS } = await import("../shared/visit-time-limit.js");
 
 const q = async (text: string, params: unknown[] = []) => (await pg.client.query(text, params)).rows as any[];
 const one = async (text: string, params: unknown[] = []) => (await q(text, params))[0];
@@ -139,6 +141,92 @@ test("a second check-in while a visit is open is refused", async () => {
   const second = await request("POST", "/api/xpot/visits/check-in", { leadId, ...AT_SHOP });
   expect(second.status).toBe(409);
   expect(await visitCount()).toBe(1);
+});
+
+async function overdueVisit(hours = 66) {
+  const response = await request("POST", "/api/xpot/visits/check-in", { leadId, ...AT_SHOP });
+  expect(response.status).toBe(201);
+  const visitId = response.body.visit.id;
+  const startedAt = new Date(Date.now() - hours * 3600_000);
+  await q(`UPDATE sales_visits SET checked_in_at = $2 WHERE id = $1`, [visitId, startedAt.toISOString()]);
+  return { visitId, startedAt };
+}
+
+test("a forgotten visit expires at four hours without inventing an outcome or duration", async () => {
+  const { visitId, startedAt } = await overdueVisit();
+  const before = await one(`SELECT last_visit_at FROM sales_leads WHERE id = $1`, [leadId]);
+  expect(await expireOverdueVisits()).toBe(1);
+  const visit = await one(`SELECT * FROM sales_visits WHERE id = $1`, [visitId]);
+  expect(visit.status).toBe("cancelled");
+  expect(visit.duration_seconds).toBeNull();
+  expect(visit.check_out_lat).toBeNull();
+  expect(new Date(visit.expired_at).getTime()).toBe(startedAt.getTime() + VISIT_MAX_SECONDS * 1000);
+  expect(visit.checked_out_at).toEqual(visit.expired_at);
+  expect((await one(`SELECT last_visit_at FROM sales_leads WHERE id = $1`, [leadId])).last_visit_at).toEqual(before.last_visit_at);
+  expect(await expireOverdueVisits()).toBe(0);
+});
+
+test("resuming an expired visit clears /me and permits the next check-in", async () => {
+  const { visitId } = await overdueVisit();
+  const me = await request("GET", "/api/xpot/me");
+  expect(me.status).toBe(200);
+  expect(me.body.activeVisit).toBeNull();
+  expect((await one(`SELECT expired_at FROM sales_visits WHERE id = $1`, [visitId])).expired_at).not.toBeNull();
+  const next = await request("POST", "/api/xpot/visits/check-in", { leadId, ...AT_SHOP });
+  expect(next.status).toBe(201);
+  expect(next.body.visit.id).not.toBe(visitId);
+});
+
+test("a late check-out cannot record 66 hours or turn an expired visit into a sale", async () => {
+  const { visitId } = await overdueVisit();
+  const response = await request("POST", `/api/xpot/visits/${visitId}/check-out`, { status: "sale_made" });
+  expect(response.status).toBe(409);
+  expect(response.body.code).toBe("visit_expired");
+  expect((await request("PATCH", `/api/xpot/visits/${visitId}`, { status: "sale_made" })).status).toBe(409);
+  expect(await one(`SELECT status, duration_seconds FROM sales_visits WHERE id = $1`, [visitId])).toMatchObject({ status: "cancelled", duration_seconds: null });
+});
+
+test("visits below the limit check out normally and cannot be checked out twice", async () => {
+  const { visitId } = await overdueVisit(0.5);
+  expect(await expireOverdueVisits()).toBe(0);
+  const first = await request("POST", `/api/xpot/visits/${visitId}/check-out`, { status: "completed" });
+  expect(first.status).toBe(200);
+  expect(first.body.expiredAt).toBeNull();
+  expect(first.body.durationSeconds).toBeGreaterThanOrEqual(1800);
+  expect(first.body.durationSeconds).toBeLessThan(1810);
+  const second = await request("POST", `/api/xpot/visits/${visitId}/check-out`, { status: "follow_up" });
+  expect(second.status).toBe(409);
+  expect((await one(`SELECT status FROM sales_visits WHERE id = $1`, [visitId])).status).toBe("completed");
+});
+
+test("the worker expires at the exact deadline and leaves a later visit active", async () => {
+  const { visitId, startedAt } = await overdueVisit(1);
+  const deadline = new Date(startedAt.getTime() + VISIT_MAX_SECONDS * 1000);
+  expect(await expireOverdueVisits(undefined, new Date(deadline.getTime() - 1))).toBe(0);
+  expect(await expireOverdueVisits(undefined, deadline)).toBe(1);
+  expect((await one(`SELECT status FROM sales_visits WHERE id = $1`, [visitId])).status).toBe("cancelled");
+});
+
+test("expiration closes the linked route stop without claiming the business was visited", async () => {
+  const { visitId } = await overdueVisit();
+  const route = await one(`INSERT INTO prospecting_routes (rep_id, name, route_date, status, planned_start_at, start_lat, start_lng)
+    VALUES (1, 'Timeout route', '2026-11-02', 'in_progress', NOW(), '42.3', '-71.5') RETURNING id`);
+  await q(`INSERT INTO prospecting_route_stops (route_id, lead_id, visit_id, position, status, name, lat, lng)
+    VALUES ($1, $2, $3, 1, 'checked_in', 'Corner Barber', '42.3', '-71.5')`, [route.id, leadId, visitId]);
+  expect(await expireOverdueVisits()).toBe(1);
+  expect(await one(`SELECT status, skip_reason FROM prospecting_route_stops WHERE visit_id = $1`, [visitId]))
+    .toMatchObject({ status: 'skipped', skip_reason: 'visit_timeout' });
+  expect((await one(`SELECT status FROM prospecting_routes WHERE id = $1`, [route.id])).status).toBe('completed');
+});
+
+test("a rep-scoped cleanup leaves another rep's overdue visit for the background worker", async () => {
+  await overdueVisit();
+  await q(`INSERT INTO users (id, phone) VALUES ('other-timeout-rep', '+15550000888')`);
+  const other = await one(`INSERT INTO sales_reps (user_id, display_name, role) VALUES ('other-timeout-rep', 'Other', 'rep') RETURNING id`);
+  await q(`INSERT INTO sales_visits (rep_id, lead_id, status, checked_in_at) VALUES ($1, $2, 'in_progress', NOW() - INTERVAL '2 days')`, [other.id, leadId]);
+  expect(await expireOverdueVisits(1)).toBe(1);
+  expect((await one(`SELECT status FROM sales_visits WHERE rep_id = $1`, [other.id])).status).toBe('in_progress');
+  expect(await expireOverdueVisits()).toBe(1);
 });
 
 // A result is the outcome of a finished visit. Setting one on a visit still open used to save it with

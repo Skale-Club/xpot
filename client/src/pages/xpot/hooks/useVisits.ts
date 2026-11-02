@@ -53,6 +53,7 @@ export function useVisits() {
       setLocation(visit.routeId ? `/route?routeId=${visit.routeId}` : `/dashboard/history/${visit.id}`);
     },
     onError: (error: Error) => {
+      void invalidateXpotData();
       toast({ title: t("checkOutFailed"), description: error.message, variant: "destructive" });
     },
   });

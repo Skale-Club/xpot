@@ -10,6 +10,7 @@ import {
   plannedVisitOfStop,
 } from "./prospecting/route-execution.js";
 import { markStopOfVisitCheckedIn, markStopOfVisitFinished } from "./prospecting/visit-sync.js";
+import { visitTimeLimitReached } from "#shared/visit-time-limit.js";
 
 type StartValues = {
   locationId?: number;
@@ -82,12 +83,17 @@ export async function finishVisitTransaction(input: {
   leadId: number;
   status: SalesVisitStatus;
   checkedOutAt: Date;
-  durationSeconds: number;
+  durationSeconds: number | null;
   checkOutLat?: number;
   checkOutLng?: number;
   updateLeadLastVisit: boolean;
+  requireActive?: boolean;
 }) {
   return db.transaction(async (tx) => {
+    if (input.requireActive) {
+      const [current] = await tx.select().from(salesVisits).where(eq(salesVisits.id, input.visitId)).for("update");
+      if (!current || current.status !== "in_progress" || visitTimeLimitReached(current.checkedInAt)) return null;
+    }
     const [visit] = await tx.update(salesVisits).set({
       status: input.status,
       checkedOutAt: input.checkedOutAt,
