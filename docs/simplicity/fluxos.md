@@ -59,6 +59,7 @@ Arquivos: `server/tags/acquisitions.ts:103-120` (a consulta; `leftJoin` na linha
 Risco: nenhuma regra de negocio; so a trava de linha. Conferir se outras consultas com `.for("update")` tem join: so esta tem (grep feito em `server/`).
 
 ### FLX-2 [S1] Planejar rota: o texto promete "continuar digitando", mas nao da para continuar
+Status: feito, opção (a): sem sugestões do Google, "Boston, MA" digitado vale (`parseTypedCity`, com teste) e o Continue avança; o texto diz a verdade e a consulta para por 30 s depois da falha.
 Telas: owner/en-phone/Route > Plan today's route, passo 1 (`p6-37-plan`, `p6-38-plan-city`, `p6-39-plan-city2`)
 Problema: quando as sugestoes do Google falham (lab: 503; em producao: chave faltando, cota, rede) aparece "Google suggestions are unavailable. You can continue by typing." e logo acima "Choose a suggestion so the city includes its state." Digitei "Boston, MA" e Enter: o botao Continue continua desabilitado e nada e adicionado. Sem sugestao a pessoa nao consegue planejar rota nenhuma, e o texto afirma o contrario. Alem disso cada letra digitada dispara uma chamada que falha (5 chamadas 503 para "Boston").
 Mudanca: ou (a) aceitar a cidade digitada no formato "Cidade, UF" quando as sugestoes estiverem indisponiveis (Enter/Continue adiciona o texto validando `^.+,\s*[A-Z]{2}$`), ou (b) trocar o texto para o que e verdade: en "Google suggestions are unavailable right now. Try again in a few minutes." / pt "As sugestoes do Google estao indisponiveis agora. Tente de novo em alguns minutos." / es "Las sugerencias de Google no estan disponibles ahora. Intenta de nuevo en unos minutos." Recomendo (a): o app promete isso. Em ambos: parar de repetir a chamada depois de uma falha 503 (desligar a consulta por 30 s).
@@ -66,6 +67,7 @@ Arquivos: `client/src/pages/xpot/XpotProspecting.tsx:935` (`addCity` so aceita s
 Risco: aceitar texto livre muda a qualidade das buscas; decisao do dono. Recomendo (a) com a validacao "Cidade, UF".
 
 ### FLX-3 [S1] Acerto de consignacao cobra tudo como vendido se a pessoa nao contar
+Status: feito. O campo começa vazio, nada de "They owe" nem botão até contar (`settleCountState`, teste de dinheiro), 0 contado vale. Conferido com clique real: 10 contados de 18 gravou 8 vendidas.
 Telas: rep-both/en-phone/Sales > Consignments > Settle (`p6-32-settle`)
 Problema: abri "Settle" do Copper Kettle Cafe (18 unidades no registro). O campo "Still on the shelf" vem em 0, a tela ja mostra "Sold since last visit 18 / They owe $63.00" e o botao verde "Settle $63.00" ja esta ativo, com pagamento "Paid / Cash". Quem toca em Settle sem contar registra 18 vendidas e $63 pagos. So uma dica cinza "count them" avisa. Digitando 10 na prateleira a conta vira 8 vendidas, $28.00 (certo).
 Mudanca: o campo comeca vazio; enquanto vazio, nao mostrar "They owe" (mostrar "Count what is left on the shelf") e manter o botao desabilitado. Texto: en "How many are left on the shelf?" / pt "Quantas sobraram na prateleira?" / es "¿Cuántas quedan en el estante?". Botao: en "Settle" ate haver numero.
@@ -122,6 +124,7 @@ Arquivos: `client/src/pages/tags/TagSaleDialog.tsx`/`ContentEditor.tsx` (link), 
 Risco: nenhum.
 
 ### FLX-11 [S2] Finalizar visita: resultado vem em "Visited" mesmo com venda feita
+Status: feito. Check-out começa em "Sale made" quando a visita vendeu (`defaultCheckoutStatus`, teste); rótulo "Come back".
 Telas: rep-both/en-phone/Finish visit (`p6-10-finish`)
 Problema: gravei uma venda ($25.98) nesta visita e, ao finalizar, o resultado marcado e "Visited", nao "Sale made". Quem so desliza para sair registra a visita sem resultado de venda (a lista de visitas anteriores mostra "Sale made" so quando escolhido). "Come back l..." aparece cortado.
 Mudanca: se a visita tem venda, pre-selecionar "Sale made". Encurtar o rotulo: en "Come back" / pt "Voltar depois" / es "Volver luego".
@@ -129,6 +132,7 @@ Arquivos: `client/src/pages/xpot/XpotCheckIn.tsx` (dialogo Finish visit), `clien
 Risco: nenhum.
 
 ### FLX-12 [S2] Resumo da visita: "1 transactions · 0 pieces" com 2 placas vendidas
+Status: feito. O servidor passou a contar itens vendidos (`visitSales.items`); o resumo diz "{n} sale(s) · {m} item(s)" e só aparece com venda.
 Telas: rep-both/en-phone/Visit summary (`p6-11-checkedout`)
 Problema: vendi 2 "Small Plate" do catalogo e o resumo diz "SALES $25.98 / 1 transactions · 0 pieces". "pieces" conta so pecas com codigo (escaneadas), nao itens vendidos; a pessoa le "0 pecas" para uma venda de 2 placas. Plural errado ("1 transactions").
 Mudanca: contar itens vendidos (quantidade das linhas) ou trocar o rotulo para "0 tagged pieces". Plural: en "{n} sale(s) · {m} item(s)". 
@@ -136,6 +140,7 @@ Arquivos: `client/src/i18n/messages/visits.ts:41`, `client/src/pages/xpot/compon
 Risco: nenhum.
 
 ### FLX-13 [S2] Planejador de rota cortado a direita no celular
+Status: feito. O planejador cabia com `min-w-0` no contêiner e no formulário; o "1/4" que cobria o botão de fechar saiu.
 Telas: owner/en-phone/Plan today's route (`p6-37-plan`)
 Problema: em 390 px o texto "Choose up to five cities. Each city must include its state." termina cortado, o contador "1/4" e "0/5 cities" saem da tela. Medi: o container `flex flex-col p-4` termina em x=411, o resto em 395, em tela de 390.
 Mudanca: o Dialog do planejador esta mais largo que a janela; tirar o `min-w` implicito (provavelmente do `<Button>` Continue + input na mesma linha) e usar `min-w-0` no flex pai; conferir `inFieldContinue` empilhado em < 400 px.
@@ -143,6 +148,7 @@ Arquivos: `client/src/pages/xpot/XpotProspecting.tsx:1113` (container), `:964` (
 Risco: nenhum.
 
 ### FLX-14 [S2] Tres contagens diferentes para o progresso da rota
+Status: feito, junto com VIS-3.
 Telas: rep-both/en-phone/Dashboard, Route, rota aberta (`p6-02-rep-app`, `p6-35-route-home`, `p6-13-route-reload`)
 Problema: a mesma rota mostra "3 of 8 stops done" (Dashboard), "4 of 8 stops visited" (Route) e a lista de paradas mostra 2 "Done" + 1 "In visit". Parada pulada conta como feita/visitada.
 Mudanca: "done" = concluidas; "skipped" contadas a parte. Textos: en "{n} of {total} stops visited, {k} skipped".
@@ -150,6 +156,7 @@ Arquivos: `client/src/pages/xpot/prospectingUi.ts:291-298` (`isStopDone` inclui 
 Risco: nenhum.
 
 ### FLX-15 [S2] Nota da visita so por voz
+Status: feito. Campo "Or type a note" na nota da visita (e na visita antiga), grava no `summary` da nota; o campo já abre com a nota salva. A lista de notas anteriores não foi criada: há uma nota por visita.
 Telas: rep-both/en-phone/Visit note (`p6-04-note`, `p6-19-voice-stopped`, `p6-20-voice-upload`)
 Problema: "Visit note" abre um dialogo que so tem o botao de gravar ("Tap to record voice notes"). Em lugar silencioso, com ruido, ou sem permissao de microfone, nao ha como escrever. Depois de gravar nao ha como ouvir antes de enviar ("Recorded (7s)", "Clear", "Upload"); depois de enviar, o dialogo volta ao estado inicial sem mostrar que ha uma nota salva (so um toast).
 Mudanca: campo de texto abaixo do gravador: en "Or type a note" / pt "Ou digite uma nota" / es "O escribe una nota"; listar as notas ja salvas desta visita no dialogo.
