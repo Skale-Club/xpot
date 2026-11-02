@@ -340,6 +340,16 @@ export function registerProductionRoutes(app: Express, deps: { device: readonly 
     }
   });
 
+  app.post(`${jobs}/:id/reprint-damaged`, requireProductionUser, async (req, res) => {
+    const id = uuidParam(req.params.id, res);
+    if (!id) return;
+    try {
+      res.status(201).json(await production.reprintDamaged(id, userIdOf(req), productionScopeOf(req)));
+    } catch (err) {
+      fail(res, err, "Failed to print the damaged pieces again");
+    }
+  });
+
   app.post(`${jobs}/:id/files`, requireProductionUser, rawFile, async (req, res) => {
     const id = uuidParam(req.params.id, res);
     if (!id) return;

@@ -525,6 +525,10 @@ export interface PrintJobItem {
   stale: boolean;
   /** A failed or cancelled plate already printed again: the attempt that took its place (it cannot be redone twice). */
   redoneBy: string | null;
+  /** A printed plate whose damaged pieces were asked for again: the first live plate of that request (null again if it was cancelled). */
+  reprintedBy: { id: string; batchCode: string | null } | null;
+  /** This plate belongs to a request that replaces the damaged pieces of another printed plate. */
+  replaces: { id: string; batchCode: string | null } | null;
   /** The request this plate belongs to, its place in it ("plate 2 of 3") and how many pieces the request asked for. */
   requestId: string | null;
   plateNumber: number;
