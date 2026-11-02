@@ -101,8 +101,12 @@ class BuilderTest(unittest.TestCase):
         cases += [('stand.menu', {'size': 'large', 'nfc_mount': 'sticker_10x20', 'font': 'Metropolis Medium, MENU spaced'}),
                   ('stand.google', {'size': 'medium', 'nfc_mount': 'sticker_10x20'})]
         for builder, params in cases:
-            with self.subTest(builder=builder, params=params), self.assertRaises(BuildError):
-                build_piece(builder, tag, 0, params, '.')
+            with self.subTest(builder=builder, params=params):
+                try:
+                    with self.assertRaises(BuildError):
+                        build_piece(builder, tag, 0, params, '.')
+                except ModuleNotFoundError as err:
+                    self.skipTest(f'needs the geometry packages: {err.name}')
 
 
 class NfcMountTest(unittest.TestCase):
