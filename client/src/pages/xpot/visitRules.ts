@@ -87,13 +87,12 @@ export function visitLocationException(visit: {
 }
 
 /**
- * The result a check-out starts with. What the rep or a voice note already
- * chose stays; the untouched default ("Talked") becomes "Sale made" when a sale
- * was recorded during the visit, so just sliding to check out does not file a
- * visit that sold as one that did not.
+ * The result a check-out starts with. What the rep or a voice note already chose stays, "Talked" included when the rep
+ * picked it. With nothing chosen there is no default (null), except a visit that sold: that one starts as "Sale made",
+ * so sliding to check out does not file a visit that sold as one that did not.
  */
-export function defaultCheckoutStatus(current: string, hasSale: boolean): string {
-  return current === "completed" && hasSale ? "sale_made" : current;
+export function defaultCheckoutStatus(current: string | null, hasSale: boolean): string | null {
+  return current ?? (hasSale ? "sale_made" : null);
 }
 
 /** A visit that is checked in and not out: its result is chosen at check-out, not before. */

@@ -182,6 +182,7 @@ export function XpotVisits({ basePath = "/dashboard/history" }: { basePath?: str
         {deleteId != null && (
           <VisitDeleteConfirm
             visitId={deleteId}
+            sales={allVisits.find((visit) => visit.id === deleteId)?.visitSales}
             open
             onOpenChange={(open) => { if (!open) setDeleteId(null); }}
             onDeleted={() => { setDeleteId(null); closeVisit(); }}
@@ -266,6 +267,7 @@ export function XpotVisits({ basePath = "/dashboard/history" }: { basePath?: str
       {deleteId != null && (
         <VisitDeleteConfirm
           visitId={deleteId}
+          sales={allVisits.find((visit) => visit.id === deleteId)?.visitSales}
           open
           onOpenChange={(o) => { if (!o) setDeleteId(null); }}
           onDeleted={() => { setDeleteId(null); closeVisit(); }}

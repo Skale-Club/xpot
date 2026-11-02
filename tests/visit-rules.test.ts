@@ -82,15 +82,18 @@ describe("isWorkedCompany", () => {
 
 describe("defaultCheckoutStatus", () => {
   it("starts a visit that sold as \"Sale made\", so sliding to check out does not file it as a plain visit", () => {
-    expect(defaultCheckoutStatus("completed", true)).toBe("sale_made");
+    expect(defaultCheckoutStatus(null, true)).toBe("sale_made");
   });
 
   it("keeps what the rep or a voice note already chose", () => {
     expect(defaultCheckoutStatus("follow_up", true)).toBe("follow_up");
     expect(defaultCheckoutStatus("not_interested", true)).toBe("not_interested");
+    // "Talked" picked by the rep is a choice, not a default.
+    expect(defaultCheckoutStatus("completed", true)).toBe("completed");
   });
 
-  it("leaves a visit without a sale as it is", () => {
+  it("marks nothing for a visit that did not sell: the rep says how it went", () => {
+    expect(defaultCheckoutStatus(null, false)).toBeNull();
     expect(defaultCheckoutStatus("completed", false)).toBe("completed");
   });
 });
