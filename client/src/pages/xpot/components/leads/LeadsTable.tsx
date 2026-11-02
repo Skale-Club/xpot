@@ -1,5 +1,5 @@
 import { useMemo, useState, type ReactNode } from "react";
-import { ArrowDown, ArrowUp, Building2, DollarSign, LogIn, Nfc, Trash2 } from "lucide-react";
+import { ArrowDown, ArrowUp, Building2, DollarSign, LogIn, MoreVertical, Nfc, Trash2 } from "lucide-react";
 import type { LeadTagSummary } from "@shared/tagsApi";
 import { useT } from "@/i18n";
 import { leadsMessages } from "@/i18n/messages/leads";
@@ -15,11 +15,14 @@ import { LeadStatePill } from "./LeadStatePill";
 
 type SortKey = "name" | "city" | "sold" | "shelf" | "lastVisit";
 
-/** Follow-up due as a pill: late is red, otherwise a step to take (amber). Nothing when none is due. */
-export function FollowUpDuePill({ lead }: { lead: FullSalesLead }) {
+/**
+ * A follow-up as a pill, on every company the "Follow-up" filter lists: red once its date is past, amber for today or
+ * later, plain grey ("Follow-up") when the visit asked to come back but no date was set.
+ */
+export function FollowUpDuePill({ lead, followUp = true }: { lead: FullSalesLead; followUp?: boolean }) {
   const t = useT(visitsUiMessages);
   const due = followUpDueTime(lead);
-  if (!Number.isFinite(due)) return null;
+  if (!Number.isFinite(due)) return followUp ? <Pill tone="slate">{t("followUpPlain")}</Pill> : null;
   const startOfToday = new Date();
   startOfToday.setHours(0, 0, 0, 0);
   return <Pill tone={due < startOfToday.getTime() ? "red" : "amber"}>{t("followUpDue", { date: formatShortDate(new Date(due)) })}</Pill>;
@@ -29,12 +32,12 @@ export function FollowUpDuePill({ lead }: { lead: FullSalesLead }) {
  * The core facts of a company row, the same on the phone card and the
  * desktop table: its state, the follow-up due and the last visit.
  */
-export function LeadRowFacts({ lead, lastVisit, showLastVisit = true }: { lead: FullSalesLead; lastVisit: Date | null; showLastVisit?: boolean }) {
+export function LeadRowFacts({ lead, lastVisit, showLastVisit = true, worked, followUp = false }: { lead: FullSalesLead; lastVisit: Date | null; showLastVisit?: boolean; worked?: boolean; followUp?: boolean }) {
   const t = useT(visitsUiMessages);
   return (
     <span className="flex flex-wrap items-center gap-1.5">
-      <LeadStatePill status={lead.status} />
-      <FollowUpDuePill lead={lead} />
+      <LeadStatePill status={lead.status} worked={worked} />
+      <FollowUpDuePill lead={lead} followUp={followUp} />
       {showLastVisit && lastVisit ? <span className="text-[11px] text-white/40">{t("lastVisit", { date: formatShortDate(lastVisit) })}</span> : null}
     </span>
   );
@@ -64,6 +67,33 @@ function RowAction({ title, onClick, children, className = "" }: { title: string
   );
 }
 
+/** The row's less used actions: sell and delete, behind one menu so a delete is never next to Check in. */
+function RowMenu({ label, items }: { label: string; items: Array<{ key: string; label: string; icon: typeof Trash2; run: () => void; danger?: boolean }> }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="relative" onBlur={(event) => { if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setOpen(false); }}>
+      <RowAction title={label} onClick={() => setOpen((value) => !value)} className="hover:text-white/80">
+        <MoreVertical aria-hidden="true" />
+      </RowAction>
+      {open ? (
+        <div role="menu" className="absolute right-0 top-full z-30 mt-1 min-w-[12rem] overflow-hidden rounded-xl border border-white/10 bg-[#0d1322] py-1 shadow-[0_16px_40px_rgba(0,0,0,0.5)]">
+          {items.map(({ key, label: itemLabel, icon: Icon, run, danger }) => (
+            <button
+              key={key}
+              type="button"
+              role="menuitem"
+              onClick={(event) => { event.stopPropagation(); setOpen(false); run(); }}
+              className={`flex min-h-10 w-full items-center gap-2.5 px-3 text-left text-sm ${danger ? "text-red-300 hover:bg-red-500/10" : "text-white/80 hover:bg-white/[0.06]"}`}
+            >
+              <Icon className="h-4 w-4" aria-hidden="true" />{itemLabel}
+            </button>
+          ))}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 /** Desktop list of visited leads, sortable, one row per company (the kit's CompactDataTable). */
 export function LeadsTable({
   leads,
@@ -71,6 +101,8 @@ export function LeadsTable({
   onSelect,
   piecesFor,
   lastVisitFor,
+  worked = true,
+  isFollowUp,
   onSell,
   onCheckIn,
   onDelete,
@@ -81,6 +113,9 @@ export function LeadsTable({
   onSelect: (lead: FullSalesLead) => void;
   piecesFor: (leadId: number) => LeadTagSummary | undefined;
   lastVisitFor: (leadId: number) => Date | null;
+  /** The list is the worked companies (not the "To visit" ones), so a visited prospect reads "In talks". */
+  worked?: boolean;
+  isFollowUp?: (lead: FullSalesLead) => boolean;
 } & LeadRowActions) {
   const t = useT(leadsMessages);
   const tu = useT(visitsUiMessages);
@@ -160,7 +195,7 @@ export function LeadsTable({
       key: "state",
       label: tu("colState"),
       cellClassName: "whitespace-nowrap",
-      render: (lead) => <LeadRowFacts lead={lead} lastVisit={null} showLastVisit={false} />,
+      render: (lead) => <LeadRowFacts lead={lead} lastVisit={null} showLastVisit={false} worked={worked} followUp={isFollowUp?.(lead) ?? false} />,
     },
     {
       key: "city",
@@ -205,18 +240,17 @@ export function LeadsTable({
       label: <span className="sr-only">{t("colActions")}</span>,
       cellClassName: "whitespace-nowrap !px-2 !py-1.5",
       render: (lead) => (
-        <div className="flex items-center justify-end gap-0.5">
-          <RowAction title={t("salesAndConsignment")} onClick={() => onSell(lead)} className="hover:text-emerald-300">
-            <DollarSign aria-hidden="true" />
-          </RowAction>
-          <RowAction title={t("checkIn")} onClick={() => onCheckIn(lead)} className="hover:text-blue-300">
-            <LogIn aria-hidden="true" />
-          </RowAction>
-          {!canDelete || canDelete(lead) ? (
-            <RowAction title={t("delete")} onClick={() => onDelete(lead)} className="hover:bg-red-500/15 hover:text-red-300">
-              <Trash2 aria-hidden="true" />
-            </RowAction>
-          ) : null}
+        <div className="flex items-center justify-end gap-1">
+          <Button type="button" variant="secondary" size="sm" onClick={(e) => { e.stopPropagation(); onCheckIn(lead); }} data-testid={`lead-${lead.id}-check-in`}>
+            <LogIn aria-hidden="true" /> {t("checkIn")}
+          </Button>
+          <RowMenu
+            label={t("moreActions")}
+            items={[
+              { key: "sell", label: t("salesAndConsignment"), icon: DollarSign, run: () => onSell(lead) },
+              ...(!canDelete || canDelete(lead) ? [{ key: "delete", label: t("deleteCompany"), icon: Trash2, run: () => onDelete(lead), danger: true }] : []),
+            ]}
+          />
         </div>
       ),
     },

@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { Link } from "wouter";
-import { Building2, CalendarDays, Camera, DollarSign, Navigation, Nfc, PackageCheck, Trash2, UserRoundCheck, UsersRound } from "lucide-react";
+import { Link, useLocation } from "wouter";
+import { Building2, CalendarDays, Camera, ChevronDown, DollarSign, MapPinCheck, Navigation, Nfc, PackageCheck, Phone, Trash2, UserRoundCheck, UsersRound } from "lucide-react";
+import { useIsDesktop } from "@/hooks/use-is-desktop";
+import { useVisits } from "../../hooks/useVisits";
 import type { LeadTagSummary } from "@shared/tagsApi";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -27,7 +29,7 @@ import { CompanyTaskButton } from "./CompanyTaskButton";
 import type { EnrichedSalesVisit, FullSalesLead } from "../../types";
 import { ModuleBadge } from "@/components/xpot/ModuleBadge";
 import { fileSrc, shrinkImageForUpload } from "@/lib/files";
-import { formatCents, formatVisitWhen } from "../../utils";
+import { displayPhone, formatVisitWhen, phoneHref } from "../../utils";
 import { companyStage } from "../../visitRules";
 import { useLeadAccess } from "../../leadAccess";
 import { useLeadSalesSnapshot } from "../../hooks/useSalesModule";
@@ -130,6 +132,13 @@ export function LeadDetailPane({ lead, pieces, visits, onClose, backLabel, onDel
 }) {
   const { toast } = useToast();
   const t = useT(leadsMessages);
+  const [, navigate] = useLocation();
+  const isDesktop = useIsDesktop();
+  const { activeVisit } = useVisits();
+  // The visit open right now decides what the company offers: go back to it, or finish it before starting another.
+  const openHere = activeVisit?.leadId === lead.id;
+  const openElsewhere = activeVisit && !openHere ? activeVisit : null;
+  const worked = lead.status !== "prospect" || visits.some((visit) => Boolean(visit.checkedInAt));
   const location = lead.locations?.[0];
   const routeUrl = buildRouteUrl(location);
   // A rep who only holds a piece here may edit it but not delete it or change its stage.
@@ -139,7 +148,6 @@ export function LeadDetailPane({ lead, pieces, visits, onClose, backLabel, onDel
   // cached query). They used the list's per-lead totals, which the company
   // page never has: /leads/:id loads the lead alone, so they always said $0.00 / 0.
   const salesSnapshot = useLeadSalesSnapshot(lead.id).data;
-  const soldCents = salesSnapshot?.lifetimeCents ?? lead.salesLifetimeCents;
   const unitsOnShelf = salesSnapshot
     ? salesSnapshot.activeConsignments.reduce((sum, row) => sum + row.consignment.quantityOnHand, 0)
     : lead.unitsOnShelf;
@@ -162,52 +170,76 @@ export function LeadDetailPane({ lead, pieces, visits, onClose, backLabel, onDel
           <CompanyCoverPhoto lead={lead} />
           <div className="min-w-0 flex-1">
             <div className="mb-1 flex min-h-5 flex-wrap items-center gap-2">
-              <p className={EYEBROW}>{t("companyProfile")}</p>
-              <LeadStatePill status={lead.status} />
+              <LeadStatePill status={lead.status} worked={worked} />
               {lead.ghlContactId ? <Pill tone="slate">GHL</Pill> : null}
             </div>
             <div className="min-w-0 max-w-xl"><InlineField label="" large value={lead.name} onSave={saveName} /></div>
             {address ? <p className="mt-1 truncate text-xs text-white/40">{address}</p> : null}
+            {lead.phone ? (
+              <a href={phoneHref(lead.phone)} className="mt-1 inline-flex min-h-8 items-center gap-1.5 text-xs text-white/60 hover:text-white/85">
+                <Phone className="h-3 w-3 shrink-0" aria-hidden="true" />{displayPhone(lead.phone)}
+              </a>
+            ) : null}
             <div className="mt-3 flex flex-wrap gap-2">
               <CompanyTaskButton lead={lead} />
               <CompanyGoogleProfileButton lead={lead} />
             </div>
           </div>
         </div>
-        <div className="flex flex-wrap gap-2 lg:pl-0">
+        <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap lg:pl-0">
+          {openHere ? (
+            <Button type="button" variant="brand" onClick={() => navigate("/route/check-in")} className="min-h-11" data-testid="lead-back-to-visit">
+              <MapPinCheck aria-hidden="true" />{t("backToVisit")}
+            </Button>
+          ) : openElsewhere ? null : (
+            <Button type="button" variant="brand" onClick={() => navigate(`/route/check-in?leadId=${lead.id}`)} className="min-h-11" data-testid="lead-check-in">
+              <MapPinCheck aria-hidden="true" />{t("checkIn")}
+            </Button>
+          )}
           {routeUrl ? (
-            <Button asChild variant="secondary">
+            <Button asChild variant="secondary" className="min-h-11">
               <a href={routeUrl} target="_blank" rel="noopener noreferrer"><Navigation aria-hidden="true" />{t("directions")}</a>
             </Button>
           ) : null}
-          {access.owner && companyStage(lead.status) !== "customer" && onConvertToCustomer ? (
-            <Button type="button" variant="secondary" onClick={onConvertToCustomer} loading={converting}>
-              <UserRoundCheck aria-hidden="true" />{t("promote")}
-            </Button>
-          ) : null}
         </div>
+        {openElsewhere ? (
+          <p className="text-xs text-amber-200/80" data-testid="lead-finish-first">{t("finishVisitFirst", { name: openElsewhere.lead?.name ?? t("leadNumber", { id: openElsewhere.leadId }) })}</p>
+        ) : null}
       </header>
 
-      <div className={`grid grid-cols-2 overflow-hidden rounded-2xl sm:grid-cols-4 ${GLASS_SUBTLE_CLASS}`}>
-        <Metric icon={<DollarSign className="h-3.5 w-3.5" aria-hidden="true" />} label={t("colSold")} value={soldCents == null ? "—" : formatCents(soldCents)} accent="text-emerald-300" />
+      {/* Sold and the visits are in the cards below; the shelf and the pieces are what to check on the way in. */}
+      <div className={`grid grid-cols-2 overflow-hidden rounded-2xl ${GLASS_SUBTLE_CLASS}`}>
         <Metric icon={<PackageCheck className="h-3.5 w-3.5" aria-hidden="true" />} label={t("colShelf")} value={unitsOnShelf == null ? "—" : String(unitsOnShelf)} />
         <Metric icon={<Nfc className="h-3.5 w-3.5" aria-hidden="true" />} label={t("sectionPieces")} value={String(pieces?.pieces ?? 0)} />
-        <Metric icon={<CalendarDays className="h-3.5 w-3.5" aria-hidden="true" />} label={t("sectionVisits")} value={String(visits.length)} />
       </div>
 
       <div className="grid min-w-0 items-start gap-6 lg:grid-cols-[minmax(0,1.15fr)_minmax(360px,0.85fr)]">
-        <div className="min-w-0 space-y-6">
-          <SectionCard title={t("sectionDetails")} icon={Building2} bodyClassName="p-4 sm:p-5"><CompanyInlineEditor lead={lead} /></SectionCard>
-          <SectionCard title={t("sectionContacts")} icon={UsersRound} bodyClassName="p-4 sm:p-5"><LeadContacts leadId={lead.id} contacts={lead.contacts ?? []} /></SectionCard>
+        {/* On a phone the order is what to do on the spot: sell, then the history, then the people and the record. */}
+        <div className="min-w-0 max-lg:contents lg:space-y-6">
+          <div className="max-lg:order-5">
+            {isDesktop ? (
+              <SectionCard title={t("sectionDetails")} icon={Building2} bodyClassName="p-4 sm:p-5"><CompanyInlineEditor lead={lead} /></SectionCard>
+            ) : (
+              <details className={`group rounded-2xl ${GLASS_SUBTLE_CLASS}`} data-testid="lead-details-collapsed">
+                <summary className="flex min-h-12 cursor-pointer list-none items-center gap-2 px-4 text-sm font-semibold text-white/80 [&::-webkit-details-marker]:hidden">
+                  <Building2 className="h-4 w-4 text-white/45" aria-hidden="true" />
+                  <span className="min-w-0 flex-1">{t("sectionDetails")}</span>
+                  <ChevronDown className="h-4 w-4 text-white/40 transition-transform group-open:rotate-180" aria-hidden="true" />
+                </summary>
+                <div className="px-4 pb-4"><CompanyInlineEditor lead={lead} /></div>
+              </details>
+            )}
+          </div>
+          <div className="max-lg:order-4"><SectionCard title={t("sectionContacts")} icon={UsersRound} bodyClassName="p-4 sm:p-5"><LeadContacts leadId={lead.id} contacts={lead.contacts ?? []} /></SectionCard></div>
         </div>
-        <div className="min-w-0 space-y-6">
-          <SectionCard title={t("sectionSales")} icon={DollarSign} bodyClassName="p-4 sm:p-5"><LeadSalesPanel leadId={lead.id} leadName={lead.name} lead={lead} compact /></SectionCard>
+        <div className="min-w-0 max-lg:contents lg:space-y-6">
+          <div className="max-lg:order-1"><SectionCard title={t("sectionSales")} icon={DollarSign} bodyClassName="p-4 sm:p-5"><LeadSalesPanel leadId={lead.id} leadName={lead.name} lead={lead} compact /></SectionCard></div>
           {pieces && pieces.pieces > 0 ? (
-            <SectionCard title={<span className="flex items-center gap-2">{t("sectionPieces")}<ModuleBadge module="tags" /></span>} icon={Nfc} bodyClassName="p-4 sm:p-5">
+            <div className="max-lg:order-2"><SectionCard title={<span className="flex items-center gap-2">{t("sectionPieces")}<ModuleBadge module="tags" /></span>} icon={Nfc} bodyClassName="p-4 sm:p-5">
               <LeadPiecesPanel leadId={lead.id} leadName={lead.name} summary={pieces} />
-            </SectionCard>
+            </SectionCard></div>
           ) : null}
-          <SectionCard title={t("sectionVisits")} icon={CalendarDays} bodyClassName={visits.length ? "px-4 py-2 sm:px-5" : "p-4 sm:p-5"}>
+          <div className="max-lg:order-3"><SectionCard title={t("sectionVisits")} icon={CalendarDays} bodyClassName={visits.length ? "px-4 py-2 sm:px-5" : "p-4 sm:p-5"}>
             {visits.length === 0 ? <EmptyState compact dense icon={CalendarDays} title={t("noVisitsYet")} /> : (
               <div className="divide-y divide-white/[0.06]">{visits.slice(0, 6).map((visit) => {
                 const when = formatVisitWhen(visit);
@@ -218,13 +250,18 @@ export function LeadDetailPane({ lead, pieces, visits, onClose, backLabel, onDel
                 );
               })}</div>
             )}
-          </SectionCard>
+          </SectionCard></div>
         </div>
       </div>
 
-      <div className="flex justify-end border-t border-white/[0.06] pt-4">
+      <div className="flex flex-wrap items-center justify-between gap-3 border-t border-white/[0.06] pt-4">
+        {access.owner && companyStage(lead.status) !== "customer" && onConvertToCustomer ? (
+          <Button type="button" variant="secondary" size="sm" onClick={onConvertToCustomer} loading={converting}>
+            <UserRoundCheck aria-hidden="true" />{t("promote")}
+          </Button>
+        ) : <span />}
         {access.owner ? (
-          <Button type="button" variant="ghost" size="sm" onClick={onDelete} className="text-red-300/70 hover:bg-red-500/[0.08] hover:text-red-300"><Trash2 aria-hidden="true" />{t("delete")}</Button>
+          <Button type="button" variant="ghost" size="sm" onClick={onDelete} className="text-red-300/70 hover:bg-red-500/[0.08] hover:text-red-300"><Trash2 aria-hidden="true" />{t("deleteCompany")}</Button>
         ) : (
           <p className="text-xs text-white/40" data-testid="lead-owner-only-note">{t("ownerOnlyNote")}</p>
         )}
