@@ -133,8 +133,8 @@ export function FilterSearch({
   testId?: string;
   /** Focus with the "/" desktop shortcut. */
   shortcut?: boolean;
-  /** Enter in the box, with what is typed (a code that opens its record, say). */
-  onEnter?: (value: string) => void;
+  /** Enter in the box, with what is typed (a code that opens its record, say). Answer `true` when it did its job: the box empties. */
+  onEnter?: (value: string) => boolean | Promise<boolean>;
 }) {
   const t = useT(filtersMessages);
   const [draft, setDraft] = useState(value);
@@ -172,7 +172,11 @@ export function FilterSearch({
         onKeyDown={(event) => {
           if (event.key === "Enter" && onEnter && draft.trim()) {
             event.preventDefault();
-            onEnter(draft.trim());
+            void Promise.resolve(onEnter(draft.trim())).then((done) => {
+              if (done !== true) return;
+              sent.current = "";
+              setDraft("");
+            });
             return;
           }
           if (event.key === "Escape" && draft) {

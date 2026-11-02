@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { Button } from "@/components/ui/button";
+import { useViewerAccess } from "@/lib/adminMode";
 import { useLocation } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { Building2, ChevronRight, Nfc, Package, ScanLine, Shapes, SlidersHorizontal } from "lucide-react";
@@ -126,8 +128,16 @@ export default function PiecesScreen({ selectedCode = null }: { selectedCode?: s
 
   const listLoading = <ListSkeleton rows={6} rowClassName="h-[88px] rounded-2xl" />;
   const listError = <ErrorState message={errorText(error, tc("requestFailed"))} onRetry={() => void refetch()} />;
+  // Whoever manages is not told to ask a manager: the company's pieces are in Stock.
+  const { reach } = useViewerAccess();
+  const nothingYet = (data ?? []).length === 0 && !hasListFilters;
   const listEmpty = (
-    <EmptyState tone="tags" icon={Package} title={(data ?? []).length === 0 && !hasListFilters ? t("piecesEmpty") : t("piecesNoMatch")} />
+    <EmptyState
+      tone="tags"
+      icon={Package}
+      title={nothingYet ? t(reach ? "piecesEmptyManager" : "piecesEmpty") : t("piecesNoMatch")}
+      action={nothingYet && reach ? <Button type="button" variant="secondary" onClick={() => navigate("/admin/tags/pieces")} data-testid="button-open-stock">{t("openStock")}</Button> : undefined}
+    />
   );
 
   return (

@@ -14,6 +14,7 @@ import { canLockChip, nfcMode } from "@/pages/tags/webNfc";
 import { tagPath } from "@/pages/tags/lib";
 import { CARD, CopyButton, EYEBROW_MUTED, Pill, Spinner, StepList } from "@/pages/tags/ui";
 import { usePiece, usePieceWrite, type PieceCommandsRef } from "./PieceContext";
+import { usePieceChipLabel } from "./PieceStatusPill";
 import { pieceChipState, type PieceChipState } from "./pieceStatus";
 import { pieceSituation } from "./pieceView";
 
@@ -58,6 +59,9 @@ export function ChipSection({ desktopWriter, commands }: {
   // Nothing to write on a piece that is gone or not here yet.
   const idle = retired || tag.stockStatus === "lost" || tag.stockStatus === "pending";
   const chipState = pieceChipState(tag);
+  // Where the chip asks for a step it says it in the words of the lists ("Not written", "Not tested").
+  const chipWords = usePieceChipLabel()(tag);
+  const chipAsksForStep = chipState === "needsWriting" || chipState === "failed" || chipState === "untested";
   const chipIsNextStep = pieceSituation(tag, viewer).action?.kind === "writeChip";
   const pillTone = chipState === "none" && (tag.nfcStatus === "verified" || tag.nfcStatus === "locked") ? "green" : CHIP_PILL_TONE[chipState];
   // Another phone locks only a chip a tap confirmed (lock a wrong chip and it is lost);
@@ -91,7 +95,7 @@ export function ChipSection({ desktopWriter, commands }: {
       <div className="flex items-center justify-between gap-2">
         <p className={EYEBROW_MUTED}>{t("chipTitle")}</p>
         <div className="flex items-center gap-1">
-          <Pill tone={pillTone}>{t(`chip_${tag.nfcStatus}` as "chip_verified")}</Pill>
+          <Pill tone={pillTone}>{chipAsksForStep ? chipWords.label : t(`chip_${tag.nfcStatus}` as "chip_verified")}</Pill>
           {canLock && (
             // Neutral: locking is optional; the green "Chip locked" pill is what it leads to.
             <button

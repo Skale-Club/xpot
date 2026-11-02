@@ -181,13 +181,25 @@ export function PiecesTab({ go }: { go: (path: string) => void }) {
   );
   const openPiece = (id: string) => (isDesktop ? setPane(id) : go(`/pieces/${id}`));
   // The one search box also takes a piece's code or what its QR / chip holds (a scanned link): Enter opens that piece.
-  const openByCode = async (typed: string) => {
+  const openByCode = async (typed: string): Promise<boolean> => {
     const scan = parseTagIntakeScan(typed, [window.location.hostname]);
-    if (!scan.ok) return;
+    if (!scan.ok) return false;
     try {
-      openPiece((await getJson<{ id: string }>(`/api/xpot/tags/lookup/${scan.publicCode}`)).id);
+      const { id } = await getJson<{ id: string }>(`/api/xpot/tags/lookup/${scan.publicCode}`);
+      // The code did its job: the list behind the pop-up is the list again, not one row.
+      if (!isDesktop) go(`/pieces/${id}`);
+      else {
+        setParams((now) => {
+          const next = new URLSearchParams(now);
+          next.delete("search");
+          next.set("piece", id);
+          return next;
+        }, { replace: current() });
+      }
+      return true;
     } catch {
       // Not a piece we know: the list below already shows that nothing matches.
+      return false;
     }
   };
   const closePiece = useCallback(() => setPane(null), [setPane]);
@@ -294,7 +306,7 @@ export function PiecesTab({ go }: { go: (path: string) => void }) {
       </div>
       <FilterBar
         testId="admin-pieces-filters"
-        search={<FilterSearch value={filters.search} onChange={(search) => set({ search })} onEnter={(typed) => void openByCode(typed)} placeholder={tm("searchPlaceholder")} debounceMs={350} testId="admin-pieces-search" />}
+        search={<FilterSearch value={filters.search} onChange={(search) => set({ search })} onEnter={openByCode} placeholder={tm("searchPlaceholder")} debounceMs={350} testId="admin-pieces-search" />}
         actions={
           isAdmin ? (
             // Quiet on purpose: a loose piece outside any production is the exception, not the way to add stock.
