@@ -12,6 +12,7 @@ import {
   DollarSign,
   Mic2,
   CircleCheck,
+  MapPinCheck,
   MapPinOff,
   XCircle,
   type LucideIcon,
@@ -44,6 +45,8 @@ import { SocialLinks } from "./components/leads/socials";
 import { InlineField } from "./components/InlineField";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { VoiceRecorder } from "./components/VoiceRecorder";
+import { VisitTextNote } from "./components/VisitTextNote";
+import { defaultCheckoutStatus } from "./visitRules";
 import { VisitRow } from "./components/VisitRow";
 import { LiveMap } from "./components/LiveMap";
 import { StatusPicker } from "./components/VisitStatus";
@@ -155,7 +158,7 @@ function VisitAction({ icon: Icon, title, hint, onClick, tone = "indigo", testId
       </span>
       <span className="min-w-0">
         <strong className="block truncate text-sm font-bold text-white">{title}</strong>
-        <span className="mt-0.5 block truncate text-[10px] text-white/40">{hint}</span>
+        <span className="mt-0.5 hidden truncate text-[10px] text-white/40 sm:block">{hint}</span>
       </span>
     </button>
   );
@@ -205,13 +208,13 @@ function ActiveLeadInfo({ lead, profile, profileLoading }: { lead: VisitLead; pr
       {(lead.phone || lead.email || websiteHref) && (
         <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
           {lead.phone && (
-            <a href={phoneHref(lead.phone)} className="flex min-h-10 min-w-0 items-center gap-2 rounded-xl bg-white/[0.035] px-3 py-2 text-white/75">
+            <a href={phoneHref(lead.phone)} className="col-span-2 flex min-h-10 min-w-0 items-center gap-2 rounded-xl bg-white/[0.035] px-3 py-2 text-white/75">
               <Phone className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
               <span className="truncate">{displayPhone(lead.phone)}</span>
             </a>
           )}
           {websiteHref && (
-            <a href={websiteHref} target="_blank" rel="noreferrer" className="flex min-h-10 min-w-0 items-center gap-2 rounded-xl bg-white/[0.035] px-3 py-2 text-white/75">
+            <a href={websiteHref} target="_blank" rel="noreferrer" className="col-span-2 flex min-h-10 min-w-0 items-center gap-2 rounded-xl bg-white/[0.035] px-3 py-2 text-white/75">
               <Globe className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
               <span className="truncate">{lead.website}</span>
             </a>
@@ -359,6 +362,8 @@ export function XpotCheckIn() {
   const [checkoutStatus, setCheckoutStatus] = useState<VisitStatus>("completed");
   const [createLeadDialogOpen, setCreateLeadDialogOpen] = useState(false);
   const [activeVisitPanel, setActiveVisitPanel] = useState<"sales" | "note" | "checkout" | "cancel" | null>(null);
+  // A sale recorded during the visit makes "Sale made" the result it starts with at check-out.
+  const visitHasSale = ((activeVisit as { visitSales?: { transactions: number } } | null)?.visitSales?.transactions ?? 0) > 0;
   const activeLeadDetails: VisitLead | null = activeVisit?.lead
     ? (leadsQuery.data?.find((lead) => lead.id === activeVisit.lead!.id) ?? activeVisit.lead)
     : null;
@@ -491,8 +496,18 @@ export function XpotCheckIn() {
               }}
             />
           )}
-          <VisitAction icon={CircleCheck} title={t("finishVisit")} hint={t("finishVisitHint")} tone="emerald" onClick={() => setActiveVisitPanel("checkout")} />
         </div>
+
+        <Button
+          type="button"
+          variant="brand"
+          size="lg"
+          onClick={() => { setCheckoutStatus((current) => defaultCheckoutStatus(current, visitHasSale) as VisitStatus); setActiveVisitPanel("checkout"); }}
+          className="relative min-h-12 w-full text-base font-bold"
+          data-testid="button-finish-visit"
+        >
+          <CircleCheck aria-hidden="true" />{t("finishVisit")}
+        </Button>
 
         {/* Secondary on purpose: a mistaken check-in is discarded, not checked out with an outcome. */}
         <div className="relative flex justify-center">
@@ -538,6 +553,7 @@ export function XpotCheckIn() {
         <DialogContent className="max-w-md">
           <DialogHeader className="pr-8"><DialogTitle className="text-base">{t("visitNote")}</DialogTitle></DialogHeader>
           <VoiceRecorder onUpload={uploadVisitNote} />
+          <VisitTextNote visitId={activeVisit.id} saved={activeVisit.note?.summary} />
           <VisitActionsPanel visitId={activeVisit.id} onApplied={() => invalidateXpotData()} />
         </DialogContent>
       </Dialog>

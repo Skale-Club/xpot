@@ -436,7 +436,8 @@ function ActiveVisitBanner() {
           <span className="relative h-2.5 w-2.5 rounded-full bg-emerald-400" />
         </span>
         <span className="min-w-0 flex-1 truncate font-medium">
-          {lead ? t("activeVisitAt", { lead }) : t("activeVisit")}
+          {/* On a phone the company is what matters; "visit in progress" would push its name off the strip. */}
+          {lead ? <><span className="sm:hidden">{lead}</span><span className="hidden sm:inline">{t("activeVisitAt", { lead })}</span></> : t("activeVisit")}
         </span>
         <span className="tabular-nums text-emerald-200/70">{elapsedLabel(visit.checkedInAt)}</span>
         <span className="shrink-0 font-semibold text-emerald-300">{t("openVisit")} →</span>
