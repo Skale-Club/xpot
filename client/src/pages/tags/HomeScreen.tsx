@@ -332,7 +332,7 @@ export default function HomeScreen() {
           className="mt-4 min-h-10 w-full text-center text-sm text-white/50 underline underline-offset-2 hover:text-white/80"
           data-testid="link-write-direct"
         >
-          {t("navDirect")}
+          {t("directLink")}
         </button>
         <Button type="button" variant="ghost" size="lg" onClick={() => setSheet(null)} className="mt-1 w-full">
           {tc("cancel")}

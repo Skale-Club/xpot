@@ -250,8 +250,8 @@ describe("visitsScreen", () => {
 
 describe("phoneBarHidden", () => {
   it("hides the top bar inside a piece, a customer, a company or a visit, and keeps it on the screens you start from", () => {
-    for (const p of ["/tags/t/ABC123", "/tags/pieces/ABC123", "/tags/customers/27", "/leads/9", "/dashboard/history/4", "/route/check-in", "/check-in"]) expect(phoneBarHidden(p)).toBe(true);
-    for (const p of ["/tags", "/tags/pieces", "/tags/customers", "/tags/shop", "/tags/direct", "/dashboard", "/dashboard/history", "/route", "/leads", "/leads/prospects", "/tasks", "/sales"]) expect(phoneBarHidden(p)).toBe(false);
+    for (const p of ["/tags/t/ABC123", "/tags/pieces/ABC123", "/tags/customers/27", "/tags/direct", "/leads/9", "/dashboard/history/4", "/route/check-in", "/check-in"]) expect(phoneBarHidden(p)).toBe(true);
+    for (const p of ["/tags", "/tags/pieces", "/tags/customers", "/tags/shop", "/dashboard", "/dashboard/history", "/route", "/leads", "/leads/prospects", "/tasks", "/sales"]) expect(phoneBarHidden(p)).toBe(false);
   });
 });
 

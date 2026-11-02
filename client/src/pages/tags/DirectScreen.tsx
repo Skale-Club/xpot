@@ -193,6 +193,8 @@ export default function DirectScreen() {
                 {t("showQr")}
               </Button>
             </SheetActions>
+            {/* Two buttons look dead when nothing says what they wait for. */}
+            {!ready && <p className="text-center text-xs text-white/50" data-testid="direct-needs">{t(`directNeed_${kind}` as "directNeed_url")}</p>}
           </section>
         </div>
 
