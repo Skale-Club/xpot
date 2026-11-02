@@ -688,6 +688,34 @@ describe("which NFC goes inside", () => {
     expect((await request(app, "GET", "/api/xpot/admin/print-models/nfc-sticker-round-25")).body.onHand).toBe(10);
   });
 
+  it("a Menu print takes the chosen title font to the bench, a redo keeps it, and another face refuses one", async () => {
+    const app = admin();
+    await choiceModel(app);
+    const created = await request(app, "POST", "/api/xpot/admin/print-generate", { productType: "large_plate", theme: "white", face: "menu", quantity: 4, nfcMount: "sticker_round_25", menuFont: "Nunito Black (rounded)" });
+    expect(created.status).toBe(201);
+    expect(created.body.menuFont).toBe("Nunito Black (rounded)");
+    const id = created.body.plates[0].id;
+    expect(created.body.plates[0].menuFont).toBe("Nunito Black (rounded)");
+    const production = await import("../../server/tags/production.js");
+    expect((await production.jobTicket(id, null)).version.params).toMatchObject({ font: "Nunito Black (rounded)", nfc_mount: "sticker_round_25" });
+    await request(app, "POST", `/api/xpot/admin/print-jobs/${id}/transition`, { action: "cancel" });
+    const again = await request(app, "POST", `/api/xpot/admin/print-jobs/${id}/redo`);
+    expect(again.body.menuFont).toBe("Nunito Black (rounded)");
+
+    const unsaid = await firstPlate(app, { model: "plate-large-menu-white", quantity: 4, nfcMount: "sticker_round_25" });
+    expect(unsaid.menuFont).toBeNull();
+    expect((await production.jobTicket(unsaid.id, null)).version.params).not.toHaveProperty("font");
+    expect((await request(app, "POST", "/api/xpot/admin/print-jobs", { model: "plate-large-menu-white", quantity: 4, nfcMount: "sticker_round_25", menuFont: "Comic Sans" })).status).toBe(400);
+
+    await request(app, "POST", "/api/xpot/admin/print-models", {
+      slug: "plate-large-instagram-white", kind: "serialized", title: "Plate Large · Instagram · White", productType: "large_plate", face: "instagram", theme: "white",
+      salesProductId: await salesProductId(), batchPrefix: "TPLATE", version: { builder: "plate.instagram", beds: [bedX4], consumes: [] },
+    });
+    const other = await request(app, "POST", "/api/xpot/admin/print-jobs", { model: "plate-large-instagram-white", quantity: 4, menuFont: "Metropolis Bold" });
+    expect(other.status).toBe(409);
+    expect(other.body.code).toBe("print_font_unavailable");
+  });
+
   it("a plate printed again keeps its type", async () => {
     const app = admin();
     await choiceModel(app);

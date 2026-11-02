@@ -94,10 +94,9 @@ def plate_google(tag, index, params, out_dir):
                     ('Yellow - Stars', 'Yellow_Google_Stars.stl', 3)]
 
 
-# Menu title fonts the Menu layout draws as-is (Metropolis's spaced capitals need their own layout first).
-MENU_FONTS_READY = ('Inria Serif Bold', 'Inria Serif Bold Italic')
-# The Plate also lays out Metropolis's spaced capitals (build_menu_batch.artwork); the Stand's card has no layout for them.
-PLATE_MENU_FONTS = MENU_FONTS_READY + ('Metropolis Medium, MENU spaced',)
+# The Menu title fonts, all approved (user, 2026-11-02): the Plate and the Stand draw each one, chosen per print.
+MENU_FONTS = ('Inria Serif Bold', 'Inria Serif Bold Italic', 'Metropolis Medium, MENU spaced', 'Inter SemiBold, MENU spaced',
+              'Metropolis Bold', 'Nunito Black (rounded)')
 
 
 def plate_menu(tag, index, params, out_dir):
@@ -105,8 +104,8 @@ def plate_menu(tag, index, params, out_dir):
     import build_menu_sticker_test as sticker
     theme = _theme(params, index)
     font = params.get('font', 'Inria Serif Bold')
-    if font not in PLATE_MENU_FONTS:
-        raise BuildError(f'menu font {font!r} has no layout yet: one of {", ".join(PLATE_MENU_FONTS)}')
+    if font not in MENU_FONTS:
+        raise BuildError(f'menu font {font!r} has no layout yet: one of {", ".join(MENU_FONTS)}')
     size = params.get('size', 'large')
     if size not in build_menu_batch.MENU_SIZES:
         raise BuildError(f'menu size {size!r}: one of {", ".join(build_menu_batch.MENU_SIZES)}')
@@ -183,8 +182,8 @@ def _stand(module_name, face, tag, index, params, out_dir, batch):
 
 def _menu_font(params, face):
     font = params.get('font', 'Inria Serif Bold')
-    if face == 'Menu' and font not in MENU_FONTS_READY:
-        raise BuildError(f'menu font {font!r} has no layout yet: one of {", ".join(MENU_FONTS_READY)}')
+    if face == 'Menu' and font not in MENU_FONTS:
+        raise BuildError(f'menu font {font!r} has no layout yet: one of {", ".join(MENU_FONTS)}')
     return font
 
 

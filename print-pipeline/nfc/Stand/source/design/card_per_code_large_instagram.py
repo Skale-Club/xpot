@@ -228,6 +228,8 @@ def build(code, batch, serial, out_dir, nfc_mount='embedded_round', theme='white
     otherwise)."""
     if nfc_mount not in nfc_mounts.NFC_MOUNTS:
         raise ValueError('unsupported nfc_mount')
+    global H
+    H = fc.CARD_H  # a Plate built earlier in this process leaves its own height here (tile_per_code)
     large.configure()
     code = fa.normalize_code(code)
     art = layout(code)

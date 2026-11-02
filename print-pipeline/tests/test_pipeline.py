@@ -98,7 +98,7 @@ class BuilderTest(unittest.TestCase):
         from builders import BUILDERS, BuildError, build_piece
         tag = {'public_code': 'AAAA1111', 'serial_number': '001'}
         cases = [(builder, {'nfc_mount': 'sticker_round_99'}) for builder in BUILDERS]
-        cases += [('stand.menu', {'size': 'large', 'nfc_mount': 'sticker_10x20', 'font': 'Metropolis Medium, MENU spaced'}),
+        cases += [('stand.menu', {'size': 'large', 'nfc_mount': 'sticker_10x20', 'font': 'Comic Sans'}),
                   ('stand.google', {'size': 'medium', 'nfc_mount': 'sticker_10x20'})]
         for builder, params in cases:
             with self.subTest(builder=builder, params=params):
@@ -107,6 +107,18 @@ class BuilderTest(unittest.TestCase):
                         build_piece(builder, tag, 0, params, '.')
                 except ModuleNotFoundError as err:
                     self.skipTest(f'needs the geometry packages: {err.name}')
+
+    def test_a_large_stand_builds_after_a_plate_in_the_same_process(self):
+        import tempfile
+        from builders import build_piece
+        tag = {'public_code': 'A7K3P9X2', 'serial_number': '001', 'qr_url': 'https://xpot.place/q/A7K3P9X2', 'nfc_url': 'https://xpot.place/n/A7K3P9X2'}
+        params = {'theme': 'white', 'nfc_mount': 'sticker_round_25'}
+        try:
+            for builder, size in (('plate.menu', 'small'), ('stand.menu', 'large'), ('plate.menu', 'large'), ('stand.instagram', 'large')):
+                with tempfile.TemporaryDirectory() as out:
+                    build_piece(builder, tag, 0, dict(params, size=size), out)
+        except ModuleNotFoundError as err:
+            self.skipTest(f'needs the geometry packages: {err.name}')
 
 
 class NfcMountTest(unittest.TestCase):

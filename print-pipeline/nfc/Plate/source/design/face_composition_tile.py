@@ -97,12 +97,10 @@ MENU_FONTS = {
     'Inria Serif Bold': ('InriaSerif-Bold.otf', False, 0.0),
     'Inria Serif Bold Italic': ('InriaSerif-BoldItalic.otf', False, 0.0),
     'Metropolis Medium, MENU spaced': ('Metropolis-Medium.otf', True, 0.30),
-}
-MENU_FONTS_STUDY = dict(MENU_FONTS, **{          # the first study's six, for --menu-fonts
     'Inter SemiBold, MENU spaced': ('Inter_24pt-SemiBold.ttf', True, 0.28),
     'Metropolis Bold': ('Metropolis-Bold.otf', False, 0.0),
     'Nunito Black (rounded)': ('NunitoW900.ttf', False, 0.0),
-})
+}
 MENU_TITLE_CAP, MENU_TITLE_MAX_W = 16.4, 72.0
 
 
@@ -162,7 +160,7 @@ def _path_d(tp, k, dx, base):
 
 def title_block(word, font, cap=None, width=None):
     """`word` in a MENU_FONTS font, sized by cap height (or by ink width); letters spaced by the font's tracking."""
-    fontfile, upper, tracking = MENU_FONTS_STUDY[font]
+    fontfile, upper, tracking = MENU_FONTS[font]
     prop = _font(fontfile)
     word = word.upper() if upper else word
     capref = TextPath((0, 0), 'H', size=100, prop=prop).get_extents().height

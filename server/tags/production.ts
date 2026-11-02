@@ -17,6 +17,8 @@ import {
 } from "#shared/schema.js";
 import {
   PRINT_BOUGHT_BED,
+  PRINT_MENU_FONTS,
+  menuFontsOf,
   nfcMountsOf,
   preferredNfcMount,
   withNfcVariant,
@@ -62,6 +64,7 @@ import {
   type PrintPartReason,
   type PrintPreviewCatalog,
   type PrintPreviewInfo,
+  type PrintMenuFont,
   type PrintRequestItem,
   type PrintVersionInput,
   type PrintVersionSource,
@@ -671,7 +674,7 @@ export async function currentPreview(modelRef: string, actor?: TagActor): Promis
 
 interface JobRow {
   id: string; model_id: string; model_slug: string; model_title: string; model_kind: string; version_id: string;
-  version_number: number; bed_label: string; plates: number; quantity: number; status: string; batch_id: string | null; nfc_mount: string | null;
+  version_number: number; bed_label: string; plates: number; quantity: number; status: string; batch_id: string | null; nfc_mount: string | null; menu_font: string | null;
   batch_code: string | null; piece_count: number | null; received_count: number | null; pending_count: number | null; damaged_count: number | null; device_name: string | null;
   notes: string | null; error_code: string | null; error_message: string | null; report: Record<string, unknown> | null; created_at: Date | string;
   built_at: Date | string | null; printed_at: Date | string | null; updated_at: Date | string; last_event_at: Date | string | null;
@@ -697,7 +700,7 @@ const REPRINTED_BY = sql`
 
 const JOB_SELECT = sql`
   SELECT j.id, j.model_id, m.slug AS model_slug, m.title AS model_title, m.kind AS model_kind, j.version_id,
-    v.version AS version_number, j.bed_label, j.plates, j.quantity, j.status, j.batch_id, j.nfc_mount, b.batch_code,
+    v.version AS version_number, j.bed_label, j.plates, j.quantity, j.status, j.batch_id, j.nfc_mount, j.menu_font, b.batch_code,
     CASE WHEN j.batch_id IS NULL THEN NULL ELSE (SELECT count(*)::int FROM tags t WHERE t.batch_id = j.batch_id) END AS piece_count,
     CASE WHEN j.batch_id IS NULL THEN NULL
       ELSE (SELECT count(*)::int FROM tags t WHERE t.batch_id = j.batch_id AND t.stock_status NOT IN ('pending', 'damaged')) END AS received_count,
@@ -730,7 +733,7 @@ function jobItem(j: JobRow, now = Date.now()): PrintJobItem {
   return {
     id: j.id,
     modelId: j.model_id,
-    nfcMount: j.nfc_mount as PrintNfcMount | null,
+    nfcMount: j.nfc_mount as PrintNfcMount | null, menuFont: j.menu_font,
     modelSlug: j.model_slug,
     modelTitle: j.model_title,
     modelKind: j.model_kind as PrintModelKind,
@@ -785,7 +788,7 @@ export async function listJobs(filter: JobListFilter, modelRef: string | null, s
 
 interface RequestRow {
   id: string; model_id: string; model_slug: string; model_title: string; model_kind: string; version_number: number;
-  bed_label: string; quantity: number; nfc_mount: string | null; notes: string | null; created_at: Date | string; open: boolean;
+  bed_label: string; quantity: number; nfc_mount: string | null; menu_font: string | null; notes: string | null; created_at: Date | string; open: boolean;
   organization_id: number; organization_name: string;
 }
 
@@ -795,7 +798,7 @@ const OPEN_PLATE = sql`j.status IN ('requested', 'building', 'ready', 'printing'
 
 const REQUEST_SELECT = sql`
   SELECT r.id, r.model_id, m.slug AS model_slug, m.title AS model_title, m.kind AS model_kind, v.version AS version_number,
-    r.bed_label, r.quantity, r.nfc_mount, r.notes, r.created_at,
+    r.bed_label, r.quantity, r.nfc_mount, r.menu_font, r.notes, r.created_at,
     EXISTS (SELECT 1 FROM print_jobs j WHERE j.request_id = r.id AND ${OPEN_PLATE}) AS open,
     r.organization_id, o.name AS organization_name
   FROM print_requests r
@@ -817,6 +820,7 @@ async function withPlates(list: RequestRow[], executor: typeof db | Tx = db): Pr
     bedLabel: r.bed_label,
     quantity: Number(r.quantity),
     nfcMount: r.nfc_mount as PrintNfcMount | null,
+    menuFont: r.menu_font,
     notes: r.notes,
     createdAt: iso(r.created_at)!,
     open: Boolean(r.open),
@@ -877,7 +881,7 @@ export async function getJob(id: string, scope: ProductionScope): Promise<PrintJ
   const job = await loadJob(id, scope);
   const [row] = await rows<JobRow>(sql`${JOB_SELECT} WHERE j.id = ${job.id}`);
   const [version] = await rows<VersionRow>(sql`${VERSION_SELECT} WHERE v.id = ${job.versionId}`);
-  const printed = version ? printedVersion(version, job.nfcMount) : null;
+  const printed = version ? printedVersion(version, job.nfcMount, job.menuFont) : null;
   const bed = printed?.beds.find((b) => b.label === job.bedLabel) ?? null;
   const files = await db.select().from(printJobFiles).where(eq(printJobFiles.jobId, job.id)).orderBy(printJobFiles.createdAt);
   return {
@@ -898,11 +902,18 @@ function fileItem(f: typeof printJobFiles.$inferSelect): PrintJobFileItem {
 }
 
 /** A version's params, recipe, beds and parts as the plate's NFC type prints them (shared withNfcVariant). */
-function printedVersion(version: VersionRow, mount: string | null) {
+function printedVersion(version: VersionRow, mount: string | null, menuFont: string | null) {
+  const params = menuFont ? { ...version.params, font: menuFont } : version.params ?? {};
   return withNfcVariant(
-    { params: version.params ?? {}, recipe: version.recipe ?? {}, beds: version.beds ?? [], consumes: version.consumes ?? [] },
+    { params, recipe: version.recipe ?? {}, beds: version.beds ?? [], consumes: version.consumes ?? [] },
     version.nfc_variants, mount,
   );
+}
+
+/** The title font of a new print: only a Menu piece has one to choose; unsaid, the version's own. */
+function pickMenuFont(version: VersionRow, requested: PrintMenuFont | undefined): PrintMenuFont | null {
+  if (requested && !menuFontsOf(version.builder).includes(requested)) throw new TagError("Only a Menu piece has a title font to choose", 409, "print_font_unavailable");
+  return requested ?? null;
 }
 
 /** The NFC type of a new print: asked when the version offers a choice, refused when it does not have that one. */
@@ -1014,6 +1025,7 @@ interface PlateContext {
   plateNumber: number;
   plateCount: number;
   nfcMount: string | null;
+  menuFont: string | null;
   notes: string | null;
   userId: string | null;
   source: JourneySource;
@@ -1093,6 +1105,7 @@ async function createSerializedPlate(model: PrintModelRow, version: Pick<Version
           quantity,
           batchId: batch.id,
           nfcMount: ctx.nfcMount,
+          menuFont: ctx.menuFont,
           status: "requested",
           notes: ctx.notes,
           requestedByUserId: ctx.userId,
@@ -1165,6 +1178,7 @@ export async function createJob(input: PrintJobCreateInput, userId: string | nul
   }
   const bed = pickBed(version, input.bed);
   const nfcMount = pickNfcMount(version, input.nfcMount, Boolean(orderContext));
+  const menuFont = pickMenuFont(version, input.menuFont);
   if (model.kind === "serialized" && (!model.batchPrefix || !model.productType || !model.salesProductId)) {
     throw new TagError("This model needs a product, a sales product and a batch prefix before printing", 409, "print_model_incomplete");
   }
@@ -1200,10 +1214,11 @@ export async function createJob(input: PrintJobCreateInput, userId: string | nul
       replacesJobId: replaces?.id ?? null,
       customerOrderLineId: orderLineId,
       nfcMount,
+      menuFont,
     }).returning({ id: printRequests.id });
     for (let index = 0; index < plates.length; index++) {
       const ctx: PlateContext = {
-        organizationId: organization.id, requestId: request.id, plateNumber: index + 1, plateCount: plates.length, nfcMount, notes, userId, source,
+        organizationId: organization.id, requestId: request.id, plateNumber: index + 1, plateCount: plates.length, nfcMount, menuFont, notes, userId, source,
         within: { tx, afterCommit },
       };
       if (model.kind === "part") await createPartPlate(model, version, bed, ctx);
@@ -1230,7 +1245,7 @@ export async function generatePieces(input: PrintGenerateInput, userId: string |
       "print_choice_unavailable");
   }
   return createJob({
-    model: choice.modelId, bed: choice.bedLabel, quantity: input.quantity, nfcMount: input.nfcMount, notes: input.notes ?? null, organization: input.organization,
+    model: choice.modelId, bed: choice.bedLabel, quantity: input.quantity, nfcMount: input.nfcMount, menuFont: input.menuFont, notes: input.notes ?? null, organization: input.organization,
   }, userId, source, scope);
 }
 
@@ -1247,7 +1262,8 @@ export async function reprintDamaged(id: string, userId: string | null, scope: P
   // The same NFC type as the plate it replaces, when the current version still makes it (else the default).
   const [model] = await db.select().from(printModels).where(eq(printModels.id, job.modelId)).limit(1);
   const nfcMount = nextNfcMount(await currentVersionOf(model), job.nfcMount);
-  return createJob({ model: job.modelId, bed: job.bedLabel, quantity: n, nfcMount, organization: job.organizationId }, userId, source, scope, job);
+  const menuFont = PRINT_MENU_FONTS.find((font) => font === job.menuFont);
+  return createJob({ model: job.modelId, bed: job.bedLabel, quantity: n, nfcMount, menuFont, organization: job.organizationId }, userId, source, scope, job);
 }
 
 /**
@@ -1305,6 +1321,7 @@ export async function redoJob(id: string, userId: string | null, scope: Producti
     const ctx: PlateContext = {
       organizationId: job.organizationId, requestId: job.requestId, plateNumber: job.plateNumber ?? 1, plateCount: Number(plateCount) || 1,
       nfcMount: freshCodes ? nextNfcMount(version, job.nfcMount) ?? null : job.nfcMount,
+      menuFont: job.menuFont,
       notes: job.notes, userId, source, within: { tx, afterCommit },
     };
     if (freshCodes) {
@@ -1325,6 +1342,7 @@ export async function redoJob(id: string, userId: string | null, scope: Producti
       quantity: job.quantity,
       batchId: job.batchId,
       nfcMount: job.nfcMount,
+      menuFont: job.menuFont,
       status: "requested",
       notes: job.notes,
       requestedByUserId: userId,
@@ -1623,7 +1641,7 @@ export async function jobTicket(id: string, scope: ProductionScope): Promise<Pri
   const job = await loadJob(id, scope);
   const [model] = await db.select().from(printModels).where(eq(printModels.id, job.modelId)).limit(1);
   const [version] = await rows<VersionRow>(sql`${VERSION_SELECT} WHERE v.id = ${job.versionId}`);
-  const printed = printedVersion(version, job.nfcMount);
+  const printed = printedVersion(version, job.nfcMount, job.menuFont);
   const bed = printed.beds.find((b) => b.label === job.bedLabel);
   if (!bed) throw new TagError("The order's bed is missing from its version", 409);
   let batch: PrintJobTicket["batch"] = null;
@@ -1772,7 +1790,7 @@ export async function printNowPlates(device: BenchDevice): Promise<PrintNowPlate
       quantity: Number(j.quantity),
       batchCode: j.batch_code,
       modelTitle: j.model_title,
-      nfcMount: j.nfc_mount as PrintNfcMount | null,
+      nfcMount: j.nfc_mount as PrintNfcMount | null, menuFont: j.menu_font,
       files: await Promise.all(own.map(async (f) => ({
         id: f.id, kind: f.kind as PrintFileKind, filename: f.filename, sha256: f.sha256, bytes: Number(f.bytes), url: await signedFileUrl(f.file_ref),
       }))),
