@@ -1,13 +1,12 @@
 import { Link } from "wouter";
 import { useQueries, useQuery } from "@tanstack/react-query";
-import { ArrowRight, CheckCircle2, ShieldCheck } from "lucide-react";
+import { ArrowRight, CheckCircle2 } from "lucide-react";
 import { COMPANY_ORGANIZATION_SLUG } from "@shared/organizations";
 import { useT } from "@/i18n";
 import { OrdersPanel } from '@/pages/tags/CustomerOrders';
 import { workspacesMessages } from "@/i18n/messages/workspaces";
 import { adminTagsFlowMessages } from "@/i18n/messages/adminTagsFlow";
 import { EmptyState } from "@/components/xpot/EmptyState";
-import { usePanelNames } from "@/components/xpot/panelNames";
 import { ownedOrganizationId, ownedOrganizations, profileOfMe } from "@/lib/adminMode";
 import type { XpotMeResponse } from "@/pages/xpot/types";
 import { ADMIN_TAGS_KEY, STALE_MS, getJson } from "./tags/api";
@@ -107,14 +106,10 @@ function OwnerToday({ me }: { me: XpotMeResponse | undefined }) { return <TodayL
 export function AdminHome() {
   const t = useT(workspacesMessages);
   const { data: me } = useQuery<XpotMeResponse>({ queryKey: ["/api/xpot/me"], retry: false });
-  const { panelName } = usePanelNames();
   const profile = profileOfMe(me);
-  // The screen's title is the top bar's (and the phone's, in the frame): here the gold band says whose panel this is, and what the list is. The sidebar reaches the rest.
+  // The screen's title is the top bar's, and the gold bar above it says whose panel this is. The sidebar reaches the rest.
   return <div className="space-y-6" data-testid="management-home">
-    <header className="flex items-center gap-3 rounded-2xl border border-amber-300/20 bg-amber-300/[0.07] px-4 py-3" data-testid="management-band">
-      <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-amber-300/25 bg-amber-300/10 text-amber-100"><ShieldCheck className="h-5 w-5" aria-hidden="true" /></span>
-      <div className="min-w-0"><p className="text-xs font-semibold uppercase tracking-wider text-amber-200/80">{panelName(profile)}</p><p className="mt-0.5 max-w-2xl text-sm leading-relaxed text-white/60">{t("todayIntro")}</p></div>
-    </header>
+    <p className="max-w-2xl text-sm leading-relaxed text-white/50">{t("todayIntro")}</p>
     <OrdersPanel all/>
     {profile === "platform" ? <PlatformToday me={me} /> : profile === "partner" ? <PartnerToday /> : profile === "owner" ? <OwnerToday me={me} /> : null}
   </div>;
