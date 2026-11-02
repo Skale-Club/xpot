@@ -8,9 +8,10 @@ export type MorePieceFilter = keyof typeof MORE_PIECE_FILTER_DEFAULTS;
 
 export const MORE_PIECE_FILTERS = Object.keys(MORE_PIECE_FILTER_DEFAULTS) as MorePieceFilter[];
 
-/** How many of the hidden filters differ from their default in these URL values. */
+/** How many of the hidden filters differ from their default in these URL values ("Paused" is a status, but it lives behind them). */
 export function countMorePieceFilters(values: Partial<Record<string, string>>): number {
-  return MORE_PIECE_FILTERS.filter((key) => (values[key] ?? MORE_PIECE_FILTER_DEFAULTS[key]) !== MORE_PIECE_FILTER_DEFAULTS[key]).length;
+  const paused = values.status === "off" ? 1 : 0;
+  return paused + MORE_PIECE_FILTERS.filter((key) => (values[key] ?? MORE_PIECE_FILTER_DEFAULTS[key]) !== MORE_PIECE_FILTER_DEFAULTS[key]).length;
 }
 
 /** The panel is open when the person opened it, or whenever a hidden filter is active. */

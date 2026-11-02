@@ -33,7 +33,7 @@ function AccessBadge({ method }: { method: string }) {
   );
 }
 
-function Ranked({ title, icon: Icon, items }: {
+export function Ranked({ title, icon: Icon, items }: {
   title: string;
   icon: typeof Tag;
   items: Array<{
@@ -95,6 +95,103 @@ function Ranked({ title, icon: Icon, items }: {
   );
 }
 
+/** The numbers behind Home's fleet view and the Results screen: the last 30 days of the viewer's pieces (everyone's in a panel's work view). */
+export function useTagsDashboard() {
+  return useQuery({
+    queryKey: ["/api/xpot/tags/dashboard"],
+    queryFn: () => tagsGet<TagDashboard>("/api/xpot/tags/dashboard?days=30"),
+    staleTime: 30_000,
+  });
+}
+
+/** Scans over the last 30 days: QR and NFC counts and the bars. `visitors` adds the estimate of distinct visitors (the fleet view). */
+export function ScansSection({ data, visitors = false }: { data: TagDashboard; visitors?: boolean }) {
+  const t = useT(tagsMessages);
+  const total = data.scans.qr + data.scans.nfc;
+  const chart = data.daily.map((d) => ({ day: d.day, qr: d.qr, nfc: d.nfc }));
+  return (
+    <section className={`${CARD} p-4`}>
+      <div className="flex items-baseline justify-between gap-2">
+        <h2 className={EYEBROW_MUTED}>{t("dashScansTitle")}</h2>
+        <p className="shrink-0 text-xs text-white/45">
+          <span style={{ color: QR_COLOR }}>■</span> QR {formatCount(data.scans.qr, t.locale)} · <span style={{ color: NFC_COLOR }}>■</span> NFC {formatCount(data.scans.nfc, t.locale)}
+          {visitors && <> · {t("dashVisitors", { n: formatCount(data.visitors, t.locale) })}</>}
+        </p>
+      </div>
+      {total === 0 ? (
+        <div className="mt-3">
+          <EmptyState compact dense tone="tags" icon={BarChart3} title={t("dashEmpty")} cardStyle={{}} />
+        </div>
+      ) : (
+        <div className="mt-3 h-40">
+          <ResponsiveContainer width="100%" height="100%">
+            <BarChart data={chart} margin={{ top: 4, right: 0, left: 0, bottom: 0 }}>
+              <XAxis
+                dataKey="day"
+                axisLine={false}
+                tickLine={false}
+                interval={chartTickInterval(chart.length)}
+                tick={CHART_TICK}
+                tickFormatter={(day: string) => formatChartDay(day, t.locale, CHART_TICK_DAY)}
+              />
+              <Tooltip {...chartTooltip(t.locale)} />
+              <Bar dataKey="qr" name="QR" stackId="s" fill={QR_COLOR} radius={[0, 0, 0, 0]} />
+              <Bar dataKey="nfc" name="NFC" stackId="s" fill={NFC_COLOR} radius={[3, 3, 0, 0]} />
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+      )}
+    </section>
+  );
+}
+
+/** The pieces and the customers scanned most, as ranked bars. */
+export function TopLists({ data }: { data: TagDashboard }) {
+  const t = useT(tagsMessages);
+  const [, navigate] = useLocation();
+  return (
+    <>
+      {data.topPieces.length > 0 && (
+        <Ranked
+          title={t("dashTopPieces")}
+          icon={Tag}
+          items={data.topPieces.map((p) => ({
+            key: p.id,
+            hideIcon: true,
+            content: (
+              <TagPieceMention
+                publicCode={p.publicCode}
+                productType={p.productType}
+                face={p.face}
+                batchCode={p.batchCode}
+                customer={p.leadName}
+                details={p.label || undefined}
+              />
+            ),
+            value: p.scans,
+            split: { qr: p.qr, nfc: p.nfc },
+            onClick: () => navigate(tagPath(p.publicCode)),
+          }))}
+        />
+      )}
+      {data.topCustomers.length > 0 && (
+        <Ranked
+          title={t("dashTopCustomers")}
+          icon={Building2}
+          items={data.topCustomers.map((c) => ({
+            key: String(c.leadId),
+            label: c.name,
+            sub: t.plural("dashPieces", c.pieces),
+            value: c.scans,
+            onClick: () => navigate(`${APP_BASE}/customers/${c.leadId}`),
+          }))}
+        />
+      )}
+    </>
+  );
+}
+
+/** Home for a manager in a panel's work view: the whole fleet's numbers. A reseller's Home is TagsTodo; their numbers are Results. */
 export function TagsDashboard() {
   const t = useT(tagsMessages);
   const tc = useT(commonMessages);
@@ -102,18 +199,9 @@ export function TagsDashboard() {
   // In a panel's work view (platform, partner, owner; never a member) the server answers with the whole fleet it
   // covers: everyone's for the platform, the organization's for the rest (routes.ts, listActor).
   const fleet = useViewerAccess().adminMode;
-  const { data, isLoading, error, refetch } = useQuery({
-    queryKey: ["/api/xpot/tags/dashboard"],
-    queryFn: () => tagsGet<TagDashboard>("/api/xpot/tags/dashboard?days=30"),
-    staleTime: 30_000,
-  });
+  const { data, isLoading, error, refetch } = useTagsDashboard();
 
   const total = data ? data.scans.qr + data.scans.nfc : undefined;
-  const chart = (data?.daily ?? []).map((d) => ({
-    day: d.day,
-    qr: d.qr,
-    nfc: d.nfc,
-  }));
   const recentScans = data?.recentScans ?? [];
 
   return (
@@ -124,68 +212,40 @@ export function TagsDashboard() {
           {t("fleetViewing")}
         </p>
       )}
-      {data && data.chipsMissing > 0 && (
-        <button
-          type="button"
-          // Every rep's count in management mode: "My pieces" would hold only the viewer's, so it opens the
-          // Overview's "Chips to write" list (set-up pieces whose chip is not written and checked).
-          onClick={() => navigate(fleet ? "/admin/tags/overview/chipPending" : `${APP_BASE}/pieces?chip=missing`)}
-          className="flex w-full items-center gap-3 rounded-2xl border border-red-400/40 bg-red-500/[0.12] p-4 text-left"
-          data-testid="dashboard-chips-missing"
-        >
-          <AlertTriangle className="h-5 w-5 shrink-0 text-red-300" />
-          <span className="min-w-0 flex-1">
-            <span className="block text-sm font-bold text-red-100">{t.plural("dashChipsMissing", data.chipsMissing)}</span>
-            <span className="block text-xs text-red-100/70">{t("nfcMissingBody")}</span>
-          </span>
-          <ChevronRight className="h-4 w-4 shrink-0 text-red-200/60" />
-        </button>
-      )}
+      {data && data.chipsMissing > 0 && (() => {
+        // Red only when a piece already in the customer's hands fails; one still being set up is only waiting.
+        const urgent = data.chipsMissingLive > 0;
+        return (
+          <button
+            type="button"
+            // Every rep's count in management mode: "My pieces" would hold only the viewer's, so it opens the
+            // Overview's "Chips to write" list (set-up pieces whose chip is not written and checked).
+            onClick={() => navigate(fleet ? "/admin/tags/overview/chipPending" : `${APP_BASE}/pieces?chip=missing`)}
+            className={`flex w-full items-center gap-3 rounded-2xl border p-4 text-left ${urgent ? "border-red-400/40 bg-red-500/[0.12]" : "border-amber-400/30 bg-amber-400/[0.08]"}`}
+            data-testid="dashboard-chips-missing"
+          >
+            <AlertTriangle className={`h-5 w-5 shrink-0 ${urgent ? "text-red-300" : "text-amber-300"}`} />
+            <span className="min-w-0 flex-1">
+              <span className={`block text-sm font-bold ${urgent ? "text-red-100" : "text-amber-100"}`}>{t.plural("dashChipsMissing", data.chipsMissing)}</span>
+              <span className={`block text-xs ${urgent ? "text-red-100/70" : "text-amber-100/70"}`}>{t("nfcMissingBody")}</span>
+            </span>
+            <ChevronRight className={`h-4 w-4 shrink-0 ${urgent ? "text-red-200/60" : "text-amber-200/60"}`} />
+          </button>
+        );
+      })()}
 
       {error && !data ? (
         <ErrorState message={errorText(error, tc("requestFailed"))} onRetry={() => void refetch()} />
       ) : (
         <div className="grid grid-cols-2 gap-2 lg:grid-cols-4 lg:gap-4" data-testid="tags-summary">
-          <KpiTile accent="violet" icon={Package} loading={isLoading} label={fleet ? t("statWithResellers") : t("statInStock")} value={data ? formatCount(data.inStock, t.locale) : "—"} />
+          <KpiTile accent="violet" icon={Package} loading={isLoading} label={t("statWithResellers")} value={data ? formatCount(data.inStock, t.locale) : "—"} />
           <KpiTile accent="violet" icon={Radio} loading={isLoading} label={t("statActive")} value={data ? formatCount(data.active, t.locale) : "—"} />
           <KpiTile accent="violet" icon={DollarSign} loading={isLoading} label={t("statSold30")} value={data ? formatCount(data.soldInPeriod, t.locale) : "—"} />
           <KpiTile accent="violet" icon={ScanLine} loading={isLoading} label={t("statScans30")} value={total != null ? formatCount(total, t.locale) : "—"} />
         </div>
       )}
 
-      {data && (
-        <section className={`${CARD} p-4`}>
-          <div className="flex items-baseline justify-between gap-2">
-            <h2 className={EYEBROW_MUTED}>{t("dashScansTitle")}</h2>
-            <p className="text-xs text-white/45">
-              <span style={{ color: QR_COLOR }}>■</span> QR {formatCount(data.scans.qr, t.locale)} · <span style={{ color: NFC_COLOR }}>■</span> NFC {formatCount(data.scans.nfc, t.locale)} · {t("dashVisitors", { n: formatCount(data.visitors, t.locale) })}
-            </p>
-          </div>
-          {total === 0 ? (
-            <div className="mt-3">
-              <EmptyState compact dense tone="tags" icon={BarChart3} title={t("dashEmpty")} cardStyle={{}} />
-            </div>
-          ) : (
-            <div className="mt-3 h-40">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={chart} margin={{ top: 4, right: 0, left: 0, bottom: 0 }}>
-                  <XAxis
-                    dataKey="day"
-                    axisLine={false}
-                    tickLine={false}
-                    interval={chartTickInterval(chart.length)}
-                    tick={CHART_TICK}
-                    tickFormatter={(day: string) => formatChartDay(day, t.locale, CHART_TICK_DAY)}
-                  />
-                  <Tooltip {...chartTooltip(t.locale)} />
-                  <Bar dataKey="qr" name="QR" stackId="s" fill={QR_COLOR} radius={[0, 0, 0, 0]} />
-                  <Bar dataKey="nfc" name="NFC" stackId="s" fill={NFC_COLOR} radius={[3, 3, 0, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
-          )}
-        </section>
-      )}
+      {data && <ScansSection data={data} visitors />}
 
       {recentScans.length > 0 && (
         <section data-testid="recent-scans">
@@ -220,43 +280,7 @@ export function TagsDashboard() {
         </section>
       )}
 
-      {data && data.topPieces.length > 0 && (
-        <Ranked
-          title={t("dashTopPieces")}
-          icon={Tag}
-          items={data.topPieces.map((p) => ({
-            key: p.id,
-            hideIcon: true,
-            content: (
-              <TagPieceMention
-                publicCode={p.publicCode}
-                productType={p.productType}
-                face={p.face}
-                batchCode={p.batchCode}
-                customer={p.leadName}
-                details={p.label || undefined}
-              />
-            ),
-            value: p.scans,
-            split: { qr: p.qr, nfc: p.nfc },
-            onClick: () => navigate(tagPath(p.publicCode)),
-          }))}
-        />
-      )}
-
-      {data && data.topCustomers.length > 0 && (
-        <Ranked
-          title={t("dashTopCustomers")}
-          icon={Building2}
-          items={data.topCustomers.map((c) => ({
-            key: String(c.leadId),
-            label: c.name,
-            sub: t.plural("dashPieces", c.pieces),
-            value: c.scans,
-            onClick: () => navigate(`${APP_BASE}/customers/${c.leadId}`),
-          }))}
-        />
-      )}
+      {data && <TopLists data={data} />}
 
       {data && data.devices.length > 0 && (
         <Ranked

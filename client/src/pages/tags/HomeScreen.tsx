@@ -6,6 +6,7 @@ import { commonMessages } from "@/i18n/messages/common";
 import { tagsMessages } from "@/i18n/messages/tags";
 import QrScanner from "./QrScanner";
 import { TagsDashboard } from "./TagsDashboard";
+import { TagsTodo } from "./TagsTodo";
 import {
   APP_BASE,
   classify,
@@ -32,6 +33,7 @@ import {
 } from "./ui";
 import { mapNfcError, nfcMode, scanOnce } from "./webNfc";
 import { useIsComputer, useIsDesktop } from "@/hooks/use-is-desktop";
+import { useViewerAccess } from "@/lib/adminMode";
 
 // "read" is the chooser behind the single Read button: QR, chip or typed code.
 type Sheet = { kind: "read" } | { kind: "empty" } | { kind: "nfc" } | null;
@@ -65,6 +67,7 @@ export default function HomeScreen() {
   const isDesktop = useIsDesktop();
   // A tablet at desktop width still has a camera and maybe NFC.
   const isComputer = useIsComputer();
+  const fleet = useViewerAccess().adminMode;
 
   const openCode = useCallback(
     async (tagCode: string) => {
@@ -246,8 +249,8 @@ export default function HomeScreen() {
 
       {isComputer && codeForm}
 
-      {/* Real activity: scans over time, recent scans, top pieces and customers. */}
-      <TagsDashboard />
+      {/* A reseller: what is waiting for them, and the results one link away. A manager in a panel's work view: the whole fleet's numbers. */}
+      {fleet ? <TagsDashboard /> : <TagsTodo />}
 
       {qrOpen && (
         <QrScanner

@@ -347,8 +347,10 @@ export interface TagDashboard {
   scans: { qr: number; nfc: number };
   /** Distinct visitors per day, summed (a person scanning twice in a day counts once). */
   visitors: number;
-  /** Assigned or live pieces whose NFC chip holds nothing (or failed): QR only. */
+  /** Assigned or live pieces whose NFC chip holds nothing (or failed). */
   chipsMissing: number;
+  /** Of those, the live ones: already with the customer, so a tap opens nothing now. */
+  chipsMissingLive: number;
   daily: Array<{ day: string; qr: number; nfc: number }>;
   topPieces: Array<{
     id: string;

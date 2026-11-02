@@ -3,6 +3,7 @@ import { classifyScan, TAGS_APP_PATH, type ScanClassification } from "@shared/ta
 import { viewHeaders } from "@/lib/adminMode";
 import { currentPlatform } from "@/lib/device";
 import { serverErrorText } from "@/lib/apiErrors";
+import type { TagListItem } from "@shared/tagsApi";
 
 export const APP_BASE = TAGS_APP_PATH;
 const RECENTS_KEY = "xpot.tags.recents";
@@ -182,6 +183,25 @@ export const tagsGet = <T,>(url: string) => call<T>("GET", url);
 export const tagsPost = <T,>(url: string, body: unknown = {}, signal?: AbortSignal) => call<T>("POST", url, body, undefined, signal);
 export const tagsPostIdempotent = <T,>(url: string, body: unknown, key: string) =>
   call<T>("POST", url, body, { "Idempotency-Key": key });
+
+/** The list endpoint's ceiling: everything a reseller holds fits under it. */
+export const MY_PIECES_LIMIT = 2000;
+
+/**
+ * "My pieces": the viewer's own, every status at once (the screens filter), optionally one customer's. The list and
+ * Home's "To do" ask with this one definition, so they share the cached answer and count the same pieces.
+ */
+export function myPiecesQuery(leadId: number | null = null) {
+  return {
+    queryKey: ["tags", "list", null, leadId] as const,
+    queryFn: () => {
+      const params = new URLSearchParams({ mine: "1", limit: String(MY_PIECES_LIMIT) });
+      if (leadId) params.set("leadId", String(leadId));
+      return tagsGet<TagListItem[]>(`/api/xpot/tags?${params}`);
+    },
+    staleTime: 15_000,
+  };
+}
 
 export function errorText(err: unknown, fallback: string): string {
   return err instanceof Error && err.message ? err.message : fallback;

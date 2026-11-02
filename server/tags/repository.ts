@@ -2316,14 +2316,15 @@ export async function getTagDashboard(repId: number | null, days = 30, now: Date
   // The shared stock numbers (shared/tagMetrics.ts), so the dashboard reads what Overview, Inventory and
   // Resellers read: "in stock" is the unsold stock in resellers' hands (the rep's own, for a rep), set-up and
   // live pieces included; "sold" is an active financial sale in the period (as the Resellers report counts it).
-  const [totals] = await rows<{ in_stock: number; active: number; sold: number; missing: number }>(sql`
+  const [totals] = await rows<{ in_stock: number; active: number; sold: number; missing: number; missing_live: number }>(sql`
     SELECT
       ${countMetricSql("withResellers")} AS in_stock,
       count(*) FILTER (WHERE t.status = 'active')::int AS active,
       count(*) FILTER (WHERE EXISTS (
         SELECT 1 FROM sales_sale_tags st WHERE st.tag_id = t.id AND st.status = 'active' AND st.sold_at >= ${since}
       ))::int AS sold,
-      count(*) FILTER (WHERE t.status IN ('assigned', 'active') AND t.nfc_provisioning_status IN ('not_programmed', 'failed'))::int AS missing
+      count(*) FILTER (WHERE t.status IN ('assigned', 'active') AND t.nfc_provisioning_status IN ('not_programmed', 'failed'))::int AS missing,
+      count(*) FILTER (WHERE t.status = 'active' AND t.nfc_provisioning_status IN ('not_programmed', 'failed'))::int AS missing_live
     FROM tags t WHERE ${tagScope}
   `);
   const [scans] = await rows<{ qr: number; nfc: number; visitors: number }>(sql`
@@ -2397,6 +2398,7 @@ export async function getTagDashboard(repId: number | null, days = 30, now: Date
     scans: { qr: Number(scans?.qr ?? 0), nfc: Number(scans?.nfc ?? 0) },
     visitors: Number(scans?.visitors ?? 0),
     chipsMissing: Number(totals?.missing ?? 0),
+    chipsMissingLive: Number(totals?.missing_live ?? 0),
     daily: daily.map((d) => ({ day: d.day, qr: Number(d.qr), nfc: Number(d.nfc) })),
     topPieces: topPieces.map((p) => ({
       id: p.id,
