@@ -3,7 +3,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Check, Phone, Plus, X } from "lucide-react";
 import { CUSTOMER_PANEL_PATH, type CustomerContactsResponse } from "@shared/customerPanel";
 import { formatPhone } from "@shared/phone";
-import { phoneCountryCodeFromLocales } from "@shared/phoneCountry";
+import { dialCodeOf, phoneCountryCodeFromLocales } from "@shared/phoneCountry";
 import { useT } from "@/i18n";
 import { myPlatesMessages } from "@/i18n/messages/myPlates";
 import { ApiError, apiRequest } from "@/lib/queryClient";
@@ -19,6 +19,7 @@ import { CARD, CopyButton, EYEBROW_MUTED, Spinner } from "./ui";
 
 const FIELD = `${FIELD_CONTROL} h-11 px-3 !text-base`;
 
+
 /** The panel's section for one customer; renders nothing while the panel is off. */
 export function CustomerAccess({ leadId, onDone }: { leadId: number; onDone: (text: string, ok: boolean) => void }) {
   const enabled = useQuery<{ enabled: boolean }>({ queryKey: ["/api/my/enabled"], staleTime: 5 * 60_000 });
@@ -31,9 +32,11 @@ function AccessSection({ leadId, onDone }: { leadId: number; onDone: (text: stri
   const qc = useQueryClient();
   const url = `/api/xpot/leads/${leadId}/customer-contacts`;
   const list = useQuery<CustomerContactsResponse>({ queryKey: ["/api/xpot/leads", leadId, "customer-contacts"], staleTime: 30_000 });
-  const [countryCode, setCountryCode] = useState<string>(() => phoneCountryCodeFromLocales(
+  // The business's own country first (a customer in the US added from a phone set to Portuguese is still +1), else the phone's language.
+  const [chosenCountry, setCountryCode] = useState<string | null>(null);
+  const countryCode = chosenCountry ?? dialCodeOf(list.data?.businessPhone) ?? phoneCountryCodeFromLocales(
     typeof navigator === "undefined" ? [] : navigator.languages ?? [navigator.language],
-  ));
+  );
   const [phone, setPhone] = useState("");
   const [busy, setBusy] = useState(false);
   const [removing, setRemoving] = useState<string | null>(null);
@@ -130,20 +133,23 @@ function AccessSection({ leadId, onDone }: { leadId: number; onDone: (text: stri
         {!list.isLoading && !businessPhone && contacts.length === 0 && <p className="py-2 text-sm text-white/45">{t("accessNone")}</p>}
       </div>
 
-      <form onSubmit={(e) => void add(e)} className="mt-3 flex gap-2" data-testid="customer-access-form">
-        <CountryCodePicker value={countryCode} onChange={setCountryCode} label={t("country")} />
-        <input
-          value={phone}
-          onChange={(e) => setPhone(e.target.value.replace(/[^\d\s().+-]/g, "").slice(0, 24))}
-          type="tel"
-          inputMode="tel"
-          autoComplete="off"
-          placeholder={t("accessPhonePlaceholder")}
-          aria-label={t("accessAdd")}
-          className={`${FIELD} min-w-0 flex-1`}
-          data-testid="customer-access-phone"
-        />
-        <Button type="submit" variant="secondary" size="sm" className="h-11" loading={busy} disabled={phone.replace(/\D/g, "").length < 7}>
+      {/* A phone: the country and the number on one row, the button under them; on a computer all on one. */}
+      <form onSubmit={(e) => void add(e)} className="mt-3 flex flex-col gap-2 sm:flex-row" data-testid="customer-access-form">
+        <div className="flex min-w-0 flex-1 gap-2">
+          <CountryCodePicker value={countryCode} onChange={setCountryCode} label={t("country")} />
+          <input
+            value={phone}
+            onChange={(e) => setPhone(e.target.value.replace(/[^\d\s().+-]/g, "").slice(0, 24))}
+            type="tel"
+            inputMode="tel"
+            autoComplete="off"
+            placeholder={t("accessPhonePlaceholder")}
+            aria-label={t("accessAdd")}
+            className={`${FIELD} min-w-0 flex-1`}
+            data-testid="customer-access-phone"
+          />
+        </div>
+        <Button type="submit" variant="secondary" size="sm" className="h-11 w-full sm:w-auto" loading={busy} disabled={phone.replace(/\D/g, "").length < 7}>
           <Plus />
           {t("accessAllow")}
         </Button>
