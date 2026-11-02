@@ -121,7 +121,7 @@ function EntryRow({ entry, showScope }: { entry: TagJourneyEntryItem; showScope:
       {/* Only what is not routine: execution and "active" are the norm, so they stay quiet. */}
       {(entry.kind !== "execution" || labelledAction || entry.status !== "active") && (
         <div className="flex flex-wrap items-center gap-2">
-          {entry.kind !== "execution" && <KindBadge kind={entry.kind} />}
+          {entry.kind !== "execution" && <KindBadge kind={entry.kind} action={entry.action} />}
           {labelledAction && <span className="text-xs font-medium text-white/55">{labels.action(labelledAction)}</span>}
           {entry.status !== "active" && <EntryStatusBadge status={entry.status} />}
         </div>

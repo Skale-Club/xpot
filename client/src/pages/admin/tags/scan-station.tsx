@@ -132,12 +132,14 @@ export function ContinuousCamera({ onRead, onClose, paused = false }: { onRead: 
 }
 
 /** The camera's on/off switch for a station. */
-export function CameraButton({ on, onToggle, disabled }: { on: boolean; onToggle: () => void; disabled?: boolean }) {
+export function CameraButton({ on, onToggle, disabled, primary = false, className }: { on: boolean; onToggle: () => void; disabled?: boolean; /** The way the work is done here (a phone in the hand): the brand button, not the quiet one. */ primary?: boolean; className?: string }) {
   const t = useT(adminTagsFlowMessages);
   return (
     <Button
       type="button"
-      variant="secondary"
+      variant={primary && !on ? "brand" : "secondary"}
+      accent={primary && !on ? "tags" : undefined}
+      className={className}
       onClick={() => {
         primeFeedback();
         onToggle();

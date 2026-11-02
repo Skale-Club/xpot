@@ -11,6 +11,7 @@ import { Pill } from "@/components/xpot/StatusPill";
 import { SwitchRow } from "@/components/xpot/SwitchRow";
 import { useToast } from "@/hooks/use-toast";
 import { formatMoney } from "@/lib/format";
+import { MemberMenu } from "@/pages/xpot/components/MemberMenu";
 import { useT } from "@/i18n";
 import { commonMessages } from "@/i18n/messages/common";
 import { manageTagsMessages } from "@/i18n/messages/manageTags";
@@ -268,12 +269,11 @@ export function ShowcaseTab() {
                   {item.referencePriceCents !== null && <span>{t("shopPriceLine", { price: formatMoney(item.referencePriceCents, item.currency) })}</span>}
                 </span>
               </span>
-              <Button type="button" variant="ghost" size="icon" aria-label={t("shopEdit")} onClick={() => setEditing(item)} data-testid="showcase-edit">
-                <Pencil />
-              </Button>
-              <Button type="button" variant="ghost" size="icon" aria-label={t("shopDelete")} onClick={() => setDeleting(item)}>
-                <Trash2 />
-              </Button>
+              {/* Two icons with no words took 110px of a phone row: one menu, with the words. */}
+              <MemberMenu label={t("shopEdit")} testId="showcase-menu" items={[
+                { key: "edit", label: t("shopEdit"), onSelect: () => setEditing(item) },
+                { key: "delete", label: t("shopDelete"), danger: true, onSelect: () => setDeleting(item) },
+              ]} />
             </li>
           ))}
         </ul>
