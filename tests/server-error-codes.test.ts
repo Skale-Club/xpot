@@ -22,7 +22,7 @@ const translated = new Set(Object.keys(apiErrorMessages.en).filter((k) => k.star
 
 describe("serverErrorText", () => {
   it("words a known code in the language in use, with its params", () => {
-    const body = { message: "Not in house stock: A7K3P9X2", code: "tag_not_house_stock", params: { codes: "A7K3P9X2" } };
+    const body = { message: "Not in company stock: A7K3P9X2", code: "tag_not_house_stock", params: { codes: "A7K3P9X2" } };
     lang.current = "en";
     expect(serverErrorText(body, "x")).toBe("Not in company stock: A7K3P9X2");
     lang.current = "pt";

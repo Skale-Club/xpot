@@ -192,6 +192,21 @@ Status e Integrations são técnicos, mas só a plataforma vê.
 | Plataforma | Organizations, People | Aprovar e dar acesso |
 | Dono da plaquinha | /my | Ver se a plaquinha está sendo usada |
 
+## Status (2026-11-01)
+
+Feitos e em produção: PRs 0, 1, 2a, 2b, 3, 4, 5, 6 e 7. Nenhuma tela foi conferida no navegador ainda.
+
+Diferenças em relação ao plano abaixo, decididas ao executar:
+
+- **PR 2b:** texto neutro ("Peça ao seu gestor"), sem expor o nome da organização pelo servidor. "Skale Club" fica só no atacado da loja.
+- **PR 3:** as abas `inventory`, `kits` e `customers` da organização ficam. São o único jeito de um dono com várias organizações ver uma por vez, e de um dono só com Tags ver as empresas.
+- **PR 4:** Needs attention do Dashboard de Visits fica, porque o vendedor em campo não tem Today.
+- **PR 5:** lote de impressão da casa mostra só o resumo, o que tira a leitura opcional de QR nesses lotes.
+- **PR 6:** só a tela muda. O servidor continua aceitando o recebimento.
+- **PR 7:** a aba Pipeline fica, porque também tem oportunidades e tarefas de follow-up que não dependem do GoHighLevel.
+
+Em aberto: PR 8 (D7), decidir depois de conferir as telas. O Today da plataforma conta só a própria empresa, enquanto a lista que ele abre mostra todas as organizações.
+
 ## Plano em PRs
 
 Ordem por risco: primeiro texto, depois tela, depois regra. Cada PR fecha sozinho, com CI verde e deploy.

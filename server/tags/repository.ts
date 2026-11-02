@@ -838,14 +838,14 @@ export async function deliverKit(input: KitInput, userId: string | null, source:
       if (missing.length) throw new TagError(`Unknown codes: ${missing.join(", ")}`, 404, "tag_codes_unknown", { codes: missing.join(", ") });
       const unavailable = picked.filter((t) => t.status !== "inventory" || t.stockStatus !== "available" || t.repId !== null ||
         (input.sourceOrganizationId !== undefined && t.organizationId !== input.sourceOrganizationId)).map((t) => t.publicCode);
-      if (unavailable.length) throw new TagError(`Not in house stock: ${unavailable.join(", ")}`, 409, "tag_not_house_stock", { codes: unavailable.join(", ") });
+      if (unavailable.length) throw new TagError(`Not in company stock: ${unavailable.join(", ")}`, 409, "tag_not_house_stock", { codes: unavailable.join(", ") });
       // Same rule as the dry run (shared/tagDistribution.ts handOutBlocker): a sold piece never goes into a kit.
       const sold = picked.length ? await tx.select({ tagId: salesSaleTags.tagId }).from(salesSaleTags)
         .where(and(inArray(salesSaleTags.tagId, picked.map((t) => t.id)), eq(salesSaleTags.status, "active"))) : [];
       if (sold.length) {
         const soldIds = new Set(sold.map((s) => s.tagId));
         const soldCodes = picked.filter((t) => soldIds.has(t.id)).map((t) => t.publicCode);
-        throw new TagError(`Not in house stock: ${soldCodes.join(", ")}`, 409, "tag_not_house_stock", { codes: soldCodes.join(", ") });
+        throw new TagError(`Not in company stock: ${soldCodes.join(", ")}`, 409, "tag_not_house_stock", { codes: soldCodes.join(", ") });
       }
     } else if (input.batchId && input.quantity) {
       picked = await tx
@@ -867,7 +867,7 @@ export async function deliverKit(input: KitInput, userId: string | null, source:
         .limit(input.quantity)
         .for("update");
       if (picked.length < input.quantity) {
-        throw new TagError(`Only ${picked.length} unsold pieces left in house stock for that batch`, 409, "kit_batch_short", { count: picked.length });
+        throw new TagError(`Only ${picked.length} unsold pieces left in company stock for that batch`, 409, "kit_batch_short", { count: picked.length });
       }
     } else {
       throw new TagError("Choose the pieces: codes, or a batch and a quantity", 400, "kit_pieces_required");
@@ -1229,7 +1229,7 @@ export async function returnToHouse(
     await recordJourney({
       kind: "execution",
       action: "returned_to_house",
-      title: `${moved.length} ${moved.length === 1 ? "piece" : "pieces"} returned to house stock${rep ? ` by ${rep.name}` : ""}`,
+      title: `${moved.length} ${moved.length === 1 ? "piece" : "pieces"} returned to company stock${rep ? ` by ${rep.name}` : ""}`,
       repId,
       // Only a single kit: a batch id here would also make the entry
       // batch-wide for every piece of the batch.
@@ -1652,7 +1652,7 @@ export async function setTagInternalUse(
   const updated = await db.transaction(async (tx) => {
     const tag = await lockTag(tx, id);
     if (tag.stockStatus !== "available" || tag.repId !== null) {
-      throw new TagError("Only available house stock can be moved to internal use", 409);
+      throw new TagError("Only available company stock can be moved to internal use", 409);
     }
     const [next] = await tx.update(tags).set({
       stockStatus: "internal_use",
@@ -1720,7 +1720,7 @@ export async function returnInternalTagToStock(
   await recordJourney({
     kind: "execution",
     action: "piece_returned_to_stock",
-    title: `Piece ${updated.publicCode} returned to house stock`,
+    title: `Piece ${updated.publicCode} returned to company stock`,
     content: reason,
     tagId: updated.id,
     batchId: updated.batchId,
