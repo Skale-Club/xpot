@@ -201,6 +201,7 @@ export function ChipSection({ desktopWriter, commands }: {
         identity="xpot"
         onClose={() => setWriteOpen(false)}
         onDone={onWritten}
+        registerWrite
         onLock={() => setLockOpen(true)}
         confirmed={tag.nfcStatus === "verified" || tag.nfcStatus === "locked"}
         continueUrl={`${window.location.origin}${tagPath(tag.publicCode)}?write=1`}

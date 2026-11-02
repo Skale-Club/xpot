@@ -21,13 +21,13 @@ import {
   useBanner,
 } from "./lib";
 import { Button } from "@/components/ui/button";
+import { InlineAlert } from "@/components/xpot/InlineAlert";
 import {
   ActionTile,
   Banner,
   BottomSheet,
   CARD,
   INPUT,
-  SheetActions,
   TAGS_FILL,
   TapAnimation,
 } from "./ui";
@@ -57,6 +57,8 @@ export default function HomeScreen() {
   const [qrOpen, setQrOpen] = useState(false);
   const [sheet, setSheet] = useState<Sheet>(null);
   const [code, setCode] = useState("");
+  // A chip that could not be read is said inside the sheet that is reading it, with a way to read again.
+  const [nfcError, setNfcError] = useState<string | null>(null);
   const [sellTo, setSellToState] = useState(getSellTo);
   const nfcAbort = useRef<AbortController | null>(null);
   // Only Chrome on Android reads a chip in the app. An iPhone's own NFC opens the chip's
@@ -125,6 +127,7 @@ export default function HomeScreen() {
     stopNfc();
     const ctrl = new AbortController();
     nfcAbort.current = ctrl;
+    setNfcError(null);
     setSheet({ kind: "nfc" });
     try {
       const reading = await scanOnce(ctrl.signal);
@@ -138,14 +141,13 @@ export default function HomeScreen() {
       if (ctrl.signal.aborted) return;
       const e = mapNfcError(err);
       if (e.silent) return;
-      setSheet(null);
-      show({ tone: "error", text: t(e.code) });
+      setNfcError(t(e.code));
     }
   };
 
   // On a phone a code is whole at its 8th character: open the piece then, without a tap on the arrow.
   useEffect(() => {
-    if (isDesktop || sheet?.kind !== "read") return;
+    if (isDesktop || (sheet?.kind !== "read" && sheet?.kind !== "empty")) return;
     const typed = classify(code);
     if (typed.kind === "xpot" && code.replace(/[s-]/g, "").length === TAG_CODE_LENGTH) void openCode(typed.code);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -266,6 +268,10 @@ export default function HomeScreen() {
       {qrOpen && (
         <QrScanner
           onClose={() => setQrOpen(false)}
+          onTypeCode={() => {
+            setQrOpen(false);
+            setSheet({ kind: "read" });
+          }}
           onResult={(text) => {
             setQrOpen(false);
             void handleScan(text);
@@ -320,18 +326,6 @@ export default function HomeScreen() {
           )}
         </div>
         <div className="mt-5 border-t border-white/10 pt-4">{codeForm}</div>
-        {/* Rare, so a link and not a tile: the way in to a chip that holds the customer's own link. */}
-        <button
-          type="button"
-          onClick={() => {
-            setSheet(null);
-            navigate(directPath());
-          }}
-          className="mt-4 min-h-10 w-full text-center text-sm text-white/50 underline underline-offset-2 hover:text-white/80"
-          data-testid="link-write-direct"
-        >
-          {t("navDirect")}
-        </button>
         <Button type="button" variant="ghost" size="lg" onClick={() => setSheet(null)} className="mt-1 w-full">
           {tc("cancel")}
         </Button>
@@ -345,7 +339,19 @@ export default function HomeScreen() {
         }}
         title={t("readPiece")}
       >
-        <TapAnimation identity="xpot" icon={Nfc} label={t("readingTitle")} sub={t("readingSub")} />
+        {nfcError ? (
+          <div className="mb-3" data-testid="nfc-read-error">
+            <InlineAlert tone="error">{nfcError}</InlineAlert>
+          </div>
+        ) : null}
+        {nfcError ? (
+          <Button type="button" variant="brand" accent="tags" size="lg" onClick={() => void startNfc()} className="mb-2 w-full" data-testid="button-read-again">
+            <Nfc className="!size-5" />
+            {tc("retry")}
+          </Button>
+        ) : (
+          <TapAnimation identity="xpot" icon={Nfc} label={t("readingTitle")} sub={t("readingSub")} />
+        )}
         <Button
           type="button"
           variant="ghost"
@@ -361,15 +367,21 @@ export default function HomeScreen() {
       </BottomSheet>
 
       <BottomSheet open={sheet?.kind === "empty"} onClose={() => setSheet(null)} title={t("chipEmpty")}>
-        <SheetActions className="mt-2">
-          <Button type="button" variant="brand" accent="tags" size="lg" onClick={() => navigate(directPath())} className="w-full">
-            <Link2 className="!size-5" />
-            {t("openDirect")}
-          </Button>
-          <Button type="button" variant="ghost" size="lg" onClick={() => setSheet(null)} className="w-full">
-            {tc("close")}
-          </Button>
-        </SheetActions>
+        <p className="mb-3 text-sm text-white/70">{t("chipEmptyHint")}</p>
+        {codeForm}
+        {/* Rare, so a small link: a chip that is to hold the customer's own link, with no piece behind it. */}
+        <button
+          type="button"
+          onClick={() => navigate(directPath())}
+          className="mt-3 flex min-h-10 w-full items-center justify-center gap-1.5 text-sm text-white/50 underline underline-offset-2 hover:text-white/80"
+          data-testid="link-write-direct"
+        >
+          <Link2 className="h-4 w-4" />
+          {t("navDirect")}
+        </button>
+        <Button type="button" variant="ghost" size="lg" onClick={() => setSheet(null)} className="mt-1 w-full">
+          {tc("close")}
+        </Button>
       </BottomSheet>
     </div>
   );
