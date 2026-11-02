@@ -190,7 +190,7 @@ export function PrintJobPage({ id, go }: { id: string; go: Go }) {
             <span>{formatDateTime(job.createdAt)}</span>
           </p>
         </div>
-        <details className="relative"><summary className="flex min-h-10 cursor-pointer items-center rounded-xl border border-white/10 px-3 text-xs text-white/60">{t("moreActions")}</summary><div className="mt-2 flex max-w-xl flex-wrap gap-2 rounded-xl border border-white/10 bg-white/[0.025] p-3">
+        <details className="relative w-full min-w-0 sm:w-auto"><summary className="flex min-h-10 cursor-pointer items-center rounded-xl border border-white/10 px-3 text-xs text-white/60">{t("moreActions")}</summary><div className="mt-2 flex max-w-xl flex-wrap gap-2 rounded-xl border border-white/10 bg-white/[0.025] p-3 [&>button]:h-auto [&>button]:min-h-10 [&>button]:whitespace-normal [&>button]:text-left">
           {job.status === "building" && building === "making" ? (
             <Button type="button" variant="ghost" size="sm" onClick={() => setConfirming("release")}>{t("release")}</Button>
           ) : null}
