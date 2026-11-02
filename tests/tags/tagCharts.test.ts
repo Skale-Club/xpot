@@ -18,6 +18,9 @@ describe("Tags chart helpers", () => {
   it("write a chart day in the app language, first letter capitalised, in UTC", () => {
     expect(formatChartDay("2026-03-04", "en-US", CHART_TICK_DAY)).toBe("Mar 4");
     expect(formatChartDay("2026-03-04", "pt-BR", CHART_TOOLTIP_DAY)).toBe("Quarta-feira, 4 de março");
+    // The axis label has no "de" and no dot: the first day is not cut at the chart's edge.
+    expect(formatChartDay("2026-10-03", "pt-BR", CHART_TICK_DAY)).toBe("3 out");
+    expect(formatChartDay("2026-10-03", "es-US", CHART_TICK_DAY)).toBe("3 oct");
     expect(formatChartDay("2026-03-04", "es-US", CHART_TICK_DAY).charAt(0)).toBe("4");
   });
 

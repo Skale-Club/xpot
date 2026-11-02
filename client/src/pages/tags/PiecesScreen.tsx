@@ -365,7 +365,7 @@ function PiecesTable({ items, selectedCode, onSelect, onCustomer }: {
                       <span className="truncate group-hover:underline">{tag.leadName}</span>
                     </button>
                   ) : (
-                    <span className="text-white/35">{t("noCustomer")}</span>
+                    <span className="text-white/35">—</span>
                   )}
                   {tag.label && <div className="mt-0.5 truncate text-xs text-white/35">{tag.label}</div>}
                 </td>

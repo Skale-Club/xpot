@@ -354,7 +354,7 @@ Vale por cima da tabela acima, em toda a interface. Só texto: código, banco e 
 | Estoque de quem é dono das peças | Company stock | Estoque da empresa | Stock de la empresa | House stock, The house |
 | Peça com quem clicou | With me | Comigo | Conmigo | My stock |
 | Mesa que vai à impressora | Print job | Impressão | Impresión | Plate, quando não é o produto |
-| PC que gera os arquivos | Print computer | Computador da impressora | Ordenador de la impresora | Bench |
+| PC que gera os arquivos | Print computer | Computador da impressora | Computadora de la impresora | Bench |
 | Tela de estoque | Stock | Estoque | Stock | Inventory |
 | Tela de entrega | Hand out | Entregar peças | Entregar piezas | Distribution, Kits |
 | Pedidos da Stuscle | Wholesale orders | Pedidos de atacado | Pedidos mayoristas | Stuscle orders |

@@ -87,7 +87,7 @@ export const settingsMessages: Dictionary<typeof en> = {
     showPassword: "Mostrar senha",
     hidePassword: "Ocultar senha",
 
-    role: "Papel",
+    role: "Função",
     role_rep: "Vendedor",
     role_admin: "Plataforma",
 

@@ -23,6 +23,7 @@ import { useTagLabels } from "./labels";
 import { Loading, LoadError } from "./pieces-shared";
 import { MaterialsDialog, MaterialsNeeded } from "./production-materials";
 import { PrintDialog, RequestList } from "./production-orders";
+import { useThemeName } from "./production-identity";
 import { PrintPreviewCard } from "./production-preview";
 import { KindPill, ModelStatusPill, PRODUCTION_BASE, bedSummary, formatBytes, uploadFile, useProductionAccess, useThemeOptions } from "./production-shared";
 import { canPrintModel } from "./production-workflow";
@@ -37,6 +38,7 @@ export function PrintModelPage({ slug, go }: { slug: string; go: Go }) {
   const t = useT(productionMessages);
   const pm = useT(partnerMaterialsMessages);
   const labels = useTagLabels();
+  const themeName = useThemeName();
   const { toast } = useToast();
   const [printing, setPrinting] = useState(false);
   const [materials, setMaterials] = useState(false);
@@ -90,7 +92,7 @@ export function PrintModelPage({ slug, go }: { slug: string; go: Go }) {
               {model.lowStock ? <Pill tone="amber">{t("lowStock", { count: model.partReorderAt ?? 0 })}</Pill> : null}
               <span className="font-mono">{model.slug}</span>
               {model.productType ? <span>{labels.product(model.productType)}</span> : null}
-              {model.theme ? <span>{model.theme}</span> : null}
+              {model.theme ? <span>{themeName(model.theme)}</span> : null}
               {model.batchPrefix ? <span className="font-mono">{model.batchPrefix}-…</span> : null}
             </p>
           </div>

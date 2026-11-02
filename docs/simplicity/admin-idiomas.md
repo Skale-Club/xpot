@@ -74,6 +74,7 @@ Problema: abaixo do nome aparece "Waiting for approval · Rep · Visits · Tags"
 Mudança: na pessoa pendente, tirar os módulos da linha de pills e deixar só as caixas. `PersonPills` não mostra módulos quando `rep.access === "pending"`.
 Arquivos: pages/admin/PersonDetail.tsx:154-166
 Risco: nenhum.
+Status: feito. Pendente ou recusada não mostra módulos, só as caixas; a pessoa recusada nem tem a linha de módulos.
 
 ### AD-03 [S1] Status: alarme vermelho por um serviço que só não foi configurado
 Telas: platform/en-desktop/status, platform/en-phone/status, platform/pt-desktop/status, platform/es-desktop/status
@@ -81,6 +82,7 @@ Problema: o topo diz "Something is down / Because of: Background prospecting", e
 Mudança: `engine_not_configured` deixa de ser `down` e passa a um veredito novo, `off`. Topo em âmbar: en "Prospecting is not set up", pt "A prospecção não está configurada", es "La prospección no está configurada", mantendo o "What to do". Vermelho só para o que estava ligado e parou. Um nome só: en "Prospecting", pt "Prospecção", es "Prospección".
 Arquivos: server/observability/health.ts:71; shared/system-health.ts:18; i18n/messages/systemHealth.ts:12,124
 Risco: as buscas concluídas podem ser do seed, mas a regra é do produto. Se a prospecção for obrigatória em produção, âmbar ainda avisa; recomendo âmbar.
+Status: feito. `engine_not_configured` virou o veredito `off` (âmbar, "A prospecção não está configurada"), um nome só (Prospecção) no topo, no cartão e na tabela; com a prospecção desligada some a fila e as buscas. Testes em `tests/system-health.test.ts` e `tests/platform-ui.test.ts`.
 
 ### AD-04 [S1] "Sync on" ao lado de um interruptor desligado
 Telas: platform/en-desktop/integrations-xphere, platform/en-phone/integrations-xphere, platform/en-desktop/person-omar, person-sofia, person-reseller, person-refused e demais person-*; pt e es nas mesmas telas
@@ -88,6 +90,7 @@ Problema: em cada cartão Xphere, o rótulo diz "Sync on", pt "Sincronização l
 Mudança: rótulo neutro. en "Sync with Xphere", pt "Sincronizar com o Xphere", es "Sincronizar con Xphere".
 Arquivos: i18n/messages/integrations.ts:78,179,276
 Risco: nenhum.
+Status: feito. "Sincronizar com o Xphere" nos três idiomas.
 
 ### ID-01 [S1] Peça com revendedor aparece como "Em estoque"
 Telas: platform/pt-desktop/piece-popup-withReseller, platform/es-desktop/piece-popup-withReseller
@@ -118,6 +121,7 @@ Problema: Priya é dona, Daniela é parceira, Kevin é revendedor só de Tags: t
 Mudança: a linha mostra função e empresa: "Owner · Brightside Marketing", "Employee · Lindgren Local Growth", ou "No organization". O seletor passa a se chamar en "Platform access", pt "Acesso à plataforma", es "Acceso a la plataforma", com as opções en "No" / "Yes, administrator", pt "Não" / "Sim, administrador", es "No" / "Sí, administrador".
 Arquivos: pages/admin/PersonDetail.tsx:85,159,580-590; pages/admin/AdminReps.tsx
 Risco: precisa enviar as organizações da pessoa em `/admin/reps`. Não muda regra.
+Status: feito. A lista diz "Dono · Empresa", "Funcionário · Empresa", "N organizações" ou "Sem organização" (`teams` em `/admin/reps`); o campo "Papel" virou "Acesso à plataforma" (Não / Sim, administrador), no filtro também.
 
 ### AD-08 [S2] Painel da pessoa: os números têm os títulos cortados
 Telas: platform/en-desktop/person-owner ("ACTIV…", "IN STO…", "SCAN…"); platform/pt-desktop/person-owner ("VENDI…", "ATIVA…", "EM ES…", "LEITU…"); platform/es-desktop/person-owner ("VENDI…", "ACTIV…", "EN ST…", "LECTU…"); platform/en-phone/person-owner ("Sale counted in this…", "Pieces put live in thi…")
@@ -125,6 +129,7 @@ Problema: quatro colunas num painel de 400 px cortam todo título. A pessoa vê 
 Mudança: `grid-cols-2` sempre neste componente, porque o `sm:` olha a tela, não o painel. Título do bloco: en "Pieces sold and activity", pt "Peças vendidas e atividade", es "Piezas vendidas y actividad". Tirar as dicas repetidas; deixar só "46 QR · 21 NFC". Seletor de datas em duas linhas.
 Arquivos: pages/admin/PersonTagsSales.tsx:66-70; pages/admin/tags/pieces-analytics.tsx:102; i18n/messages/manageTags.ts:149-153
 Risco: nenhum.
+Status: feito. Dois números por linha, título "Peças vendidas e atividade", sem as dicas repetidas.
 
 ### AD-09 [S2] Pessoa recusada: o botão é "Unblock"
 Telas: platform/en-desktop/person-refused, platform/en-phone/person-refused
@@ -132,6 +137,7 @@ Problema: "Their sign-up was refused. Unblocking gives them access with the modu
 Mudança: botão en "Approve after all", pt "Aprovar mesmo assim", es "Aprobar de todos modos". Dica: en "Their sign-up was refused. Approving now gives them access.", pt "O cadastro foi recusado. Aprovar agora dá acesso.", es "Se rechazó su registro. Aprobar ahora le da acceso."
 Arquivos: i18n/messages/peopleWorkspace.ts:24, i18n/messages/manage.ts:96; pages/admin/PersonDetail.tsx:427
 Risco: nenhum.
+Status: feito. "Aprovar mesmo assim" com a dica nova. O servidor continua usando os módulos guardados na conta.
 
 ### AD-10 [S2] "Cost rule for physical Tags": ninguém sabe o que é
 Telas: platform/en-desktop/person-owner, person-reseller, person-sofia; platform/pt-desktop/person-owner; platform/es-desktop/person-owner; platform/pt-desktop/handout-form-reseller-picked
@@ -167,6 +173,7 @@ Problema: em cada linha ficam "Suspend from organization", "Make owner" ou "Remo
 Mudança: mover as ações para um menu "⋯" na linha, cada uma com uma frase: en "Suspend: keeps the account, loses this organization's data", "Remove: leaves the organization for good". Esconder "Remove owner", "Suspend" e "Remove" do último dono. Trocar "org admin" na mensagem por "owner".
 Arquivos: pages/xpot/OrganizationsPage.tsx:373-375; server/organizations/service.ts:404-405; i18n/messages/organizations.ts:61-74
 Risco: nenhum na regra; a tela só passa a obedecer o que o servidor já exige.
+Status: feito em parte. Pessoa: Bloquear e Excluir ficam numa "Zona de perigo" à parte, com uma frase cada; o último dono não tem o botão de remover (`onlyOwner`, testado), e quem está bloqueado não mostra "Suspenso" na organização. Equipe da organização: o último dono perde os três botões (uma linha em `OrganizationsPage.tsx`, arquivo de F4); o menu "⋯" ficou pendente, é do mesmo arquivo. A mensagem do servidor agora diz "owner".
 
 ### AD-15 [S2] Três formulários diferentes para adicionar pessoa
 Telas: platform/en-desktop/person-new-dialog, org-brightside-team, settings-organization; owner/en-phone/settings-organization, org-brightside-team
@@ -174,6 +181,7 @@ Problema: People pede "Full name", telefone e módulos, e o botão é "Create ac
 Mudança: usar `AddPersonForm` nos três lugares e tirá-lo de Settings, onde fica só "Open the team". Em People, acrescentar "Organization" e "Módulos". Botão sempre "Add person".
 Arquivos: pages/admin/AdminReps.tsx:316,345; pages/xpot/XpotSettings.tsx:447; pages/xpot/components/AddPersonForm.tsx:22
 Risco: pessoa sem organização pode ser caso válido (revendedor direto). Recomendo a opção "No organization" como padrão.
+Status: feito em People (mesmos campos de nome e telefone, botão "Adicionar pessoa", mais organização, módulos e regra de custo). Descartado em Settings: o formulário de lá é o único caminho de quem vende sozinho para montar uma equipe (a aba Team só aparece para quem já tem equipe), então não saiu.
 
 ### AD-16 [S2] Xphere: uma pilha de cartões técnicos sem dizer o que fazer
 Telas: platform/en-desktop/integrations-xphere (2995 px), platform/en-phone/integrations-xphere (3920 px)
@@ -181,6 +189,7 @@ Problema: há um cartão completo por pessoa, com "Outbound token (xph_…, from
 Mudança: uma tabela: pessoa, "Connected" ou "Not connected", última sincronização, botão "Set up" que abre o painel da pessoa. Campos técnicos só no painel, com "API URL" dentro de "Advanced". Texto no topo: en "Connect a person to send their work to the Xphere CRM.", pt "Conecte uma pessoa para enviar o trabalho dela ao CRM Xphere.", es "Conecta a una persona para enviar su trabajo al CRM Xphere."
 Arquivos: pages/admin/AdminXphere.tsx; pages/admin/PersonDetail.tsx:842; i18n/messages/integrations.ts:71,79-83
 Risco: nenhum.
+Status: feito. Integrações > Xphere é uma tabela (pessoa, conexão, última sincronização, Configurar); chave de entrada, endereço, token e "API URL" (em Avançado) ficam no painel da pessoa.
 
 ### AD-17 [S2] Painel mostra blocos que não se aplicam à situação da pessoa
 Telas: platform/en-desktop/person-pending, person-refused, person-blocked, person-platform; platform/en-phone/person-pending, person-blocked, person-refused
@@ -188,6 +197,7 @@ Problema: a pessoa pendente ou recusada tem regra de custo, Xphere, "Their visit
 Mudança: pendente e recusada veem só dados do cadastro, módulos e a decisão. Bloqueada: motivo, desbloquear, histórico e organizações, sem editar custo e Xphere. Idiomas por nome (`LANG_LABELS`). Tirar o selo.
 Arquivos: pages/admin/PersonDetail.tsx:224,233,239,286,295,502,797; pages/admin/PersonTagsSales.tsx:19
 Risco: nenhum.
+Status: feito. Pendente e recusada só veem dados, módulos e decisão; bloqueada, motivo, desbloquear, organizações e histórico; idiomas pelo nome; selo da plataforma saiu.
 
 ### AD-18 [S2] Editor do site: frases em pedaços
 Telas: platform/en-desktop/landing-editor, platform/en-phone/landing-editor
@@ -195,6 +205,7 @@ Problema: a frase dos termos vem em três campos: "Terms line, before the links"
 Mudança: um campo só, com marcadores: "By continuing you agree to the {terms} and the {privacy}." Prévia do rascunho ao lado do botão de publicar. Rótulos: en "Top menu button, signed in" e "Big button on the page, signed in".
 Arquivos: i18n/messages/landingAdmin.ts:44-46; pages/admin/landingFields.ts; pages/admin/AdminLandingContent.tsx
 Risco: o leitor do conteúdo salvo precisa aceitar o formato novo, com migração dos textos já publicados.
+Status: feito em parte. A frase dos termos é um campo só com {terms} e {privacy}, gravada nos três pedaços de sempre (sem migração); rótulos "Botão do menu de cima" e "Botão grande da página"; o link agora se chama "Abrir a página publicada". Pendente: prévia do rascunho, que pede um endpoint de rascunho.
 
 ### AD-20 [S2] Settings: "Open panel" não diz para onde vai
 Telas: owner/en-phone/settings-profile, settings-administration; platform/en-desktop/settings-profile; partner/en-phone/settings-administration; platform/pt-desktop/settings-profile
@@ -244,6 +255,7 @@ Problema: o selo mostra "black" e "white", em minúsculas e em inglês, nas tela
 Mudança: traduzir o valor: en "Black"/"White", pt "Preta"/"Branca", es "Negra"/"Blanca".
 Arquivos: pages/admin/tags/production-identity.tsx:34
 Risco: nenhum.
+Status: feito. A cor (black, white, mixed) sai traduzida nos selos e no cabeçalho do modelo; valor desconhecido continua como está.
 
 ### ID-07 [S2] Loja do revendedor com conteúdo só em inglês
 Telas: reseller/pt-desktop/tags-shop, reseller/es-desktop/tags-shop
@@ -302,6 +314,7 @@ Problema: a aba tem um nome e um interruptor, ambos travados, e "Only the platfo
 Mudança: esconder a aba e o item "Settings" da barra lateral para quem não edita. O parceiro mantém o resumo de AD-05.
 Arquivos: pages/xpot/OrganizationsPage.tsx:291-316,650
 Risco: nenhum.
+Status: pendente (`OrganizationsPage.tsx` é de F4).
 
 ### AD-21 [S3] Listas da organização sem resumo e sem busca
 Telas: platform/en-desktop/org-company-inventory (3844 px), org-harbor-inventory; owner/en-desktop/org-brightside-inventory, org-brightside-kits, org-brightside-customers; platform/en-desktop/org-brightside-customers; owner-multi/en-desktop/org-lindgren-inventory
@@ -309,6 +322,7 @@ Problema: Stock é uma lista de códigos, com produto e estado em cinza à direi
 Mudança: Stock vira contagem por estado ("Live 3 · Ready, not live 3 · No customer yet 7"), cada uma levando ao Estoque já filtrado. Kits ganha "{n} pieces". Companies e Kits mostram 10 linhas e "See all" para todos os perfis. Ícone de prédio nas duas.
 Arquivos: pages/xpot/OrganizationsPage.tsx:386-398
 Risco: conferir se o dono pode abrir o Estoque filtrado por organização.
+Status: pendente (`OrganizationsPage.tsx` é de F4).
 
 ### AD-22 [S3] Visão geral: número mal nomeado e cor de boa notícia no zero
 Telas: platform/en-desktop/org-brightside-overview, org-harbor-overview; owner/en-phone/org-brightside-overview; partner/en-desktop/org-harbor-overview; owner-multi/en-desktop/org-lindgren-overview
@@ -316,6 +330,7 @@ Problema: "Stock 14" conta todas as peças da organização; a lista por trás i
 Mudança: "Stock" passa a en "Pieces", pt "Peças", es "Piezas". Valor zero em cor neutra. Seta ou sublinhado nos clicáveis. Blocos de baixo levam a Tasks e Sales filtrados. Seletor de período junto de "Team activity, last 30 days".
 Arquivos: pages/xpot/OrganizationsPage.tsx:481-482,505-506
 Risco: nenhum.
+Status: pendente (`OrganizationsPage.tsx` é de F4).
 
 ### AD-23 [S3] Status repete o log e mostra mensagem técnica
 Telas: platform/en-desktop/status, status-event-1, status-event-2, status-event-3; platform/en-phone/status, status-event-1, status-event-2
@@ -323,6 +338,7 @@ Problema: "Problems (7 days)" e "Event log" mostram os mesmos eventos. Serviços
 Mudança: agrupar "Not set up ({count})" recolhido. Manter só Problems, com "Event log" recolhido e na largura toda. No detalhe, frase simples antes do técnico; esconder "Search" sem busca; tirar o "Status" do rodapé. Ocorrências da mais nova para a mais antiga.
 Arquivos: pages/admin/AdminSystemHealth.tsx:327,346; pages/admin/AdminSystemEventDetail.tsx:120-122; i18n/messages/systemHealth.ts
 Risco: nenhum. Os textos de evento vêm do seed, mas o formato é o do log real.
+Status: feito. Serviços sem configuração recolhidos em "Não configurados (N)", log de eventos recolhido (abre ao tocar num problema), títulos repetidos fora; no detalhe: o que fazer antes do técnico, "Busca" só quando há busca, ocorrências da mais nova para a mais antiga com a aberta à vista, sem o "Status" solto no rodapé. Pendente: traduzir o texto técnico dos eventos (ID-17).
 
 ### AD-24 [S3] Assistentes de IA em linguagem de desenvolvedor
 Telas: platform/en-desktop/integrations-assistants, platform/en-phone/integrations-assistants
@@ -330,6 +346,7 @@ Problema: "AI access (MCP)", "Connector URL", "For clients that take a header in
 Mudança: título en "Connect an AI assistant", pt "Conectar um assistente de IA", es "Conectar un asistente de IA". Fluxo normal: "Copy this address into your assistant." Tokens ficam em "Advanced". "Tags production log" passa a "History".
 Arquivos: i18n/messages/integrations.ts (`mcpIntro`, `scope_journey`); pages/admin/AdminIntegrations.tsx
 Risco: nenhum.
+Status: feito. "Conectar um assistente de IA", endereço para copiar, tokens em "Avançado", "Histórico" no lugar de "diário de produção das Tags".
 
 ### AD-25 [S3] Prévia mostra o logo sumindo, sem avisar
 Telas: platform/en-desktop/brand-identity, platform/en-phone/brand-identity
@@ -337,6 +354,7 @@ Problema: em "On light", aparece só o X: o resto do logo, branco, some no fundo
 Mudança: aviso sob a prévia: en "This logo is hard to see on light backgrounds. Add a dark version.", pt "Este logo fica difícil de ver em fundo claro. Envie uma versão escura.", es "Este logo se ve mal sobre fondo claro. Sube una versión oscura." Prévia realmente redonda. "Favicon & app icon" passa a "Browser tab and app icon".
 Arquivos: i18n/messages/platformAdmin.ts:167-168; i18n/messages/manage.ts:210; pages/admin/AdminBranding.tsx
 Risco: detectar logo claro exige analisar a imagem; alternativa é o aviso fixo ao lado da prévia.
+Status: feito em parte. Aviso quando o logo tem muito branco sobre transparência (lido da própria imagem), "Ícone da aba e do app". A prévia redonda ficou como está: o ícone já é arredondado.
 
 ### AD-26 [S3] "Company" e "empresa" com sentidos demais
 Telas: owner/en-desktop/org-brightside-team, platform/en-desktop/organizations, platform/pt-desktop/panel-stock, reseller/pt-desktop/tags-pieces, tags-home, platform/pt-desktop/piece-popup-live
@@ -344,6 +362,7 @@ Problema: "My company" é a área do dono, "Companies" são os clientes, "Organi
 Mudança: "Companies" para os clientes na lista do admin; "My company" para a área do dono; "Organizations" só para o admin da plataforma. Na coluna de peças e no popup, um único nome. Recomendo en "Customer", pt "Cliente", es "Cliente", porque "company stock" já ocupa a outra palavra.
 Arquivos: docs/MODULES.md §5; i18n/messages/shell.ts, manageTagsPieces.ts, tags.ts
 Risco: decisão do dono, porque a D6 do plano foi descartada. Recomendo mudar só a coluna e o popup.
+Status: pendente (coluna e popup de peças são de F2).
 
 ### AD-28 [S3] People repete o estado em cada linha
 Telas: platform/en-desktop/people, people-status-active, people-status-blocked, people-status-pending; platform/pt-desktop/people; platform/es-desktop/people; platform/en-phone/people
@@ -351,6 +370,7 @@ Problema: dentro de "Active (9)", todas as linhas têm a pill "Active". Em "Wait
 Mudança: esconder a pill quando o grupo já diz o estado.
 Arquivos: pages/admin/AdminReps.tsx; pages/admin/PersonDetail.tsx:162
 Risco: nenhum.
+Status: feito. A linha da lista não repete o estado do grupo.
 
 ### AD-29 [S3] People no celular: a primeira pessoa fica no meio da tela
 Telas: platform/en-phone/people, people-status-active
@@ -358,6 +378,7 @@ Problema: a barra "Platform / Back to my app", o título "People" e o seletor "P
 Mudança: tirar o título quando o seletor de seção já mostra o nome. Recolher os três filtros em um botão "Filters".
 Arquivos: pages/admin/AdminApp.tsx:59-66; pages/admin/AdminReps.tsx
 Risco: nenhum.
+Status: feito em parte. Os três filtros ficam atrás de um botão "Filtros" no celular. O título repetido está em `AdminApp.tsx`, da moldura (F1).
 
 ### AD-31 [S3] Três campos de nome e código de atacado no perfil
 Telas: platform/en-desktop/settings-profile, owner/en-desktop/settings-profile, partner/en-desktop/settings-profile; reseller/es-desktop/settings-profile; platform/pt-desktop/settings-profile
@@ -365,6 +386,7 @@ Problema: "First name", "Last name" e "Display name" para o mesmo nome. "Your wh
 Mudança: esconder "Display name", derivado dos outros dois. Tirar o código do perfil; ou deixá-lo só com um link en "Open the wholesale store".
 Arquivos: pages/xpot/XpotSettings.tsx:416-424; pages/tags/WholesaleCard.tsx:55
 Risco: revendedor ligado a parceiro não vê o cartão ("Suas peças vêm de…"), mas o perfil mostra o código dele. Conferir com o dono se ele deveria ter código.
+Status: pendente (`XpotSettings.tsx` é de F5).
 
 ### ID-11 [S3] "Peça peças", e o admin mandado falar com o gestor
 Telas: platform/pt-desktop/tags-pieces
@@ -372,6 +394,7 @@ Problema: "Nenhuma peça ainda. Peça peças ao seu gestor." e "Peça placas, ch
 Mudança: "Você ainda não tem peças. Solicite ao seu gestor." e "Compre placas, chaveiros e mais na loja Stuscle com preço de revendedor. O seu código libera." Para quem administra: en "You have no pieces with you. Hand them out in Stock.", pt "Você não tem peças consigo. Entregue pelo Estoque.", es "No tienes piezas contigo. Entrégalas desde Stock."
 Arquivos: i18n/messages/tags.ts:117,582,882,1028; pages/tags/PiecesScreen.tsx
 Risco: nenhum.
+Status: feito em parte. Textos "Você ainda não tem peças. Solicite ao seu gestor." e "Compre placas…". Pendente: a variante do administrador ("Entregue pelo Estoque") precisa de lógica em `PiecesScreen.tsx`, de F5.
 
 ### ID-12 [S3] "(regra dele)"
 Telas: platform/pt-desktop/handout-form-reseller-picked, platform/es-desktop/handout-form-reseller-picked
@@ -379,6 +402,7 @@ Problema: "Da empresa (consignação) (regra dele)", es "(su regla)". Quer dizer
 Mudança: en "(their default)", pt "(padrão dele)", es "(su opción habitual)".
 Arquivos: i18n/messages/adminTagsFlow.ts:74,280,477
 Risco: nenhum.
+Status: feito. "(padrão dele)", "(its default)", "(su opción habitual)".
 
 ### ID-16 [S3] Espanhol: "ordenador" e "computadora" misturados
 Telas: platform/es-desktop/org-harbor-settings ("su propio ordenador de la impresora")
@@ -386,6 +410,7 @@ Problema: o glossário manda "Ordenador", mas a varredura dos textos acha "compu
 Mudança: corrigir o glossário para "Computadora de la impresora" e trocar `ordenador` nas chaves.
 Arquivos: docs/MODULES.md §5; i18n/messages/partnerMaterials.ts, apiErrors.ts, peopleWorkspace.ts:265
 Risco: decisão do dono. Recomendo "computadora".
+Status: feito. Espanhol usa "computadora" nas frases; glossário atualizado. A "Orden de impresión" de `apiErrors` ficou.
 
 ### ID-17 [S3] Texto de log em inglês nas telas pt e es
 Telas: platform/pt-desktop/status; platform/es-desktop/status (tabela)
@@ -393,6 +418,7 @@ Problema: "Google Maps engine answered 429; retrying in 60s", "Xphere push faile
 Mudança: traduzir os erros por código, quando existir `reasonCode`, e mostrar o texto original só em "Technical details". Os textos em si são do seed.
 Arquivos: pages/admin/AdminSystemHealth.tsx; pages/admin/systemHealthUi.tsx
 Risco: exige código em cada erro conhecido; os demais continuam em inglês, atrás de um título genérico.
+Status: pendente (os erros não têm código por tipo no servidor; ficam em inglês atrás do título).
 
 ### AD-33 [S3] 35 modelos numa caixa de seis linhas, sem busca
 Telas: platform/en-desktop/organizations-new-dialog, org-harbor-settings; platform/en-phone/organizations-new-dialog; partner/en-desktop/org-harbor-settings
@@ -400,6 +426,7 @@ Problema: "Models it may print" é uma lista com rolagem própria, de 256 px. O 
 Mudança: busca no topo e grupos por produto recolhidos ("Large Plate (6)"), com "Select all" por grupo.
 Arquivos: pages/xpot/components/ReleasedModelsField.tsx:18,43-44
 Risco: nenhum.
+Status: pendente (`ReleasedModelsField.tsx` é de F4, junto com AD-05).
 
 ## S4
 
@@ -409,6 +436,7 @@ Problema: "My organiza…" na linha do celular. "Landing p…" na aba. "Owner" e
 Mudança: deixar o nome da empresa quebrar para a segunda linha. Abas em rolagem com recuo no fim. Subtítulo en "Your role: Owner"; tirar "Platform management".
 Arquivos: pages/xpot/XpotSettings.tsx; pages/xpot/OrganizationsPage.tsx:335
 Risco: nenhum.
+Status: pendente (`XpotSettings.tsx` e `OrganizationsPage.tsx` são de outras frentes).
 
 ### AD-32 [S4] "blocked Oct 13, 2026" em minúscula
 Telas: platform/en-desktop/person-blocked, person-refused, person-pending
@@ -416,6 +444,7 @@ Problema: "blocked …", "refused …" e "signed up …" começam em minúscula,
 Mudança: en "Blocked on {date}", "Refused on {date}"; em pt e es, igual, com maiúscula.
 Arquivos: i18n/messages/manage.ts:95,128,315
 Risco: nenhum.
+Status: feito. "Bloqueado em", "Recusado em", "Cadastro em" com maiúscula nos três idiomas.
 
 ### ID-18 [S4] Primeiro dia do gráfico cortado em português
 Telas: platform/pt-desktop/tags-home, reseller/pt-desktop/tags-home
@@ -423,6 +452,7 @@ Problema: "3 de out." tem o começo cortado na borda do gráfico. O espanhol "3 
 Mudança: em pt, formatar "3 out", sem "de" e sem ponto.
 Arquivos: pages/tags/charts.ts:26; pages/tags/TagsDashboard.tsx:178
 Risco: nenhum.
+Status: feito. Eixo em português "3 out"; teste em `tests/tags/tagCharts.test.ts`.
 
 ### ID-19 [S4] Três palavras para "status" em português
 Telas: platform/pt-desktop/status, people, tags-pieces
@@ -430,6 +460,7 @@ Problema: a tela chama-se "Status", a coluna "ESTADO", o filtro "Situação" e, 
 Mudança: pt "Status" nas três chaves.
 Arquivos: i18n/messages/manage.ts:349; i18n/messages/platformAdmin.ts:281
 Risco: nenhum.
+Status: feito. "Status" em português nos filtros e na coluna do painel.
 
 ### ID-20 [S4] Espanhol: dois nomes no mesmo cartão e "mayoreo"
 Telas: platform/es-desktop/integrations-services, platform/es-desktop/tags-pieces, platform/es-desktop/person-owner
@@ -437,6 +468,7 @@ Problema: o cartão tem a pill "Apagada" e o rótulo do interruptor "Desactivada
 Mudança: "Apagada" nos dois. Sempre "mayorista": "Mayorista Stuscle", "Código mayorista".
 Arquivos: i18n/messages/manage.ts:454; i18n/messages/integrations.ts:216; i18n/messages/platformAdmin.ts:428; i18n/messages/tags.ts:1329
 Risco: conferir se `manage.disabled` é usado em outro lugar antes de trocar.
+Status: feito. "Apagada" nos dois lugares e "mayorista" em todo o espanhol.
 
 ### ID-21 [S4] "Sem cliente" e "Sem cliente ainda" na mesma linha
 Telas: reseller/pt-desktop/tags-pieces, reseller/es-desktop/tags-pieces, platform/pt-desktop/piece-popup-houseAvailable, platform/es-desktop/piece-popup-houseAvailable
@@ -444,6 +476,7 @@ Problema: a coluna diz "Sem cliente ainda" / "Aún sin cliente" e a pill diz "Se
 Mudança: "—" na coluna, quando a pill já diz. No popup, "Sem cliente" e "Sin cliente".
 Arquivos: pages/tags/PiecesScreen.tsx; i18n/messages/tags.ts
 Risco: nenhum.
+Status: feito. A coluna mostra "—" quando a pílula já diz "Sem cliente"; popup só "Sem cliente".
 
 ### ID-22 [S4] Ponto duplo depois do nome da empresa
 Telas: reseller/pt-desktop/tags-pieces, tags-shop; reseller/es-desktop/tags-pieces, tags-shop
@@ -451,6 +484,7 @@ Problema: "Suas peças vêm de Harbor Print Co.." e "Tus piezas vienen de Harbor
 Mudança: tirar o ponto final da frase nos três idiomas.
 Arquivos: i18n/messages/tags.ts:436,885 e a chave em es
 Risco: nenhum.
+Status: feito. Sem o ponto final depois do nome da empresa.
 
 ### ID-23 [S4] "With you" contra "With me" e verbos soltos no popup
 Telas: reseller/pt-desktop/tags-home, reseller/es-desktop/tags-home, platform/pt-desktop/piece-popup-live
@@ -458,6 +492,7 @@ Problema: a home diz "Com você" / "Contigo", e o glossário manda "Comigo" / "C
 Mudança: tile "Comigo"/"Conmigo"/"With me". pt "Trocar destino".
 Arquivos: i18n/messages/tags.ts:67,533,979
 Risco: nenhum.
+Status: feito. "Comigo", "Conmigo", "With me"; "Trocar destino".
 
 ### ID-24 [S4] Frases literais em português
 Telas: platform/pt-desktop/integrations-services, platform/pt-desktop/people
@@ -465,6 +500,7 @@ Problema: "Ao que o Xpot se conecta, agrupado pelo trabalho que faz." e "Papel" 
 Mudança: "O que está ligado ao Xpot, por tipo de trabalho." e "Função" em filtros e no painel.
 Arquivos: i18n/messages/platformAdmin.ts:187; i18n/messages/manage.ts
 Risco: nenhum.
+Status: feito. "O que está ligado ao Xpot, por tipo de trabalho." e "Função".
 
 ### ID-25 [S4] Chave crua nas notas da visita, causada pelo seed
 Telas: owner/en-desktop/visits-history-came_back_later, visits-history-follow_up; owner/en-phone/visits-history-came_back_later
@@ -472,6 +508,7 @@ Problema: "NOTES: came_back_later" e "NOTES: follow_up". A causa é o seed, que 
 Mudança: corrigir o seed. Opcional: em `VisitRow`, não mostrar o valor se ele for igual a um status conhecido.
 Arquivos: .lab/seed-visits.ts:135; pages/xpot/components/VisitRow.tsx:198; pages/xpot/XpotDashboard.tsx:459
 Risco: nenhum.
+Status: pendente (o seed do laboratório não é versionado; não é do produto).
 
 ## O que o report.json acusou
 

@@ -126,7 +126,7 @@ export const productionBoardMessages: Dictionary<typeof en> = {
     pendingTitle: "Esperando impresión",
     pendingIntro: "Las piezas generadas quedan pendientes hasta que se marcan como impresas. Descarga cada archivo cuando esté listo.",
     pendingEmptyHint: "Genera piezas arriba: sus impresiones aparecen aquí hasta que se completan.",
-    benchHint: "El ordenador de la impresora genera los archivos. Mientras esté apagado, las impresiones esperan aquí.",
+    benchHint: "La computadora de la impresora genera los archivos. Mientras esté apagado, las impresiones esperan aquí.",
     allOrders: "Todos los pedidos",
     generateDialog: "Generar {product}",
     generateDialogIntro: "Cada pieza recibe un serial nuevo y entra al stock como pendiente hasta que se marca como impresa.",
