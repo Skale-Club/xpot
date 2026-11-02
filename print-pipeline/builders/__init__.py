@@ -217,6 +217,10 @@ NEEDS_BATCH = {'stand.google', 'stand.instagram', 'stand.menu'}
 def build_piece(builder_id, tag, index, params, out_dir, batch=''):
     if builder_id not in BUILDERS:
         raise BuildError(f'unknown builder {builder_id!r}: one of {", ".join(sorted(BUILDERS))}')
+    # Reject an unsupported NFC option before importing optional geometry libraries.
+    # Per-builder defaults still apply when the version omits nfc_mount.
+    if 'nfc_mount' in params:
+        _mount(params, nfc_mounts.DEFAULT_MOUNT)
     fn = BUILDERS[builder_id]
     os.makedirs(out_dir, exist_ok=True)
     if builder_id in NEEDS_BATCH:
