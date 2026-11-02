@@ -23,7 +23,7 @@ import { BatchStagePill, BatchStatusPill, catalogOptions, useTagCatalog } from "
 import { Loading, LoadError } from "./pieces-shared";
 import { useTagLabels } from "./labels";
 import { BatchReceiveStation } from "./batch-receive";
-import { canMarkStep, stageSteps, type StageStep } from "./batches-model";
+import { batchTabsFor, canMarkStep, stageSteps, type StageStep } from "./batches-model";
 import { handOutHref } from "./distribution-model";
 import { useT } from "@/i18n";
 import { commonMessages } from "@/i18n/messages/common";
@@ -135,8 +135,7 @@ function EditBatch({ batch, onClose }: { batch: BatchDetailData; onClose: () => 
 }
 
 // Pieces, Hand out and Activity used to be tabs; they repeat Inventory, Distribution and the Journey log. Old ?tab= links fall back to Summary.
-const BATCH_TABS = ["summary", "print", "receive"] as const;
-type BatchTab = (typeof BATCH_TABS)[number];
+type BatchTab = "summary" | "print" | "receive";
 const TAB_KEYS = {
   summary: "tabSummary",
   print: "tabPrint",
@@ -240,7 +239,6 @@ export function BatchDetail({ id, go }: { id: string; go: (path: string) => void
   const [changingState, setChangingState] = useState(false);
   const [preparing, setPreparing] = useState(false);
   const url = useUrlFilters({ tab: "summary" });
-  const tab: BatchTab = (BATCH_TABS as readonly string[]).includes(url.values.tab) ? (url.values.tab as BatchTab) : "summary";
   const t = useT(manageTagsBatchesMessages);
   const tf = useT(adminTagsFlowMessages);
   const u = useT(unifiedProductionMessages);
@@ -255,7 +253,7 @@ export function BatchDetail({ id, go }: { id: string; go: (path: string) => void
     staleTime: STALE_MS,
   });
 
-  const back = <BackLink onBack={() => go(batch?.printJobId ? `/production/jobs/${batch.printJobId}` : "/production/queue")}>{batch?.printJobId ? u("backToOrder") : u("title")}</BackLink>;
+  const back = <BackLink onBack={() => go(batch?.printJobId ? `/production/jobs/${batch.printJobId}` : "/production")}>{batch?.printJobId ? u("backToOrder") : u("title")}</BackLink>;
 
   if (isLoading) return <Loading rows={5} />;
   if (error || !batch) {
@@ -284,6 +282,9 @@ export function BatchDetail({ id, go }: { id: string; go: (path: string) => void
   const exportBase = `/api/xpot/admin/tag-batches/${encodeURIComponent(batch.id)}`;
   const face = resolveTagFace({ batchFace: batch.face, productType: batch.productType });
   const fileBase = batch.batchCode.replace(/[^A-Za-z0-9._-]/g, "_");
+  // Only a supplier batch has Print and Receive; a house print's files and stock live on its print order. A stale ?tab= falls back to Summary.
+  const tabs = batchTabsFor(batch);
+  const tab: BatchTab = tabs.find((id) => id === url.values.tab) ?? "summary";
   const canPrepare = !batch.printJobId && batch.codeSource === "issued" && batch.tagCount > 0 && ["issued", "built"].includes(batch.stage) && batch.status !== "cancelled";
 
   const closing = batch.status === "open";
@@ -367,15 +368,17 @@ export function BatchDetail({ id, go }: { id: string; go: (path: string) => void
         {closing && batch.pendingCount > 0 ? <InlineAlert tone="warning">{t.plural("closeBatchPending", batch.pendingCount)}</InlineAlert> : null}
       </ConfirmDialog>
 
-      <Tabs
-        tabs={BATCH_TABS.map((id) => ({ id, label: tf(TAB_KEYS[id]), testId: `batch-tab-${id}` }))}
-        value={tab}
-        onChange={(next) => url.set({ tab: next })}
-        ariaLabel={batch.batchCode}
-        idPrefix="batch"
-        fill={false}
-        accent="tags"
-      />
+      {tabs.length > 1 ? (
+        <Tabs
+          tabs={tabs.map((id) => ({ id, label: tf(TAB_KEYS[id]), testId: `batch-tab-${id}` }))}
+          value={tab}
+          onChange={(next) => url.set({ tab: next })}
+          ariaLabel={batch.batchCode}
+          idPrefix="batch"
+          fill={false}
+          accent="tags"
+        />
+      ) : null}
 
       {tab === "summary" && (
         <div className="space-y-4" role="tabpanel" aria-labelledby="batch-tab-summary">

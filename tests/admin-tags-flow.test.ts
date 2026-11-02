@@ -7,6 +7,7 @@ import { TAG_PIECE_QUEUES } from "../shared/tagQueues";
 import { adminTagsFlowMessages } from "../client/src/i18n/messages/adminTagsFlow";
 import { activityFeed, needsActionQueues, pieceQueueCard } from "../client/src/pages/admin/tags/overview-model";
 import {
+  batchTabsFor,
   canMarkStep,
   intakeKey,
   pendingBatches,
@@ -88,6 +89,16 @@ describe("Batch stage stepper", () => {
     expect(marks("built")).toEqual(["printed"]);
     expect(marks("printed")).toEqual([]);
     expect(marks("receiving")).toEqual([]);
+  });
+});
+
+describe("Batch tabs", () => {
+  it("gives a supplier batch Summary, Print and Receive", () => {
+    expect(batchTabsFor({ printJobId: null })).toEqual(["summary", "print", "receive"]);
+  });
+
+  it("gives a batch from a house print only the Summary, which links to its print order", () => {
+    expect(batchTabsFor({ printJobId: "9b2f6c1e-0000-4000-8000-000000000001" })).toEqual(["summary"]);
   });
 });
 
