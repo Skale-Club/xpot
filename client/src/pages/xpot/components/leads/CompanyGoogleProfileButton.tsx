@@ -68,7 +68,7 @@ export function CompanyGoogleProfileButton({ lead }: { lead: FullSalesLead }) {
     <>
       {connected ? (
         <div className="inline-flex min-h-9 flex-wrap items-center gap-2 rounded-lg border border-blue-300/15 bg-blue-400/[0.06] px-3 py-1.5 text-xs text-blue-100" data-testid="company-google-profile-summary">
-          <GoogleLogo className="h-3.5 w-3.5" />
+          <GoogleLogo className="h-3.5 w-3.5" /><span className="font-medium">{t("googleProfileChip")}</span>
           {profile.isLoading ? <DotsLoader size="xs" tone="muted" /> : (
             <>
               {p?.rating != null ? <strong className="flex items-center gap-1 tabular-nums"><Star className="h-3.5 w-3.5 fill-amber-400 text-amber-400" />{p.rating.toFixed(1)}</strong> : null}

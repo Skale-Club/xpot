@@ -186,7 +186,7 @@ const en = {
 
   // Checking in outside the radius, or without location
   overrideTitle: "Where did you meet?",
-  overrideOutside: "You are {distance} from {name}'s address (check-in radius {radius}).",
+  overrideOutside: "You are {distance} from {name} (check-in radius {radius}).",
   overrideAccuracy: "Your location is accurate to about {accuracy}.",
   overrideNoLocation: "This device did not share its location, so the visit cannot be matched to {name}'s address.",
   overrideAsk: "Pick what happened. It is saved with the visit so your manager knows.",

@@ -49,7 +49,6 @@ import { PanelTabBar } from "./PanelTabBar";
 import { PhoneTopBar } from "./PhoneTopBar";
 import { ScreenErrorBoundary } from "./ScreenErrorBoundary";
 import { usePanelNames } from "./panelNames";
-import { dashboardMessages } from "@/i18n/messages/dashboard";
 import { PersistentRouteProgress } from "./PersistentRouteProgress";
 import { navigateGuarded } from "@/hooks/useUnsavedChangesGuard";
 import { subscribeToRoutePush } from "@/lib/pushNotifications";
@@ -280,19 +279,11 @@ function ScrollingNav({ children, label }: { children: ReactNode; label: string 
 
 function DesktopSidebar({ collapsed, onToggle }: { collapsed: boolean; onToggle: () => void }) {
   const t = useT(shellMessages);
-  const td = useT(dashboardMessages);
   const [location] = useLocation();
   const { context, module, modules, groups, moduleLabel, panel } = useShellNav();
   const { panelName } = usePanelNames();
   const { profile } = useViewerAccess();
   const accent = panel ? MANAGEMENT_ACCENT : MODULE_ACCENT[module ?? "visits"];
-  const routesQuery = useQuery<Array<{ routeDate: string; status: string }>>({
-    queryKey: ["/api/xpot/prospecting/routes"],
-    enabled: !panel && module === "visits",
-  });
-  const today = new Date();
-  const todayKey = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
-  const routeMissingToday = routesQuery.isSuccess && !routesQuery.data.some((route) => route.routeDate === todayKey && route.status !== "cancelled");
 
   return (
     <aside
@@ -329,7 +320,7 @@ function DesktopSidebar({ collapsed, onToggle }: { collapsed: boolean; onToggle:
 
       <ScrollingNav label={panel ? panelName(profile) : module ? moduleLabel(module) : t("navSettings")}>
         {groups.map((group, i) => {
-          const items = group.items.map((item) => <SidebarLink key={item.href} item={item} collapsed={collapsed} active={item.match(location)} accent={accent} warningLabel={item.href === "/route" && routeMissingToday ? td("noRouteToday") : undefined} />);
+          const items = group.items.map((item) => <SidebarLink key={item.href} item={item} collapsed={collapsed} active={item.match(location)} accent={accent} />);
           if (group.collapsible && !collapsed) return <CollapsibleGroup key={group.label || i} group={group}>{items}</CollapsibleGroup>;
           return <div key={group.label || i} className="space-y-1">
             {group.label && !collapsed ? <div className="flex items-center gap-2 px-3 pb-1 text-[10px] font-semibold uppercase tracking-widest text-white/35"><span className="truncate">{group.label}</span>{group.adminOnly && <AdminBadge className="ml-auto" />}</div> : null}

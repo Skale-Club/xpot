@@ -138,7 +138,7 @@ export function StatusPicker({ value, onChange, layout = "compact" }: { value: s
               }`}
             >
               {isActive ? <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${PILL_DOTS[tone]}`} aria-hidden="true" /> : null}
-              <span className="truncate">{visitStatusLabel(t, s.value)}</span>
+              <span className="line-clamp-2 text-center leading-tight">{visitStatusLabel(t, s.value)}</span>
             </button>
           );
         })}
