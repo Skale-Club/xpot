@@ -48,9 +48,9 @@ export function VisitSaleActions({ lead, visitId, saleOpen, onSaleOpenChange }: 
           testId={`visit-count-and-bill-${row.consignment.id}`}
         />
       ))}
-      <VisitAction icon={Package} tone="emerald" title={t("newSale")} disabled={!canRecord} onClick={() => onSaleOpenChange(true)} testId="visit-new-sale" />
-      {tagsEnabled&&<VisitAction icon={PackagePlus} tone="violet" title={ordersT('newOrder')} disabled={!canRecord} onClick={()=>navigate(`/tags/orders/new?leadId=${lead.id}&visitId=${visitId}&name=${encodeURIComponent(lead.name)}`)} testId="visit-new-order"/>}
-      <VisitAction icon={PackagePlus} tone="emerald" title={t("leaveStock")} disabled={!canRecord} onClick={() => setDepositOpen(true)} testId="visit-leave-stock" />
+      <VisitAction icon={Package} tone="emerald" title={t("newSale")} hint={t("newSaleHint")} disabled={!canRecord} onClick={() => onSaleOpenChange(true)} testId="visit-new-sale" />
+      {tagsEnabled&&<VisitAction icon={PackagePlus} tone="violet" title={ordersT('newOrder')} hint={t("newOrderHint")} disabled={!canRecord} onClick={()=>navigate(`/tags/orders/new?leadId=${lead.id}&visitId=${visitId}&name=${encodeURIComponent(lead.name)}`)} testId="visit-new-order"/>}
+      <VisitAction icon={PackagePlus} tone="emerald" title={t("leaveStock")} hint={t("leaveStockHint")} disabled={!canRecord} onClick={() => setDepositOpen(true)} testId="visit-leave-stock" />
 
       <SaleDialog open={saleOpen} onOpenChange={onSaleOpenChange} leadId={lead.id} leadName={lead.name} visitId={visitId} onDone={refresh} />
       <DepositDialog open={depositOpen} onOpenChange={setDepositOpen} leadId={lead.id} leadName={lead.name} visitId={visitId} existing={consignments} onDone={refresh} />
