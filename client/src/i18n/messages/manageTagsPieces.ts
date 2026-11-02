@@ -84,7 +84,7 @@ const en = {
   activateNeedsCustomer: "Choose a customer before putting it live.",
   activateNeedsType: "Choose a destination type before putting it live.",
   activateNeedsUrl: "Set a destination before putting it live.",
-  liveExplain: "Live — both the QR and the NFC URL redirect to the destination.",
+  liveExplain: "Live: scanning the piece opens its destination.",
   damagedExplain: "Damaged — this physical piece is out of usable stock and retained in the batch for quality-control reporting.",
 
   // Piece screen: details
@@ -286,7 +286,7 @@ export const manageTagsPiecesMessages: Dictionary<typeof en> = {
     activateNeedsCustomer: "Escolha um cliente antes de colocar no ar.",
     activateNeedsType: "Escolha um tipo de destino antes de colocar no ar.",
     activateNeedsUrl: "Defina um destino antes de colocar no ar.",
-    liveExplain: "No ar — o QR e a URL NFC redirecionam para o destino.",
+    liveExplain: "No ar: quem lê a peça abre o destino dela.",
     damagedExplain: "Estragada — esta peça física saiu do estoque utilizável e ficou registrada no lote para controle de qualidade.",
 
     sameAsBatch: "Igual ao lote",
@@ -479,7 +479,7 @@ export const manageTagsPiecesMessages: Dictionary<typeof en> = {
     activateNeedsCustomer: "Elige un cliente antes de activarla.",
     activateNeedsType: "Elige un tipo de destino antes de activar.",
     activateNeedsUrl: "Define un destino antes de activarla.",
-    liveExplain: "Activa — el QR y la URL NFC redirigen al destino.",
+    liveExplain: "Activa: al leer la pieza se abre su destino.",
     damagedExplain: "Dañada — esta pieza física salió del stock utilizable y quedó registrada en el lote para control de calidad.",
 
     sameAsBatch: "Igual que el lote",

@@ -10,7 +10,7 @@ import { manageTagsMessages } from "@/i18n/messages/manageTags";
 import { manageTagsPiecesMessages } from "@/i18n/messages/manageTagsPieces";
 import { pieceScreenMessages } from "@/i18n/messages/pieceScreen";
 import { usePiece } from "./PieceContext";
-import { pieceIsSold, pieceLocation, pieceSituation, pieceStatusChips, type PieceDimension } from "./pieceView";
+import { pieceHasLocation, pieceIsSold, pieceLocation, pieceSituation, pieceStatusChips, type PieceDimension } from "./pieceView";
 
 // The piece's header, the same on the reseller screen and the admin page: what
 // it is (model and face), one status pill (pieceSituation), where it is and
@@ -59,7 +59,8 @@ export function PieceSituationPill({ className = "" }: { className?: string }) {
   const label = useStatusLabel();
   const situation = pieceSituation(tag, viewer);
   // An unlisted situation shows the stored status in words.
-  const text = situation.key === "other" ? label("digital", tag.status) : tp(`situation_${situation.key}` as "situation_live");
+  const stockSpeaks = tag.status === "inventory" && tag.stockStatus !== "available";
+  const text = situation.key === "other" ? (stockSpeaks ? label("stock", tag.stockStatus) : label("digital", tag.status)) : tp(`situation_${situation.key}` as "situation_live");
   return (
     <div className={className} data-testid="piece-situation" data-situation={situation.key}>
       <Pill tone={situation.tone}>{text}</Pill>
@@ -72,20 +73,26 @@ export function PieceFacts({ tag, className = "" }: { tag: TagDetail; className?
   const tt = useT(tagsMessages);
   const tp = useT(pieceScreenMessages);
   const tpieces = useT(manageTagsPiecesMessages);
+  const located = pieceHasLocation(tag);
+  if (!located && !tag.leadName) return null;
   const location = pieceLocation(tag);
   const where = location.kind === "house"
     ? tpieces("houseStock")
     : tp("locationWith", { name: location.name ?? tpieces("resellerNumber", { id: location.repId }) });
   return (
     <dl className={`grid min-w-0 grid-cols-[auto_minmax(0,1fr)] items-center gap-x-2 gap-y-1 text-sm ${className}`} data-testid="piece-facts">
-      <dt className="flex items-center" title={tp("locationLabel")}>
-        <MapPin className="h-4 w-4 text-white/40" aria-hidden="true" />
-        <span className="sr-only">{tp("locationLabel")}</span>
-      </dt>
-      <dd className="min-w-0 truncate text-white/75" data-testid="piece-location">
-        {where}
-        {location.kind === "reseller" && location.kit ? <span className="font-mono text-white/45"> · {tp("locationKit", { id: location.kit })}</span> : null}
-      </dd>
+      {located ? (
+        <>
+          <dt className="flex items-center" title={tp("locationLabel")}>
+            <MapPin className="h-4 w-4 text-white/40" aria-hidden="true" />
+            <span className="sr-only">{tp("locationLabel")}</span>
+          </dt>
+          <dd className="min-w-0 truncate text-white/75" data-testid="piece-location">
+            {where}
+            {location.kind === "reseller" && location.kit ? <span className="font-mono text-white/45"> · {tp("locationKit", { id: location.kit })}</span> : null}
+          </dd>
+        </>
+      ) : null}
       <dt className="flex items-center" title={tp("customerLabel")}>
         <Building2 className="h-4 w-4 text-white/40" aria-hidden="true" />
         <span className="sr-only">{tp("customerLabel")}</span>

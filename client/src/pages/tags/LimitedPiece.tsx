@@ -59,7 +59,7 @@ export function LimitedPiece({ piece, back, onBack, right, onReceive }: {
       </div>
       <div className="space-y-3">
         {receive ? (
-          <ReceivePanel targets={receive.targets} blocker={receive.blocker} management={receive.targets[0] === "house"} onReceive={onReceive} />
+          <ReceivePanel targets={receive.targets} blocker={receive.blocker} onReceive={onReceive} />
         ) : null}
         <section className={`${CARD} flex items-start gap-3 p-4`}>
           <EyeOff className="mt-0.5 h-4 w-4 shrink-0 text-white/40" aria-hidden="true" />

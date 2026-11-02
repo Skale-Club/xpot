@@ -18,12 +18,10 @@ import { showsReceive } from "./pieceView";
 // Writing or testing the chip never shows up here: it never moves stock.
 
 /** Receive a piece not received into stock yet: into the house's stock or the viewer's own. */
-export function ReceivePanel({ targets, blocker, onReceive, management }: {
+export function ReceivePanel({ targets, blocker, onReceive }: {
   targets: ReceiveTarget[];
   blocker: string | null;
   onReceive: (into: ReceiveTarget) => Promise<void>;
-  /** The viewer receives for the house by default (management). */
-  management: boolean;
 }) {
   const tp = useT(pieceCustodyMessages);
   const tc = useT(commonMessages);
@@ -51,7 +49,6 @@ export function ReceivePanel({ targets, blocker, onReceive, management }: {
         </div>
       ) : (
         <>
-          <p className="mt-1.5 text-sm text-white/65">{management ? tp("receiveHint") : tp("receiveHintRep")}</p>
           {error ? <div className="mt-3"><InlineAlert tone="error">{error}</InlineAlert></div> : null}
           <div className="mt-3 flex flex-col gap-2">
             {targets.map((into, i) => (
@@ -100,7 +97,6 @@ export function CustodyCard() {
       <ReceivePanel
         targets={receive.targets}
         blocker={receive.blocker}
-        management={receive.targets[0] === "house"}
         onReceive={async (into) => {
           await write("POST", `/api/xpot/tags/${tag.id}/receive`, { into });
           notify({ tone: "ok", text: into === "house" ? tp("received_house") : tp("received_me") });

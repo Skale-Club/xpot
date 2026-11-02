@@ -8,6 +8,7 @@ import {
   tagAcquisitionLines,
   tagAcquisitionUnits,
   tagAcquisitions,
+  printJobs,
   tagBatches,
   tagDestinationHistory,
   tagEvents,
@@ -347,11 +348,13 @@ export async function getTagDetail(id: string, baseUrl: string, actor?: TagActor
   const history = await historyFor(sql`h.tag_id = ${id}`, 100);
   const custody = actor ? await custodyFor(actor, tag, item.saleId !== null) : undefined;
   const [batch] = tag.batchId
-    ? await db.select({ printJobId: tagBatches.printJobId }).from(tagBatches).where(eq(tagBatches.id, tag.batchId)).limit(1)
+    ? await db.select({ printJobId: tagBatches.printJobId, printJobStatus: printJobs.status }).from(tagBatches)
+      .leftJoin(printJobs, eq(printJobs.id, tagBatches.printJobId)).where(eq(tagBatches.id, tag.batchId)).limit(1)
     : [];
   return {
     ...item,
     printJobId: batch?.printJobId ?? null,
+    printJobStatus: batch?.printJobStatus ?? null,
     utmEnabled: tag.utmEnabled,
     utmCampaign: tag.utmCampaign,
     metadata: tag.metadata ?? null,
