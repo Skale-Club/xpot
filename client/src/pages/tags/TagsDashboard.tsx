@@ -12,8 +12,9 @@ import { TagPieceMention } from "@/components/xpot/TagProductThumbnail";
 import { KpiTile } from "@/components/xpot/DashboardKit";
 import { EmptyState, ErrorState } from "@/components/xpot/EmptyState";
 import { ageOf, APP_BASE, errorText, tagPath, tagsGet } from "./lib";
-import { CHART_TICK, CHART_TICK_DAY, chartTickInterval, chartTooltip, formatChartDay, formatCount, NFC_COLOR, NFC_SOFT, QR_COLOR, QR_SOFT } from "./charts";
+import { CHART_TICK_DAY, chartTickInterval, chartTooltip, formatChartDay, formatCount, NFC_COLOR, NFC_SOFT, QR_COLOR, QR_SOFT } from "./charts";
 import { CARD, EYEBROW_MUTED } from "./ui";
+import { EdgeTick } from "./ChartTick";
 
 // The Tags dashboard, under the scan actions on the module's home: stock and
 // sales, scans over the last 30 days (QR vs NFC), the pieces and customers
@@ -131,8 +132,7 @@ export function ScansSection({ data, visitors = false }: { data: TagDashboard; v
                 axisLine={false}
                 tickLine={false}
                 interval={chartTickInterval(chart.length)}
-                tick={CHART_TICK}
-                tickFormatter={(day: string) => formatChartDay(day, t.locale, CHART_TICK_DAY)}
+                tick={<EdgeTick format={(day: string) => formatChartDay(day, t.locale, CHART_TICK_DAY)} />}
               />
               <Tooltip {...chartTooltip(t.locale)} />
               <Bar dataKey="qr" name="QR" stackId="s" fill={QR_COLOR} radius={[0, 0, 0, 0]} />
