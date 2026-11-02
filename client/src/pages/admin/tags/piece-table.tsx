@@ -225,7 +225,8 @@ export function PieceTable({
       {/* Phones: tappable cards */}
       <ul className="space-y-2 md:hidden">
         {shown.map((p) => {
-          const meta = [has("organization") ? p.organizationName : null, has("customer") ? p.leadName ?? noCustomerText(p) : null, has("reseller") ? heldBy(p) : null, has("batch") ? p.batchCode : null].filter(Boolean).join(" · ");
+          const meta = [has("organization") ? p.organizationName : null, has("customer") ? p.leadName ?? noCustomerText(p) : null, has("reseller") ? heldBy(p) : null].filter(Boolean).join(" · ");
+          const batch = has("batch") ? p.batchCode : null;
           const scans = has("scans") && scansOf(p) > 0 ? tp("cardStats", { qr: p.qrInteractions, nfc: p.nfcInteractions, last: day(p.lastInteractionAt) }) : null;
           const scanned = has("scanned") && p.lastInventoryScanAt ? tp("cardScanned", { date: day(p.lastInventoryScanAt) }) : null;
           return (
@@ -242,7 +243,7 @@ export function PieceTable({
                   {/* A status that already says "Chip to write" / "Chip write failed" is not said twice on a card. */}
                   {has("chip") && !chipSaidByStatus(p) ? <PieceChipPill piece={p} quiet="none" /> : null}
                 </div>
-                {meta ? <p className="mt-1.5 break-words text-xs text-white/60">{meta}</p> : null}
+                {meta || batch ? <p className="mt-1.5 break-words text-xs text-white/60">{meta}{meta && batch ? " · " : ""}{batch ? <span className="whitespace-nowrap">{batch}</span> : null}</p> : null}
                 {scans || scanned ? <p className="mt-0.5 text-xs tabular-nums text-white/40">{scanned ?? scans}</p> : null}
               </button>
             </li>
