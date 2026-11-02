@@ -5,7 +5,7 @@ import { useUrlFilters } from "@/hooks/use-url-filters";
 import type { TagListItem } from "@shared/tagsApi";
 import { resolveTagFace } from "@shared/tagFace";
 import { TagFaceIcon } from "@/components/xpot/TagFaceIcon";
-import { TagPieceVisual } from "@/components/xpot/TagProductThumbnail";
+import { TagModelChips, TagPieceVisual } from "@/components/xpot/TagProductThumbnail";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/xpot/ConfirmDialog";
@@ -350,6 +350,7 @@ export function BatchDetail({ id, go }: { id: string; go: (path: string) => void
                 {title} <span className="ml-1 whitespace-nowrap font-mono text-xs font-normal text-white/45">{batch.batchCode}</span>
               </h2>
               <p className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-white/50">
+                <TagModelChips productType={batch.productType} face={face} batchCode={batch.batchCode} />
                 <BatchProgressPill batch={batch} />
                 {!fromPrint && batch.status !== "open" ? <Pill tone="muted">{labels.batchStatus(batch.status)}</Pill> : null}
                 {fromPrint && parsed.plate ? <span className="whitespace-nowrap">{tp("plateOf", { number: parsed.plate.number, total: parsed.plate.total })}</span> : null}

@@ -4,7 +4,6 @@ import { PieceThumb3D, PieceThumbLoader, usePieceModel } from "@/components/xpot
 import { TagFaceIcon } from "@/components/xpot/TagFaceIcon";
 import { useT } from "@/i18n";
 import { tagsMessages } from "@/i18n/messages/tags";
-import { manageTagsPiecesMessages } from "@/i18n/messages/manageTagsPieces";
 
 const PLAQUE_PRODUCT_TYPES = new Set([
   "large_stand",
@@ -93,21 +92,10 @@ export function tagPlaqueSpec(
 }
 
 /**
- * The piece's model as one name ("Large plate"): size and model read together, the same on the lists, the pop-up and
- * the page. A product that is not a plaque gives its own name.
+ * Model and size as compact chips ("STAND" plus a coloured "L" or "S"), kept
+ * beside the plaque drawing rather than on it. Products that are not plaques
+ * show `fallback`.
  */
-export function useTagModelName() {
-  const t = useT(tagsMessages);
-  const tp = useT(manageTagsPiecesMessages);
-  return (piece: { productType: string; face: string | null | undefined; batchCode?: string | null }): string => {
-    const { size, model } = tagPlaqueSpec(piece.productType, piece.face, piece.batchCode);
-    if (size && model) return tp(`modelName_${model}_${size}` as "modelName_Plate_Large");
-    if (model) return t(`plaqueModel_${model}` as "plaqueModel_Plate");
-    return t(`product_${piece.productType}` as "product_custom");
-  };
-}
-
-/** The model as one line of text, kept beside the plaque drawing rather than on it. Products that are not plaques show `fallback`. */
 export function TagModelChips({
   productType,
   face,
@@ -121,10 +109,29 @@ export function TagModelChips({
   fallback?: ReactNode;
   className?: string;
 }) {
-  const name = useTagModelName();
+  const t = useT(tagsMessages);
+  const { size, model } = tagPlaqueSpec(productType, face, batchCode);
+  const chip = "inline-flex h-4 items-center rounded px-1 text-[10px] font-bold uppercase leading-none tracking-wide";
+  if (!size && !model) {
+    return (
+      <span className={`${chip} bg-white/10 text-white/75 ring-1 ring-white/15 ${className}`} data-testid="tag-model-chips">
+        {fallback ?? t(`product_${productType}` as "product_custom")}
+      </span>
+    );
+  }
   return (
-    <span className={`text-xs text-white/55 ${className}`} data-testid="tag-model-chips">
-      {fallback && !tagPlaqueSpec(productType, face, batchCode).model ? fallback : name({ productType, face, batchCode })}
+    <span className={`inline-flex items-center gap-1 align-middle ${className}`} data-testid="tag-model-chips">
+      {model ? <span className={`${chip} bg-white/[0.08] text-white/70`}>{t(`plaqueModel_${model}`)}</span> : null}
+      {/* A size, not a state: Large in the Tags accent, Small neutral (amber would read as "needs a step"). */}
+      {size ? (
+        <span
+          className={`${chip} w-4 justify-center px-0 ${size === "Large" ? "bg-violet-500/20 text-violet-200" : "bg-white/10 text-white/70"}`}
+          title={t(`plaqueSize_${size}`)}
+          aria-label={t(`plaqueSize_${size}`)}
+        >
+          {t(`plaqueSize_${size}`).charAt(0)}
+        </span>
+      ) : null}
     </span>
   );
 }
@@ -227,9 +234,9 @@ function isPlaque(productType: string, face: string | null | undefined): boolean
   return PLAQUE_PRODUCT_TYPES.has(productType) || (productType === "custom" && face === "instagram");
 }
 
-/** `hero`: the one piece on a piece's own popup or page, drawn large on a light backdrop; lists and tables never use it. */
+/** `hero`: the one piece on a piece's own popup or page, drawn large with nothing around it; lists and tables never use it. */
 type VisualSize = keyof typeof SIZES | "hero";
-const VISUAL_SLOT = { sm: "w-9", md: "w-12", lg: "w-28", hero: "h-32 w-32 rounded-2xl bg-zinc-500/35 ring-1 ring-white/15" } as const;
+const VISUAL_SLOT = { sm: "w-9", md: "w-12", lg: "w-28", hero: "h-32 w-32" } as const;
 /** The slot widths above in px: the 3D picture is a square that wide. */
 const VISUAL_SLOT_PX = { sm: 36, md: 48, lg: 112, hero: 128 } as const;
 const VISUAL_FACE_SIZE = { sm: "md", md: "lg", lg: "lg", hero: "lg" } as const;
@@ -263,7 +270,7 @@ export function TagPieceVisual({
 }) {
   const { model, loading } = usePieceModel({ productType, face, theme, batchCode, modelSlug });
   const flat = isPlaque(productType, face) ? (
-    // The flat stand (body and foot) is 140px tall: scaled so it sits inside the 128px hero box, not over its edge.
+    // The flat stand (body and foot) is 140px tall: scaled so it sits inside the 128px hero slot, not over its edge.
     <span className={size === "hero" ? "inline-flex scale-[0.85]" : "inline-flex"}>
       <TagProductThumbnail productType={productType} face={face} size={size === "hero" ? "lg" : size} theme={theme} />
     </span>

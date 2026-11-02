@@ -34,12 +34,6 @@ const en = {
   emptyWhere_live: "Nothing is live yet.",
   emptyWhere_notReceived: "Every piece has arrived.",
   seeAllPieces: "See all pieces",
-  modelName_Plate_Small: "Small plate",
-  modelName_Plate_Large: "Large plate",
-  modelName_Stand_Small: "Small stand",
-  modelName_Stand_Large: "Large stand",
-  modelName_Sign_Small: "Small sign",
-  modelName_Sign_Large: "Large sign",
 
   // New single piece
   pieceCreated: "Piece {code} created",
@@ -260,12 +254,6 @@ export const manageTagsPiecesMessages: Dictionary<typeof en> = {
     emptyWhere_live: "Nada no ar ainda.",
     emptyWhere_notReceived: "Todas as peças já chegaram.",
     seeAllPieces: "Ver todas as peças",
-    modelName_Plate_Small: "Placa pequena",
-    modelName_Plate_Large: "Placa grande",
-    modelName_Stand_Small: "Display pequeno",
-    modelName_Stand_Large: "Display grande",
-    modelName_Sign_Small: "Letreiro pequeno",
-    modelName_Sign_Large: "Letreiro grande",
 
     pieceCreated: "Peça {code} criada",
     pieceCreatedHint: "Ela está no estoque da empresa.",
@@ -472,12 +460,6 @@ export const manageTagsPiecesMessages: Dictionary<typeof en> = {
     emptyWhere_live: "Nada activo todavía.",
     emptyWhere_notReceived: "Todas las piezas ya llegaron.",
     seeAllPieces: "Ver todas las piezas",
-    modelName_Plate_Small: "Placa pequeña",
-    modelName_Plate_Large: "Placa grande",
-    modelName_Stand_Small: "Soporte pequeño",
-    modelName_Stand_Large: "Soporte grande",
-    modelName_Sign_Small: "Letrero pequeño",
-    modelName_Sign_Large: "Letrero grande",
 
     pieceCreated: "Pieza {code} creada",
     pieceCreatedHint: "Está en el stock de la empresa.",
