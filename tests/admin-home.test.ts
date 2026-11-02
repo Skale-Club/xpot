@@ -47,7 +47,7 @@ describe("todayRows: platform", () => {
     expect(todayRows({ profile: "platform", requests: [], queues: queues(), pendingOrders: 0, pendingPeople: 0 })).toEqual([]);
   });
 
-  it("splits Platform (people, Stuscle orders) from My company (print, queues), hiding zeros", () => {
+  it("splits Platform (people, Stuscle orders, every organization's queues) from My company (print), hiding zeros", () => {
     const blocks = todayBlocks({
       profile: "platform", now: NOW, pendingPeople: 3, pendingOrders: 2,
       requests: [request(plate("ready", 1), plate("building", 2, 4), plate("failed", 3, 1))],
@@ -57,20 +57,21 @@ describe("todayRows: platform", () => {
     expect(blocks[0].rows.map((row) => [row.id, row.count, row.href])).toEqual([
       ["peopleWaiting", 3, "/admin/reps?status=pending"],
       ["stuscleOrders", 2, "/admin/tags/kits?view=orders"],
+      ["batchesNotReceived", 1, "/admin/tags/batches?pending=1"],
+      ["chipPending", 4, "/admin/tags/overview/chipPending"],
     ]);
     expect(blocks[1].rows.map((row) => [row.id, row.count, row.href])).toEqual([
       // What broke first (stuck files, failed prints), then what is next in line.
       ["filesStuck", 1, "/admin/tags/production/queue"],
       ["printsFailed", 1, "/admin/tags/production/queue"],
       ["platesToPrint", 1, "/admin/tags/production/queue"],
-      ["batchesNotReceived", 1, "/admin/tags/batches?pending=1"],
-      ["chipPending", 4, "/admin/tags/overview/chipPending"],
     ]);
   });
 
   it("drops a block that is left empty", () => {
     expect(todayBlocks({ profile: "platform", pendingPeople: 1, queues: queues() }).map((block) => block.id)).toEqual(["platform"]);
-    expect(todayBlocks({ profile: "platform", queues: queues({ noProduct: 2 }) }).map((block) => block.id)).toEqual(["company"]);
+    expect(todayBlocks({ profile: "platform", queues: queues({ noProduct: 2 }) }).map((block) => block.id)).toEqual(["platform"]);
+    expect(todayBlocks({ profile: "platform", requests: [request("ready")] }).map((block) => block.id)).toEqual(["company"]);
   });
 
   it("counts the wholesale orders once, from the orders list, not from the overview's identical queue", () => {

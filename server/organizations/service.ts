@@ -473,10 +473,9 @@ export async function getOrganizationWorkspace(organizationId: number, actor: Or
 export async function listOrganizationInventory(organizationId: number, actor: OrganizationActor) {
   const { memberships } = await assertOrganizationAccess(actor, organizationId);
   const organizationWide = canManageOrganization(actor, memberships, organizationId);
-  return db.select().from(tags).where(organizationWide
-    ? eq(tags.organizationId, organizationId)
-    : and(eq(tags.organizationId, organizationId), eq(tags.repId, actor.rep.id)))
-    .orderBy(desc(tags.updatedAt)).limit(500);
+  // The pieces as every Tags list gives them (with their sale and print), so each one reads as it does everywhere else.
+  const { listTags } = await import("../tags/repository.js");
+  return listTags({ organizationId, repId: organizationWide ? undefined : actor.rep.id, limit: 500 });
 }
 
 export async function listOrganizationKits(organizationId: number, actor: OrganizationActor) {

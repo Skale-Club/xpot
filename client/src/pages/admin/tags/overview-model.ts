@@ -31,10 +31,17 @@ export function needsActionQueues(counts: TagQueueCounts, isAdmin: boolean): Que
   return QUEUES.filter((q) => isAdmin || !q.adminOnly).map(({ adminOnly: _adminOnly, ...q }) => ({ ...q, count: counts[q.id] }));
 }
 
+/** What to do on a piece queue's list page: the one sentence under its title. */
+const QUEUE_ACTION: Record<TagPieceQueue, FlowKey> = {
+  chipPending: "queueChipPendingAction",
+  scannedNotLive: "queueScannedNotLiveAction",
+  noProduct: "queueNoProductAction",
+};
+
 /** The labels of a piece queue's own list page. */
-export function pieceQueueCard(queue: TagPieceQueue): Omit<QueueCard, "count"> {
+export function pieceQueueCard(queue: TagPieceQueue): Omit<QueueCard, "count"> & { actionKey: FlowKey } {
   const { adminOnly: _adminOnly, ...card } = QUEUES.find((q) => q.id === queue)!;
-  return card;
+  return { ...card, actionKey: QUEUE_ACTION[queue] };
 }
 
 // ─── Activity feed ────────────────────────────────────────────────────────────
@@ -62,7 +69,11 @@ function scansByPiece(events: TagOverview["recentEvents"]): Extract<ActivityItem
   return Array.from(byPiece.values());
 }
 
-/** One feed of the latest scans (a piece's scans are one row, with how many), activations and destination changes, newest first (at most ACTIVITY_LIMIT). */
+/**
+ * One feed of the latest scans (a piece's scans are one row, with how many), activations and destination changes, newest
+ * first (at most ACTIVITY_LIMIT). "All" is what happened to the pieces (went live, destination changed): the scans are the
+ * chart's, and have their own tab.
+ */
 export function activityFeed(overview: Pick<TagOverview, "recentEvents" | "recentActivations" | "recentChanges">, filter: ActivityFilter = "all"): ActivityItem[] {
   const items: ActivityItem[] = [
     ...scansByPiece(overview.recentEvents),
@@ -70,7 +81,7 @@ export function activityFeed(overview: Pick<TagOverview, "recentEvents" | "recen
     ...overview.recentChanges.map((change) => ({ kind: "destination" as const, key: `c${change.id}`, at: change.createdAt, change })),
   ];
   return items
-    .filter((item) => filter === "all" || item.kind === filter)
+    .filter((item) => (filter === "all" ? item.kind !== "scans" : item.kind === filter))
     .sort((a, b) => (a.at < b.at ? 1 : a.at > b.at ? -1 : 0))
     .slice(0, ACTIVITY_LIMIT);
 }

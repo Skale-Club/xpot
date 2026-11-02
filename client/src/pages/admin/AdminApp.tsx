@@ -67,15 +67,17 @@ export function AdminApp({ section }: { section: string }) {
   const current = groups.flatMap((group) => group.items).find((item) => item.match(location));
   const title = current?.label ?? panelName;
   const lookupAllowed = active === "tags" && !NO_CODE_LOOKUP.test(location);
+  // Stock has its own search, which takes a code or a scanned link: a second box for the same thing would only ask which to use.
+  const lookupBox = lookupAllowed && !/^\/admin\/tags\/pieces\/?$/.test(location);
   // A screen the person's panel does not have: said inside the panel, with the way back to Today.
   if (!allowed) return <AppLayout title={panelName} size="wide" mobileMaxWidth="max-w-5xl" mobileColumnClassName="pb-10 pt-5">
     <EmptyState tone="red" icon={ShieldAlert} title={tm("accessRestricted")} hint={tm("noAdminPermission")} action={<Button variant="secondary" onClick={() => navigate("/admin")}>{tw("todayTitle")}</Button>} />
   </AppLayout>;
   return <AppLayout title={title} size="wide" mobileMaxWidth="max-w-5xl" mobileColumnClassName="pb-10 pt-5"
-    topBarActions={lookupAllowed ? <CodeLookup onFound={(id) => navigate(`/admin/tags/pieces/${id}`)} /> : undefined}
+    topBarActions={lookupBox ? <CodeLookup onFound={(id) => navigate(`/admin/tags/pieces/${id}`)} /> : undefined}
     mobileHeader={<div className="mb-5 space-y-3">
       {/^\/admin\/tags\/(?:production|batches)(?:\/|$)/.test(location) ? null : <h1 className="truncate text-xl font-bold tracking-tight text-white" data-testid="panel-phone-title">{title}</h1>}
-      {lookupAllowed ? <CodeLookup fill onFound={(id) => navigate(`/admin/tags/pieces/${id}`)} /> : null}
+      {lookupBox ? <CodeLookup fill onFound={(id) => navigate(`/admin/tags/pieces/${id}`)} /> : null}
     </div>}>
     {active === "home" && <AdminHome />}
     {active === "work" && <AdminWork />}

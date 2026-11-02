@@ -146,6 +146,8 @@ export const listQuerySchema = z.object({
   house: z.enum(["1", "true"]).transform(() => true).optional(),
   /** A stock number (shared/tagMetrics.ts): the list behind a count, e.g. the company stock card. */
   metric: z.enum(TAG_STOCK_METRIC_NAMES).optional(),
+  /** Without the pieces not in stock yet: the stock list's default view (a code search or a batch still finds them). */
+  hidePending: z.enum(["1", "true"]).transform(() => true).optional(),
   /** An Overview "Needs action" queue (shared/tagQueues.ts): the list behind its count. */
   queue: z.enum(TAG_PIECE_QUEUES).optional(),
   /** Only the viewer's own pieces, even for a manager (the phone app's Pieces screen). */

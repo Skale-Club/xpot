@@ -80,10 +80,8 @@ const en = {
   colCode: "Code",
   colBatch: "Batch",
   colStatus: "Status",
-  colWhere: "Where",
   colReseller: "Reseller",
-  colCustomer: "Company",
-  colQrNfc: "QR / NFC",
+  colCustomer: "Customer",
   colSold: "Sold",
   house: "Company stock",
   stock_pending: "Not in stock yet",
@@ -97,7 +95,7 @@ const en = {
   stockFilter_house: "In company stock",
   stockFilter_reps: "With a reseller",
   whereAndLive: "{where} · {live}",
-  allWhere: "Where is it",
+  allWhere: "All statuses",
   stockSummary: "Pieces by where they are",
   moreFilters: "More filters",
   moreFiltersCount: "More filters · {count}",
@@ -126,7 +124,6 @@ const en = {
   event_misconfigured_scan: "Scanned — destination invalid",
 
   // Shared by the screens below
-  scansTaps: "Scans (QR + NFC)",
   revoke: "Revoke",
   creating: "Creating…",
   saving: "Saving…",
@@ -135,11 +132,6 @@ const en = {
 
   // Overview
   whatOverview: "the overview",
-  ovToday: "Today",
-  ovLast7: "Last 7 days",
-  ovLast30: "Last 30 days",
-  ovApproxUnique: "Est. visitors (30d)",
-  ovApproxHint: "Per piece, per day; not people",
   ovDestCleared: "Destination cleared",
   ovDestClearedReason: "Destination cleared ({reason})",
 
@@ -157,7 +149,7 @@ const en = {
   teamColCustomers: "Customers",
   teamColLastSale: "Last sale",
   allProducts: "All products",
-  allCustomers: "All companies",
+  allCustomers: "All customers",
   allBatches: "All batches",
 
   // NFC writers (desktop provisioners)
@@ -388,10 +380,8 @@ export const manageTagsMessages: Dictionary<typeof en> = {
     colCode: "Código",
     colBatch: "Lote",
     colStatus: "Status",
-    colWhere: "Onde",
     colReseller: "Revendedor",
-    colCustomer: "Empresa",
-    colQrNfc: "QR / NFC",
+    colCustomer: "Cliente",
     colSold: "Vendida",
     house: "Estoque da empresa",
     stock_pending: "Ainda fora do estoque",
@@ -405,7 +395,7 @@ export const manageTagsMessages: Dictionary<typeof en> = {
     stockFilter_house: "No estoque da empresa",
     stockFilter_reps: "Com um revendedor",
     whereAndLive: "{where} · {live}",
-    allWhere: "Onde está",
+    allWhere: "Todas as situações",
     stockSummary: "Peças por onde estão",
     moreFilters: "Mais filtros",
     moreFiltersCount: "Mais filtros · {count}",
@@ -431,7 +421,6 @@ export const manageTagsMessages: Dictionary<typeof en> = {
     event_disabled_scan: "Lida enquanto pausada",
     event_misconfigured_scan: "Lida — destino inválido",
 
-    scansTaps: "Leituras (QR + NFC)",
     revoke: "Revogar",
     creating: "Criando…",
     saving: "Salvando…",
@@ -439,11 +428,6 @@ export const manageTagsMessages: Dictionary<typeof en> = {
     lastUsedAt: "último uso {date}",
 
     whatOverview: "a visão geral",
-    ovToday: "Hoje",
-    ovLast7: "Últimos 7 dias",
-    ovLast30: "Últimos 30 dias",
-    ovApproxUnique: "Visitantes (estimativa, 30d)",
-    ovApproxHint: "Por peça, por dia; não são pessoas",
     ovDestCleared: "Destino removido",
     ovDestClearedReason: "Destino removido ({reason})",
 
@@ -460,7 +444,7 @@ export const manageTagsMessages: Dictionary<typeof en> = {
     teamColCustomers: "Clientes",
     teamColLastSale: "Última venda",
     allProducts: "Todos os produtos",
-    allCustomers: "Todas as empresas",
+    allCustomers: "Todos os clientes",
     allBatches: "Todos os lotes",
 
     device_pairing: "aguardando código",
@@ -683,10 +667,8 @@ export const manageTagsMessages: Dictionary<typeof en> = {
     colCode: "Código",
     colBatch: "Lote",
     colStatus: "Estado",
-    colWhere: "Dónde",
     colReseller: "Revendedor",
-    colCustomer: "Empresa",
-    colQrNfc: "QR / NFC",
+    colCustomer: "Cliente",
     colSold: "Vendida",
     house: "Stock de la empresa",
     stock_pending: "Aún fuera del stock",
@@ -700,7 +682,7 @@ export const manageTagsMessages: Dictionary<typeof en> = {
     stockFilter_house: "En el stock de la empresa",
     stockFilter_reps: "Con un revendedor",
     whereAndLive: "{where} · {live}",
-    allWhere: "Dónde está",
+    allWhere: "Todos los estados",
     stockSummary: "Piezas según dónde están",
     moreFilters: "Más filtros",
     moreFiltersCount: "Más filtros · {count}",
@@ -726,7 +708,6 @@ export const manageTagsMessages: Dictionary<typeof en> = {
     event_disabled_scan: "Leída mientras estaba pausada",
     event_misconfigured_scan: "Leída — destino no válido",
 
-    scansTaps: "Lecturas (QR + NFC)",
     revoke: "Revocar",
     creating: "Creando…",
     saving: "Guardando…",
@@ -734,11 +715,6 @@ export const manageTagsMessages: Dictionary<typeof en> = {
     lastUsedAt: "último uso {date}",
 
     whatOverview: "el resumen",
-    ovToday: "Hoy",
-    ovLast7: "Últimos 7 días",
-    ovLast30: "Últimos 30 días",
-    ovApproxUnique: "Visitantes (estimación, 30 d)",
-    ovApproxHint: "Por pieza, por día; no son personas",
     ovDestCleared: "Destino eliminado",
     ovDestClearedReason: "Destino eliminado ({reason})",
 
@@ -755,7 +731,7 @@ export const manageTagsMessages: Dictionary<typeof en> = {
     teamColCustomers: "Clientes",
     teamColLastSale: "Última venta",
     allProducts: "Todos los productos",
-    allCustomers: "Todas las empresas",
+    allCustomers: "Todos los clientes",
     allBatches: "Todos los lotes",
 
     device_pairing: "esperando código",

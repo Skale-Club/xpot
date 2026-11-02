@@ -58,8 +58,9 @@ describe("Overview activity feed", () => {
     recentChanges: [{ id: "h1", tagId: "t3", publicCode: "C", productType: "keychain", face: null, batchCode: null, previousUrl: null, newUrl: "https://x.test", previousDestinationType: null, newDestinationType: "website", changedByUserId: null, changedByEmail: null, reason: null, createdAt: "2026-10-04T10:00:00.000Z" }],
   };
 
-  it("merges scans, activations and destination changes, newest first", () => {
-    expect(activityFeed(overview).map((i) => i.kind)).toEqual(["activated", "destination", "scans"]);
+  it("merges activations and destination changes, newest first, and leaves the scans to their own tab", () => {
+    expect(activityFeed(overview).map((i) => i.kind)).toEqual(["activated", "destination"]);
+    expect(activityFeed(overview, "scans").map((i) => i.kind)).toEqual(["scans"]);
   });
 
   it("shows a piece's scans as one row, at the newest scan, with how many", () => {

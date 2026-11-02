@@ -1,28 +1,29 @@
 import type { ReactNode } from "react";
 import { Package } from "lucide-react";
 import type { TagListItem } from "@shared/tagsApi";
+import { PieceChipPill, PieceStatusPill } from "@/components/piece/PieceStatusPill";
 import { CompactDataTable, type CompactDataColumn } from "@/components/xpot/CompactDataTable";
 import { EmptyState } from "@/components/xpot/EmptyState";
-import { CHIP_STATUS_TONE, Pill, SOLD_TONE, toneOf, type PillTone } from "@/components/xpot/StatusPill";
 import { GLASS_CLASS } from "@/components/xpot/surface";
-import { TagPieceMention } from "@/components/xpot/TagProductThumbnail";
+import { TagPieceVisual, tagPlaqueSpec } from "@/components/xpot/TagProductThumbnail";
 import { ListPager, usePagedList } from "@/components/xpot/pagination";
 import { useT } from "@/i18n";
+import { formatDate } from "@/lib/format";
 import { manageTagsMessages } from "@/i18n/messages/manageTags";
 import { manageTagsPiecesMessages } from "@/i18n/messages/manageTagsPieces";
-import { formatDate, formatDateTime } from "./api";
-import { useTagLabels } from "./labels";
-import { pieceWhere, type PlaceId } from "./where-model";
+import { tagsMessages } from "@/i18n/messages/tags";
+import { pieceChipState } from "@/components/piece/pieceStatus";
+import { pieceHasLocation } from "@/components/piece/pieceView";
 
-// The one pieces table of the Tags admin: Inventory, a batch's pieces and a kit's pieces. On
-// CompactDataTable from md up, tappable cards on phones. Every row shows one "Where" pill (where the piece
-// is, then "· Live" when its link works; where-model.ts); the caller picks the optional columns. Text and
-// pills align left, counts right.
+// The one pieces table of the Tags admin: Stock, a batch's pieces, a kit's pieces and the Today lists. On
+// CompactDataTable from md up, tappable cards on phones. Every row is one line: the piece, one status pill (the
+// same words as its pop-up and the reseller's app, components/piece/pieceStatus.ts) and the columns the caller
+// picks. The chip only speaks when it is something to do. Text and pills align left, counts right.
 
-/** Optional columns, always drawn in this order after Code and Status; "destination" is a line under the customer. */
-export type PieceColumn = "customer" | "destination" | "reseller" | "chip" | "scans" | "lastInteraction" | "sold" | "batch";
+/** Optional columns, always drawn in this order after Code and Status. */
+export type PieceColumn = "customer" | "reseller" | "chip" | "scans" | "scanned" | "sold" | "batch";
 
-const ORDER: readonly Exclude<PieceColumn, "destination">[] = ["customer", "reseller", "chip", "scans", "lastInteraction", "sold", "batch"];
+const ORDER: readonly PieceColumn[] = ["customer", "reseller", "chip", "scans", "scanned", "sold", "batch"];
 
 export interface PieceSelection {
   /** Which pieces can be ticked (e.g. the ones a return accepts). */
@@ -33,26 +34,24 @@ export interface PieceSelection {
   onToggleAll: (codes: string[], on: boolean) => void;
 }
 
-/** A place's colour; a live piece is green (blue once sold, so "Sold" never reads as plain "Live"). */
-const PLACE_TONE: Record<PlaceId, PillTone> = {
-  house: "slate",
-  withResellers: "violet",
-  sold: SOLD_TONE,
-  notReceived: "amber",
-  damaged: "red",
-  lost: "red",
-  disabled: "red",
-  retired: "muted",
-  reserved: "blue",
-  internalUse: "slate",
-};
-
-/** The one status pill of a piece: where it is, and whether it is live. */
+/** The one status pill of a piece: the same words and colour as its pop-up, its page and the reseller's app. */
 export function WherePill({ piece }: { piece: TagListItem }) {
-  const labels = useTagLabels();
-  const { place, live } = pieceWhere(piece);
-  return <Pill tone={live && place !== "sold" ? "green" : PLACE_TONE[place]}>{labels.wherePiece(place, live)}</Pill>;
+  return <PieceStatusPill piece={piece} />;
 }
+
+/** "Large plate": size and model in one name, or the product's name for a piece that is not a plaque. */
+function usePieceModelName() {
+  const tp = useT(manageTagsPiecesMessages);
+  const tt = useT(tagsMessages);
+  return (piece: Pick<TagListItem, "productType" | "face" | "batchCode">): string => {
+    const { size, model } = tagPlaqueSpec(piece.productType, piece.face, piece.batchCode);
+    if (size && model) return tp(`modelName_${model}_${size}` as "modelName_Plate_Large");
+    if (model) return tt(`plaqueModel_${model}` as "plaqueModel_Plate");
+    return tt(`product_${piece.productType}` as "product_custom");
+  };
+}
+
+const SHORT_DAY: Intl.DateTimeFormatOptions = { month: "short", day: "numeric" };
 
 function Checkbox({ checked, disabled, label, onChange }: { checked: boolean; disabled?: boolean; label: string; onChange: (on: boolean) => void }) {
   return (
@@ -70,6 +69,20 @@ function Checkbox({ checked, disabled, label, onChange }: { checked: boolean; di
   );
 }
 
+/** The piece: its picture, its code and what model it is (side by side in the table, stacked in a phone's card). */
+function PieceCell({ piece, modelName, stacked = false }: { piece: TagListItem; modelName: string; stacked?: boolean }) {
+  const tt = useT(tagsMessages);
+  return (
+    <span className="inline-flex min-w-0 max-w-full items-center gap-2.5" title={[piece.serialNumber ? `#${piece.serialNumber}` : null, piece.label].filter(Boolean).join(" · ") || undefined}>
+      <TagPieceVisual productType={piece.productType} face={piece.face} batchCode={piece.batchCode} title={tt(`face_${piece.face ?? "none"}` as "face_none")} />
+      <span className={`flex min-w-0 ${stacked ? "flex-col" : "items-baseline gap-2.5"}`}>
+        <span className="shrink-0 font-mono text-[15px] font-semibold tracking-[0.08em] text-white">{piece.publicCode}</span>
+        <span className="truncate text-xs text-white/45">{modelName}</span>
+      </span>
+    </span>
+  );
+}
+
 export function PieceTable({
   pieces,
   onOpen,
@@ -79,10 +92,11 @@ export function PieceTable({
   empty,
   testId,
   selectedId,
+  headTop,
 }: {
   pieces: readonly TagListItem[];
   onOpen: (id: string) => void;
-  /** The piece open in a side pane (Inventory on a computer): its row is marked. */
+  /** The piece open in a side pane (Stock on a computer): its row is marked. */
   selectedId?: string | null;
   columns: readonly PieceColumn[];
   selection?: PieceSelection;
@@ -91,10 +105,12 @@ export function PieceTable({
   /** Shown instead of the table when there are no pieces. */
   empty?: ReactNode;
   testId?: string;
+  /** Keep the column headings in view while the list scrolls, this many px below the top of the scrolling area. */
+  headTop?: number;
 }) {
   const tm = useT(manageTagsMessages);
   const tp = useT(manageTagsPiecesMessages);
-  const labels = useTagLabels();
+  const modelName = usePieceModelName();
   // A new list (another filter) starts from the first page again.
   const paged = usePagedList(pieces, { pageSize: pageSize ?? Math.max(pieces.length, 1), resetKey: `${pieces.length}:${pieces[0]?.id ?? ""}` });
   const shown = pageSize ? paged.visible : pieces;
@@ -106,50 +122,52 @@ export function PieceTable({
 
   const selectableCodes = selection ? pieces.filter(selection.canSelect).map((p) => p.publicCode) : [];
   const allOn = selectableCodes.length > 0 && selectableCodes.every((c) => selection?.selected.has(c));
-  const house = <span className="text-white/40">{tm("house")}</span>;
   const none = <span className="text-white/30">—</span>;
+  /** The company's stock is where a piece in a box with no reseller is; one not in stock yet, sold, lost or already at its customer is not in anyone's. */
+  const heldBy = (p: TagListItem): string | null => p.repName ?? (pieceHasLocation(p) && p.repId === null && !p.leadName ? tp("houseStock") : null);
+  const scansOf = (p: TagListItem) => p.qrInteractions + p.nfcInteractions;
+  const day = (at: string | null) => formatDate(at, SHORT_DAY);
 
-  const cells: Record<(typeof ORDER)[number], CompactDataColumn<TagListItem>> = {
+  const cells: Record<PieceColumn, CompactDataColumn<TagListItem>> = {
     customer: {
       key: "customer",
       label: tm("colCustomer"),
-      cellClassName: "max-w-[200px]",
-      render: (p) => (
-        <span className="block min-w-0">
-          <span className="block truncate text-white/80">{p.leadName ?? none}</span>
-          {has("destination") && p.destinationType ? <span className="block truncate text-xs text-white/40">{labels.destination(p.destinationType)}</span> : null}
-        </span>
-      ),
+      cellClassName: "max-w-[200px] truncate text-white/80",
+      render: (p) => p.leadName ?? none,
     },
     reseller: {
       key: "reseller",
       label: tm("colReseller"),
-      cellClassName: "max-w-[160px] truncate text-white/80",
-      render: (p) => p.repName ?? house,
+      cellClassName: "max-w-[190px] truncate text-white/70",
+      render: (p) => heldBy(p) ?? none,
     },
     chip: {
       key: "chip",
       label: tp("colChip"),
-      render: (p) => <Pill tone={toneOf(CHIP_STATUS_TONE, p.nfcStatus)}>{labels.chip(p.nfcStatus)}</Pill>,
+      render: (p) => (pieceChipState(p) === "none" ? none : <PieceChipPill piece={p} />),
     },
     scans: {
       key: "scans",
-      label: tm("colQrNfc"),
+      label: tp("colScans"),
       align: "right",
       cellClassName: "whitespace-nowrap text-white/80",
-      render: (p) => `${p.qrInteractions} / ${p.nfcInteractions}`,
+      render: (p) => (
+        <span title={`QR ${p.qrInteractions} · NFC ${p.nfcInteractions}`}>
+          {scansOf(p) > 0 ? <>{scansOf(p)}<span className="text-white/40"> · {day(p.lastInteractionAt)}</span></> : none}
+        </span>
+      ),
     },
-    lastInteraction: {
-      key: "lastInteraction",
-      label: tp("colLastInteraction"),
-      cellClassName: "whitespace-nowrap text-xs text-white/50",
-      render: (p) => formatDateTime(p.lastInteractionAt),
+    scanned: {
+      key: "scanned",
+      label: tp("colScanned"),
+      cellClassName: "whitespace-nowrap text-xs text-white/60",
+      render: (p) => (p.lastInventoryScanAt ? day(p.lastInventoryScanAt) : none),
     },
     sold: {
       key: "sold",
       label: tm("colSold"),
       cellClassName: "whitespace-nowrap text-xs text-white/50",
-      render: (p) => formatDate(p.soldAt),
+      render: (p) => (p.soldAt ? day(p.soldAt) : none),
     },
     batch: {
       key: "batch",
@@ -183,19 +201,10 @@ export function PieceTable({
     {
       key: "code",
       label: tm("colCode"),
-      cellClassName: "max-w-[280px]",
-      render: (p) => (
-        <TagPieceMention
-          publicCode={p.publicCode}
-          productType={p.productType}
-          face={p.face}
-          batchCode={p.batchCode}
-          details={[p.serialNumber ? `#${p.serialNumber}` : null, p.label].filter(Boolean).join(" · ") || undefined}
-          className="max-w-full"
-        />
-      ),
+      cellClassName: "max-w-[300px] !py-2",
+      render: (p) => <PieceCell piece={p} modelName={modelName(p)} />,
     },
-    { key: "where", label: tm("colWhere"), render: (p) => <WherePill piece={p} /> },
+    { key: "status", label: tm("colStatus"), render: (p) => <WherePill piece={p} /> },
     ...ORDER.filter(has).map((column) => cells[column]),
   ];
 
@@ -204,7 +213,9 @@ export function PieceTable({
       {/* Phones: tappable cards */}
       <ul className="space-y-2 md:hidden">
         {shown.map((p) => {
-          const meta = [has("reseller") ? p.repName ?? tp("houseStock") : null, has("batch") ? p.batchCode : null].filter(Boolean).join(" · ");
+          const meta = [has("customer") ? p.leadName : null, has("reseller") ? heldBy(p) : null].filter(Boolean).join(" · ");
+          const scans = has("scans") && scansOf(p) > 0 ? `${tp("colScans")} ${scansOf(p)} · ${day(p.lastInteractionAt)}` : null;
+          const scanned = has("scanned") && p.lastInventoryScanAt ? tp("cardScanned", { date: day(p.lastInventoryScanAt) }) : null;
           return (
             <li key={p.id} className={`flex items-start gap-2 rounded-2xl ${GLASS_CLASS} p-3`}>
               {selection?.canSelect(p) ? (
@@ -213,21 +224,13 @@ export function PieceTable({
                 </span>
               ) : null}
               <button type="button" onClick={() => onOpen(p.id)} className="min-w-0 flex-1 text-left" data-testid={`admin-piece-card-${p.publicCode}`}>
-                <TagPieceMention
-                  publicCode={p.publicCode}
-                  productType={p.productType}
-                  face={p.face}
-                  batchCode={p.batchCode}
-                  customer={has("customer") ? p.leadName : null}
-                  className="max-w-full"
-                />
-                <div className="mt-2"><WherePill piece={p} /></div>
-                {meta ? <p className="mt-1.5 truncate text-xs text-white/50">{meta}</p> : null}
-                {has("scans") ? (
-                  <p className="mt-0.5 text-xs tabular-nums text-white/40">
-                    {tp("cardStats", { qr: p.qrInteractions, nfc: p.nfcInteractions, chip: labels.chip(p.nfcStatus), last: formatDateTime(p.lastInteractionAt) })}
-                  </p>
-                ) : null}
+                <PieceCell piece={p} modelName={modelName(p)} stacked />
+                <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                  <WherePill piece={p} />
+                  {has("chip") ? <PieceChipPill piece={p} quiet="none" /> : null}
+                </div>
+                {meta ? <p className="mt-1.5 break-words text-xs text-white/60">{meta}</p> : null}
+                {scans || scanned ? <p className="mt-0.5 text-xs tabular-nums text-white/40">{scanned ?? scans}</p> : null}
               </button>
             </li>
           );
@@ -245,6 +248,7 @@ export function PieceTable({
         getRowTestId={(p) => `admin-piece-row-${p.publicCode}`}
         selectedKey={selectedId}
         isRowSelected={selection ? (p) => selection.selected.has(p.publicCode) : undefined}
+        stickyHeadTop={headTop}
       />
 
       {pageSize ? <ListPager shown={paged.shown} total={paged.total} hasMore={paged.hasMore} onMore={paged.showMore} pageSize={pageSize} auto={false} /> : null}

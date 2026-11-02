@@ -50,6 +50,10 @@ export interface TagListItem {
   soldAt: string | null;
   saleId: number | null;
   soldPriceCents: number | null;
+  /** The status of the print order of the piece's batch (print_jobs.status); null with no print order. */
+  printJobStatus: string | null;
+  /** The last stock-intake scan of the piece; read only by the "Scanned, not live" list (`?queue=scannedNotLive`), null elsewhere. */
+  lastInventoryScanAt: string | null;
   createdAt: string;
 }
 
@@ -61,6 +65,8 @@ export interface TagHistoryEntry {
   newDestinationType: string | null;
   changedByUserId: string | null;
   changedByEmail: string | null;
+  /** Who changed it, by name; screens show this, never the email. */
+  changedByName: string | null;
   reason: string | null;
   createdAt: string;
 }
@@ -149,6 +155,8 @@ export interface TagStockMovementItem {
   referenceId: string | null;
   reason: string | null;
   actorEmail: string | null;
+  /** Who did it, by name (their rep profile); null for the system or someone without one. Screens show this, never the email. */
+  actorName: string | null;
   createdAt: string;
 }
 

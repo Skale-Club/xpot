@@ -1,8 +1,9 @@
 // Panel home ("Today"): the rows of what needs the person, each a count, a one-line description and the list behind
 // it, by profile (shared/profiles.ts). Rows at zero are left out, so an empty list means "Nothing waiting". Pure,
 // unit-tested (tests/admin-home.test.ts).
-//   platform  block Platform: people waiting for approval, Stuscle orders to separate;
-//             block My company: plates to print, files stuck, failed prints, then the Tags queues of the company.
+//   platform  block Platform: people waiting for approval, Stuscle orders to separate, then the Tags queues of every
+//             organization (a count here is what the list it opens shows: that list holds every organization's pieces too);
+//             block My company: plates to print, files stuck, failed prints.
 //   partner   the same as My company, for their organization.
 //   owner     team purchases still to arrive, then chips to write, scanned but not live, no product.
 
@@ -74,7 +75,7 @@ export interface TodayInput {
   profile: Profile;
   /** All the print requests (platform and partner only); undefined while loading or when not allowed. */
   requests?: PrintRequestItem[];
-  /** The Tags overview queues: the company's for the platform, the organization's for anyone else; undefined while loading or without Tags access. */
+  /** The Tags overview queues: every organization's for the platform, the organization's for anyone else; undefined while loading or without Tags access. */
   queues?: TagQueueCounts;
   /** Platform: wholesale orders still pending, to separate. */
   pendingOrders?: number;
@@ -95,16 +96,19 @@ export function todayFailure(error: unknown): unknown {
 
 const home = (key: HomeKey) => ({ dict: "home", key }) as const;
 
-/** The production rows (plates, files, failures, batches) and the Tags queues of one organization's pieces. */
-function productionRows({ profile, requests, queues, now }: TodayInput): TodayRow[] {
+/** The production rows (plates, files, failures) of the company's print jobs. */
+function plateRows({ requests, now }: TodayInput): TodayRow[] {
   const plates = plateCounts(requests, now);
-  const rows: TodayRow[] = [
+  return [
     { id: "platesToPrint", count: plates.toPrint, href: `${TAGS}/production/queue`, label: home("todayPlatesToPrint"), hint: home("todayPlatesToPrintHint") },
     { id: "filesStuck", count: plates.stuck, href: `${TAGS}/production/queue`, label: home("todayFilesStuck"), hint: home("todayFilesStuckHint"), urgent: true },
     { id: "printsFailed", count: plates.failed, href: `${TAGS}/production/queue`, label: home("todayPrintsFailed"), hint: home("todayPrintsFailedHint"), urgent: true },
   ];
-  rows.push(...queueRows(profile, queues, ["stuscleOrders"]));
-  return rows;
+}
+
+/** The production rows and the Tags queues of one organization's pieces (a partner's). */
+function productionRows(input: TodayInput): TodayRow[] {
+  return [...plateRows(input), ...queueRows(input.profile, input.queues, ["stuscleOrders"])];
 }
 
 /** The overview's queue cards the profile can open (batches are production's), except the ones listed in `skip`. */
@@ -124,8 +128,9 @@ export function todayBlocks(input: TodayInput): TodayBlock[] {
       { id: "peopleWaiting", count: input.pendingPeople ?? 0, href: "/admin/reps?status=pending", label: home("todayPeopleWaiting"), hint: home("todayPeopleWaitingHint") },
       // The wholesale orders come from their own list, so the overview's identical queue is not counted twice.
       { id: "stuscleOrders", count: input.pendingOrders ?? 0, href: `${TAGS}/kits?view=orders`, label: { dict: "flow", key: "queueStuscleOrders" }, hint: { dict: "flow", key: "queueStuscleOrdersHint" } },
+      ...queueRows(profile, input.queues, ["stuscleOrders"]),
     ] });
-    blocks.push({ id: "company", rows: productionRows(input) });
+    blocks.push({ id: "company", rows: plateRows(input) });
   } else if (profile === "partner") {
     blocks.push({ id: "organization", rows: productionRows(input) });
   } else if (profile === "owner") {

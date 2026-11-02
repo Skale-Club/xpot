@@ -122,6 +122,8 @@ export interface TagListFilters {
   house?: boolean;
   /** Only pieces counted by this stock number (shared/tagMetrics.ts), e.g. `house` for the company stock card. */
   metric?: TagStockMetric;
+  /** Leave out the pieces not in stock yet (stock status `pending`): the stock list's default view. */
+  hidePending?: boolean;
   /** Only pieces in this Overview "Needs action" queue (shared/tagQueues.ts). */
   queue?: TagPieceQueue;
   method?: "qr" | "nfc";
@@ -164,6 +166,8 @@ type TagRow = {
   sold_at: Date | null;
   sale_id: number | null;
   sold_price_cents: number | null;
+  print_job_status: string | null;
+  inventory_scan_at: Date | null;
   created_at: Date;
 };
 
@@ -205,11 +209,14 @@ function toListItem(r: TagRow): TagListItem {
     soldAt: iso(r.sold_at),
     saleId: r.sale_id,
     soldPriceCents: r.sold_price_cents === null ? null : Number(r.sold_price_cents),
+    printJobStatus: r.print_job_status,
+    lastInventoryScanAt: iso(r.inventory_scan_at),
     createdAt: iso(r.created_at)!,
   };
 }
 
-function tagListQuery(where: SQL, limit: number, offset = 0): SQL {
+/** `inventoryScan`: also read the last stock-intake scan of each piece (the "Scanned, not live" list shows when). */
+function tagListQuery(where: SQL, limit: number, offset = 0, opts: { inventoryScan?: boolean } = {}): SQL {
   return sql`
     SELECT t.id, t.public_code, t.serial_number, t.product_type, COALESCE(t.sales_product_id, b.sales_product_id) AS sales_product_id,
            t.face, b.face AS batch_face, t.status, t.stock_status, t.ownership_type, t.custodian_rep_id,
@@ -217,11 +224,13 @@ function tagListQuery(where: SQL, limit: number, offset = 0): SQL {
            t.destination_type, t.destination_url, t.lead_id, l.name AS lead_name, t.rep_id, r.display_name AS rep_name,
            t.kit_id, k.kit_number, t.batch_id, b.batch_code, t.activated_at, t.sold_at, t.created_at,
            sold.sale_id, sold.net_total_cents AS sold_price_cents, acquired.acquisition_cost_cents,
+           pj.status AS print_job_status, ${opts.inventoryScan ? sql`scan.inventory_scan_at` : sql`NULL::timestamptz`} AS inventory_scan_at,
            COALESCE(s.qr, 0)::int AS qr, COALESCE(s.nfc, 0)::int AS nfc, s.last_interaction_at
     FROM tags t
     LEFT JOIN sales_leads l ON l.id = t.lead_id
     LEFT JOIN sales_reps r ON r.id = t.rep_id
     LEFT JOIN tag_batches b ON b.id = t.batch_id
+    LEFT JOIN print_jobs pj ON pj.id = b.print_job_id
     LEFT JOIN tag_kits k ON k.id = t.kit_id
     LEFT JOIN LATERAL (
       -- A Visits line can carry several pieces: each one is its share.
@@ -246,6 +255,9 @@ function tagListQuery(where: SQL, limit: number, offset = 0): SQL {
       FROM tag_events e
       WHERE e.tag_id = t.id AND ${COUNTABLE}
     ) s ON true
+    ${opts.inventoryScan ? sql`LEFT JOIN LATERAL (
+      SELECT max(e.occurred_at) AS inventory_scan_at FROM tag_events e WHERE e.tag_id = t.id AND e.event_type = 'inventory_scan' AND NOT e.is_bot
+    ) scan ON true` : sql``}
     WHERE ${where}
     ORDER BY t.batch_id NULLS LAST, t.serial_number NULLS LAST, t.created_at DESC, t.id
     LIMIT ${limit} OFFSET ${offset}
@@ -268,6 +280,7 @@ export async function listTags(filters: TagListFilters): Promise<TagListItem[]> 
   }
   if (filters.house) conds.push(sql`t.rep_id IS NULL`);
   if (filters.metric) conds.push(stockMetricSql(filters.metric));
+  if (filters.hidePending) conds.push(sql`t.stock_status <> 'pending'`);
   if (filters.queue) conds.push(pieceQueueSql(filters.queue));
   if (filters.method === "qr") conds.push(sql`COALESCE(s.qr, 0) > 0`);
   if (filters.method === "nfc") conds.push(sql`COALESCE(s.nfc, 0) > 0`);
@@ -277,7 +290,7 @@ export async function listTags(filters: TagListFilters): Promise<TagListItem[]> 
   }
   const limit = Math.min(Math.max(filters.limit ?? 500, 1), 2000);
   const offset = Math.max(filters.offset ?? 0, 0);
-  return (await rows<TagRow>(tagListQuery(sql.join(conds, sql` AND `), limit, offset))).map(toListItem);
+  return (await rows<TagRow>(tagListQuery(sql.join(conds, sql` AND `), limit, offset, { inventoryScan: filters.queue === "scannedNotLive" }))).map(toListItem);
 }
 
 export async function getTagRow(id: string): Promise<Tag | null> {
@@ -301,15 +314,16 @@ async function historyFor(where: SQL, limit: number): Promise<Array<TagHistoryEn
     id: string; tag_id: string; public_code: string; product_type: string; face: string | null;
     batch_face: string | null; batch_code: string | null; previous_url: string | null; new_url: string | null;
     previous_destination_type: string | null; new_destination_type: string | null;
-    changed_by_user_id: string | null; changed_by_email: string | null; reason: string | null; created_at: Date;
+    changed_by_user_id: string | null; changed_by_email: string | null; changed_by_name: string | null; reason: string | null; created_at: Date;
   }>(sql`
     SELECT h.id, h.tag_id, t.public_code, t.product_type, t.face, b.face AS batch_face, b.batch_code,
            h.previous_url, h.new_url, h.previous_destination_type,
-           h.new_destination_type, h.changed_by_user_id, u.email AS changed_by_email, h.reason, h.created_at
+           h.new_destination_type, h.changed_by_user_id, u.email AS changed_by_email, cr.display_name AS changed_by_name, h.reason, h.created_at
     FROM tag_destination_history h
     JOIN tags t ON t.id = h.tag_id
     LEFT JOIN tag_batches b ON b.id = t.batch_id
     LEFT JOIN users u ON u.id = h.changed_by_user_id
+    LEFT JOIN sales_reps cr ON cr.user_id = h.changed_by_user_id
     WHERE ${where}
     ORDER BY h.created_at DESC
     LIMIT ${limit}
@@ -327,6 +341,7 @@ async function historyFor(where: SQL, limit: number): Promise<Array<TagHistoryEn
     newDestinationType: h.new_destination_type,
     changedByUserId: h.changed_by_user_id,
     changedByEmail: h.changed_by_email,
+    changedByName: h.changed_by_name,
     reason: h.reason,
     createdAt: iso(h.created_at)!,
   }));

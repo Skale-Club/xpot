@@ -11,6 +11,7 @@ import {
   pieceLocation,
   pieceSections,
   pieceHasLocation,
+  pieceHolderLine,
   pieceSituation,
   pieceStatusChips,
   showsReceive,
@@ -19,7 +20,7 @@ import {
 
 const history = (id: string, createdAt: string): TagHistoryEntry => ({
   id, previousUrl: null, newUrl: "https://a.test", previousDestinationType: null, newDestinationType: "website",
-  changedByUserId: null, changedByEmail: null, reason: null, createdAt,
+  changedByUserId: null, changedByEmail: null, changedByName: null, reason: null, createdAt,
 });
 const sale = (saleId: number, soldAt: string, endedAt: string | null = null): TagPieceSale => ({
   saleId, status: endedAt ? "cancelled" : "active", soldAt, endedAt, priceCents: 2500, currency: "USD",
@@ -27,7 +28,7 @@ const sale = (saleId: number, soldAt: string, endedAt: string | null = null): Ta
 });
 const movement = (id: string, movementType: string, createdAt: string, referenceType: string | null = null): TagStockMovementItem => ({
   id, movementType, fromStockStatus: "available", toStockStatus: "available", fromOwnershipType: "company", toOwnershipType: "company",
-  fromCustodianName: null, toCustodianName: "Ana", referenceType, referenceId: referenceType ? "7" : null, reason: null, actorEmail: null, createdAt,
+  fromCustodianName: null, toCustodianName: "Ana", referenceType, referenceId: referenceType ? "7" : null, reason: null, actorEmail: null, actorName: null, createdAt,
 });
 const journey = (id: string, action: string | null, occurredAt: string): TagJourneyEntryItem => ({
   id, kind: "execution", action, title: action ?? "note", content: null, batchId: null, batchCode: null, tagId: "t", publicCode: "P1",
@@ -218,7 +219,7 @@ describe("the header never contradicts the status", () => {
 
   it("says waiting to print only to whoever produces, and only while the print is open", () => {
     const open = pieceSituation({ ...piece, printJobStatus: "ready" }, admin);
-    expect([open.key, open.hint, open.action?.kind]).toEqual(["waitingPrint", "waitingPrint", "openPrint"]);
+    expect([open.key, open.hint, open.action?.kind]).toEqual(["pending", "waitingPrint", "openPrint"]);
     const done = pieceSituation({ ...piece, printJobStatus: "printed" }, admin);
     expect([done.key, done.hint, done.action?.kind]).toEqual(["pending", undefined, "openPrint"]);
     expect(pieceSituation({ ...piece, printJobStatus: "ready", custody: receivable }, rep).key).toBe("pending");
@@ -244,7 +245,7 @@ describe("pieceSituation", () => {
   const admin: PieceViewer = { surface: "admin", canManage: true, isAdmin: true, hasVisits: true };
   const partner: PieceViewer = { surface: "admin", canManage: true, isAdmin: false, hasVisits: false, producesPrints: true };
   const base = {
-    status: "inventory", stockStatus: "available", nfcStatus: "not_programmed", saleId: null as number | null,
+    status: "inventory", stockStatus: "available", nfcStatus: "verified", saleId: null as number | null,
     leadId: null as number | null, destinationUrl: null as string | null, destinationType: null as string | null,
     batchId: null as string | null, printJobId: null as string | null,
   };
@@ -259,8 +260,12 @@ describe("pieceSituation", () => {
     ["retired status", { status: "retired" }, rep, "retired", "muted", null],
     ["retired stock", { stockStatus: "retired" }, rep, "retired", "muted", null],
     ["a piece damaged and sold is damaged", { stockStatus: "damaged", saleId: 3 }, rep, "damaged", "red", null],
-    ["sale recorded", { status: "active", stockStatus: "sold", saleId: 9, ...set }, rep, "sold", "blue", null],
-    ["sale beats pending", { stockStatus: "pending", saleId: 9 }, rep, "sold", "blue", null],
+    ["sale recorded", { status: "active", stockStatus: "sold", saleId: 9, ...set }, rep, "soldLive", "blue", "viewPerformance"],
+    ["sale beats pending", { stockStatus: "pending", saleId: 9 }, rep, "soldNotLive", "amber", "configure"],
+    ["sold and live, chip never written: the chip first", { status: "active", stockStatus: "sold", saleId: 9, nfcStatus: "not_programmed", ...set }, rep, "soldLive", "blue", "writeChip"],
+    ["sold, set up, not live: put it live", { status: "assigned", stockStatus: "sold", saleId: 9, ...set }, rep, "soldNotLive", "amber", "goLive"],
+    ["sold, not live, chip not written: write it", { status: "assigned", stockStatus: "sold", saleId: 9, nfcStatus: "not_programmed", ...set }, rep, "soldNotLive", "amber", "writeChip"],
+    ["sold and paused, no link to restore: no action", { status: "disabled", stockStatus: "sold", saleId: 9, leadId: 4 }, rep, "soldNotLive", "amber", null],
     ["pending, reseller who may receive", { stockStatus: "pending", custody: receivable }, rep, "pending", "amber", "receive"],
     ["pending, receive blocked", { stockStatus: "pending", custody: blocked }, rep, "pending", "amber", null],
     ["pending, no custody data", { stockStatus: "pending" }, rep, "pending", "amber", null],
@@ -277,16 +282,23 @@ describe("pieceSituation", () => {
     ["pending, supplier lot, reseller receives", { stockStatus: "pending", batchId: "b-1", custody: receivable }, rep, "pending", "amber", "receive"],
     ["pending, supplier lot, reseller with a blocker", { stockStatus: "pending", batchId: "b-1", custody: blocked }, rep, "pending", "amber", null],
     ["live", { status: "active", ...set }, rep, "live", "green", "viewPerformance"],
+    ["live, chip not written: QR works, write the chip", { status: "active", nfcStatus: "not_programmed", ...set }, rep, "live", "green", "writeChip"],
+    ["live, chip write failed", { status: "active", nfcStatus: "failed", ...set }, rep, "live", "green", "writeChip"],
+    ["live, chip written but untested: nothing to do", { status: "active", nfcStatus: "programmed", ...set }, rep, "live", "green", "viewPerformance"],
     ["paused", { status: "disabled", ...set }, rep, "paused", "amber", "reactivate"],
     ["paused but activation blocked: no action", { status: "disabled", leadId: 4 }, rep, "paused", "amber", null],
-    ["assigned, chip not written", { status: "assigned", nfcStatus: "not_programmed", ...set }, rep, "readyNoChip", "amber", "writeChip"],
-    ["assigned, chip write failed", { status: "assigned", nfcStatus: "failed", ...set }, rep, "readyNoChip", "amber", "writeChip"],
-    ["assigned, chip written", { status: "assigned", nfcStatus: "programmed", ...set }, rep, "readyOffline", "sky", "goLive"],
-    ["assigned, chip verified", { status: "assigned", nfcStatus: "verified", ...set }, rep, "readyOffline", "sky", "goLive"],
-    ["assigned, chip locked", { status: "assigned", nfcStatus: "locked", ...set }, rep, "readyOffline", "sky", "goLive"],
-    ["assigned but no link: go live is not offered", { status: "assigned", nfcStatus: "verified", leadId: 4 }, rep, "readyOffline", "sky", null],
-    ["in stock, no customer", { status: "inventory", stockStatus: "available" }, rep, "inStock", "slate", "configure"],
-    ["reserved stock is not offered for set-up", { status: "inventory", stockStatus: "reserved" }, rep, "other", "slate", null],
+    ["assigned, chip not written", { status: "assigned", nfcStatus: "not_programmed", ...set }, rep, "ready", "sky", "writeChip"],
+    ["assigned, chip write failed", { status: "assigned", nfcStatus: "failed", ...set }, rep, "ready", "sky", "writeChip"],
+    ["assigned, chip written", { status: "assigned", nfcStatus: "programmed", ...set }, rep, "ready", "sky", "goLive"],
+    ["assigned, chip verified", { status: "assigned", nfcStatus: "verified", ...set }, rep, "ready", "sky", "goLive"],
+    ["assigned, chip locked", { status: "assigned", nfcStatus: "locked", ...set }, rep, "ready", "sky", "goLive"],
+    ["assigned but no link: go live is not offered", { status: "assigned", nfcStatus: "verified", leadId: 4 }, rep, "ready", "sky", null],
+    ["in stock, no customer", { status: "inventory", stockStatus: "available" }, rep, "noCustomer", "slate", "configure"],
+    ["reserved stock is not offered for set-up", { status: "inventory", stockStatus: "reserved" }, rep, "reserved", "blue", null],
+    ["internal use", { status: "inventory", stockStatus: "internal_use" }, rep, "internalUse", "slate", null],
+    ["print failed, the producer opens the print", { stockStatus: "pending", batchId: "b-1", printJobId: "j-1", printJobStatus: "failed" }, admin, "printFailed", "red", "openPrint"],
+    ["print failed, a reseller can only ask", { stockStatus: "pending", batchId: "b-1", printJobId: "j-1", printJobStatus: "failed" }, rep, "printFailed", "red", null],
+    ["print cancelled", { stockStatus: "pending", batchId: "b-1", printJobId: "j-1", printJobStatus: "cancelled" }, admin, "printCancelled", "muted", "openPrint"],
     ["unknown status does not break", { status: "weird", stockStatus: "weird", nfcStatus: "weird" }, rep, "other", "slate", null],
   ];
   it.each(cases)("%s", (_name, piece, viewer, key, tone, action) => {
@@ -318,5 +330,32 @@ describe("showsReceive", () => {
   ];
   it.each(cases)("%s", (_name, tag, viewer, expected) => {
     expect(showsReceive(tag, viewer)).toBe(expected);
+  });
+});
+
+describe("pieceHolderLine: who has the piece", () => {
+  const piece = { status: "inventory", stockStatus: "available", repId: null as number | null, repName: null as string | null, kitId: null as string | null, kitCode: null as string | null, leadName: null as string | null };
+  const kevin = { repId: 5, repName: "Kevin Brooks", kitId: "k-1", kitCode: "K-0003" };
+  const rep = { repId: 5, canManage: false };
+  const manager = { repId: 1, canManage: true };
+  it("company stock is the company's, and only while there is no customer", () => {
+    expect(pieceHolderLine(piece, rep)).toEqual({ kind: "company" });
+    expect(pieceHolderLine({ ...piece, leadName: "Malden Hardware", status: "active" }, rep)).toBeNull();
+  });
+  it("a reseller reads their own piece as 'with you', no kit", () => {
+    expect(pieceHolderLine({ ...piece, ...kevin }, rep)).toEqual({ kind: "you" });
+  });
+  it("another reseller is named, and the kit is for those who manage", () => {
+    expect(pieceHolderLine({ ...piece, ...kevin }, { repId: 9, canManage: false })).toEqual({ kind: "with", repId: 5, name: "Kevin Brooks", kit: null });
+    expect(pieceHolderLine({ ...piece, ...kevin }, manager)).toEqual({ kind: "with", repId: 5, name: "Kevin Brooks", kit: "K-0003" });
+  });
+  it("a piece at its customer is not 'with' anybody: the customer answers; another reseller is still named", () => {
+    const live = { ...piece, ...kevin, status: "active", leadName: "Malden Hardware" };
+    expect(pieceHolderLine(live, rep)).toBeNull();
+    expect(pieceHolderLine(live, manager)).toEqual({ kind: "reseller", repId: 5, name: "Kevin Brooks", kit: "K-0003" });
+  });
+  it("nobody holds a piece that is not in stock yet, sold, lost or deactivated", () => {
+    for (const stockStatus of ["pending", "sold", "damaged", "lost", "retired"]) expect(pieceHolderLine({ ...piece, ...kevin, stockStatus }, manager)).toBeNull();
+    expect(pieceHolderLine({ ...piece, status: "retired" }, manager)).toBeNull();
   });
 });

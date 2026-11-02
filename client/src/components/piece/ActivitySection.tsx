@@ -92,7 +92,7 @@ function TimelineRow({ event }: { event: PieceTimelineEvent }) {
       title = !entry.newUrl ? tp("evDestinationCleared") : entry.previousUrl ? tp("evDestinationChanged") : tp("evDestinationSet");
       const after = entry.newUrl ? `${labels.destination(entry.newDestinationType)}: ${entry.newUrl}` : tm("historyCleared");
       detail = entry.previousUrl ? `${labels.destination(entry.previousDestinationType)}: ${entry.previousUrl} → ${after}` : after;
-      who = entry.changedByEmail;
+      who = entry.changedByName;
       if (entry.reason) detail += ` · “${reasonText(entry.reason)}”`;
       break;
     }
@@ -112,12 +112,13 @@ function TimelineRow({ event }: { event: PieceTimelineEvent }) {
         ? m.toCustodianName ? tp("movement_transfer", { name: m.toCustodianName }) : tp("movement_transfer_house")
         : tp(key as never);
       title = named === key ? tp("movementGeneric", { from: labels.stock(m.fromStockStatus ?? "—"), to: labels.stock(m.toStockStatus) }) : named;
-      who = m.actorEmail;
+      who = m.actorName;
       detail = reasonText(m.reason);
       break;
     }
     case "journey":
-      title = event.entry.title;
+      // The server writes these titles in English and with the word "tag": say what happened from the action, in the app's words.
+      title = event.entry.action === "tag_activated" ? tp("evPutLive") : event.entry.action === "tag_created" ? tp("evCreated") : event.entry.title;
       who = event.entry.actorName ?? event.entry.actorEmail;
       detail = event.entry.content;
       break;

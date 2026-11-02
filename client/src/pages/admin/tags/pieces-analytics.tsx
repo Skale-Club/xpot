@@ -135,11 +135,10 @@ export function AnalyticsPanel({
   const { totals } = data;
   return (
     <div className="space-y-4">
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+      <div className="grid grid-cols-3 gap-3">
         <Stat card label={tm("interactions")} value={totals.interactions} detail={tm("interactionsHint")} />
         <Stat card label={tt("qrScans")} value={totals.qr} detail={formatShare(totals.qr, totals.interactions)} />
         <Stat card label={tt("nfcTaps")} value={totals.nfc} detail={formatShare(totals.nfc, totals.interactions)} />
-        <Stat card label={tm("approxUnique")} value={totals.approxUnique} detail={tm("approxUniqueHint")} />
       </div>
 
       <div className={`${CARD} min-w-0 p-4`}>
@@ -174,26 +173,16 @@ export function AnalyticsPanel({
           {totals.botHits > 0 ? ` ${tm.plural("botHits", totals.botHits)}` : ""}
           {totals.inactiveScans > 0 ? ` ${tm.plural("inactiveScans", totals.inactiveScans)}` : ""}
         </p>
+        {/* The devices are one line, as on a piece: not a card of three rows and a lot of empty. */}
+        {data.devices.length > 0 ? (
+          <p className="mt-2 flex items-center gap-1.5 text-sm text-white/65" data-testid="analytics-devices">
+            <Smartphone className="h-4 w-4 shrink-0 text-white/35" aria-hidden="true" />
+            {data.devices.map((d) => `${isDevice(d.deviceType) ? tm(DEVICE_KEYS[d.deviceType]) : d.deviceType} ${d.count}`).join(" · ")}
+          </p>
+        ) : null}
       </div>
 
-      <div className={`grid min-w-0 grid-cols-1 items-start gap-4 ${showTopTags ? "md:grid-cols-2" : ""}`}>
-        <div className={`${CARD} min-w-0 p-4`}>
-          <p className="mb-2 text-sm font-semibold text-white">{tm("devices")}</p>
-          {data.devices.length === 0 ? (
-            <EmptyState compact dense tone="tags" icon={Smartphone} title={tm("noInteractionsInPeriod")} cardStyle={{}} />
-          ) : (
-            <ul className="space-y-1.5 text-sm">
-              {data.devices.map((d) => (
-                <li key={d.deviceType} className="flex justify-between">
-                  <span className="capitalize text-white/80">{isDevice(d.deviceType) ? tm(DEVICE_KEYS[d.deviceType]) : d.deviceType}</span>
-                  <span className="tabular-nums text-white/50">
-                    {d.count} <span className="text-xs text-white/30">({formatShare(d.count, totals.interactions)})</span>
-                  </span>
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
+      <div className="grid min-w-0 grid-cols-1 gap-4">
         {showTopTags ? (
           <div className={`${CARD} min-w-0 p-4`}>
             <p className="mb-2 text-sm font-semibold text-white">{tm("topPieces")}</p>

@@ -9,13 +9,15 @@ import { tagsMessages } from "@/i18n/messages/tags";
 import { manageTagsMessages } from "@/i18n/messages/manageTags";
 import { manageTagsPiecesMessages } from "@/i18n/messages/manageTagsPieces";
 import { pieceScreenMessages } from "@/i18n/messages/pieceScreen";
-import { usePiece } from "./PieceContext";
-import { pieceHasLocation, pieceIsSold, pieceLocation, pieceSituation, pieceStatusChips, type PieceDimension } from "./pieceView";
+import { usePiece, usePieceActivity } from "./PieceContext";
+import { useReasonText } from "./reasonText";
+import { formatDate } from "@/lib/format";
+import { pieceHolderLine, pieceIsSold, pieceSituation, pieceStatusChips, type PieceDimension, type PieceSituationKey } from "./pieceView";
 
 // The piece's header, the same on the reseller screen and the admin page: what
 // it is (model and face), one status pill (pieceSituation), where it is and
-// whose it is. The three stored states as labelled chips (Digital, Physical
-// stock, Chip, and Sold) live in "More details" (PieceStatusChips).
+// whose it is. The three stored states as labelled chips (Link, Stock, Chip,
+// and Sold) live in Management › Technical details (PieceStatusChips).
 
 /** A stored value in the language in use; an unknown one shows as stored. */
 function useStatusLabel() {
@@ -52,7 +54,26 @@ export function PieceStatusChips({ tag, className = "" }: { tag: Pick<TagDetail,
   );
 }
 
-/** The one status of the piece, derived from its three states (pieceSituation). Needs the piece screen's context. */
+/** What put the piece in the state it is in, for whoever manages it: "Marked lost · Oct 3 · by Marcus Reed", and the reason if there is one. */
+const ENDED_BY: Partial<Record<PieceSituationKey, string>> = { damaged: "damage", lost: "loss", retired: "retire", reserved: "reserve", internalUse: "internal_use" };
+
+function LastMovement({ movementType }: { movementType: string }) {
+  const { tag } = usePiece();
+  const tp = useT(pieceScreenMessages);
+  const reasonText = useReasonText();
+  const { data } = usePieceActivity(tag.id, tag.updatedAt);
+  const movement = data?.movements?.find((m) => m.movementType === movementType);
+  if (!movement) return null;
+  const reason = reasonText(movement.reason);
+  return (
+    <p className="text-sm text-white/55" data-testid="piece-last-movement">
+      {[tp(`movement_${movementType}` as "movement_loss"), formatDate(movement.createdAt, { month: "short", day: "numeric" }), movement.actorName ? tp("evBy", { name: movement.actorName }) : null].filter(Boolean).join(" · ")}
+      {reason ? <span className="block text-white/45">{reason}</span> : null}
+    </p>
+  );
+}
+
+/** The one status of the piece, in the words every list uses (pieceStatus), with what the status alone leaves unsaid. Needs the piece screen's context. */
 export function PieceSituationPill({ className = "" }: { className?: string }) {
   const { tag, viewer } = usePiece();
   const tp = useT(pieceScreenMessages);
@@ -62,44 +83,52 @@ export function PieceSituationPill({ className = "" }: { className?: string }) {
   const stockSpeaks = tag.status === "inventory" && tag.stockStatus !== "available";
   const text = situation.key === "other" ? (stockSpeaks ? label("stock", tag.stockStatus) : label("digital", tag.status)) : tp(`situation_${situation.key}` as "situation_live");
   return (
-    <div className={className} data-testid="piece-situation" data-situation={situation.key}>
+    <div className={`space-y-1.5 ${className}`} data-testid="piece-situation" data-situation={situation.key}>
       <Pill tone={situation.tone}>{text}</Pill>
+      {situation.note ? <p className="text-sm text-amber-200/85" data-testid="piece-note">{tp(`note${situation.note[0].toUpperCase()}${situation.note.slice(1)}` as "noteSoldNotLive")}</p> : null}
+      {viewer.canManage && ENDED_BY[situation.key] ? <LastMovement movementType={ENDED_BY[situation.key]!} /> : null}
+      {situation.chipNote ? <p className={`text-sm ${situation.chipNote === "failed" ? "text-red-300/90" : "text-amber-200/85"}`} data-testid="piece-chip-note">{tp(`chipNote_${situation.chipNote}` as "chipNote_missing")}</p> : null}
     </div>
   );
 }
 
-/** Where the piece is (house stock, or a reseller and their kit) and its customer. */
+/**
+ * Who has the piece, and whose it is. Without a customer: where it is (company stock, "With you", or "With" the
+ * reseller; the status pill already says "No customer yet"). With a customer, the customer's name answers "where is
+ * it"; a reseller other than the viewer is named, the viewer's own piece and company stock are not.
+ */
 export function PieceFacts({ tag, className = "" }: { tag: TagDetail; className?: string }) {
-  const tt = useT(tagsMessages);
   const tp = useT(pieceScreenMessages);
   const tpieces = useT(manageTagsPiecesMessages);
-  const located = pieceHasLocation(tag);
-  if (!located && !tag.leadName) return null;
-  const location = pieceLocation(tag);
-  const where = location.kind === "house"
-    ? tpieces("houseStock")
-    : tp("locationWith", { name: location.name ?? tpieces("resellerNumber", { id: location.repId }) });
+  const { viewer } = usePiece();
+  const line = pieceHolderLine(tag, viewer);
+  const named = line && "repId" in line ? line.name ?? tpieces("resellerNumber", { id: line.repId }) : "";
+  const kit = line && "kit" in line && line.kit ? <span className="font-mono text-white/45"> · {tp("locationKit", { id: line.kit })}</span> : null;
+  const where = !line ? null
+    : line.kind === "company" ? tpieces("houseStock")
+    : line.kind === "you" ? tp("locationYou")
+    : <>{tp(line.kind === "with" ? "locationWith" : "locationReseller", { name: named })}{kit}</>;
+  if (!where && !tag.leadName) return null;
   return (
-    <dl className={`grid min-w-0 grid-cols-[auto_minmax(0,1fr)] items-center gap-x-2 gap-y-1 text-sm ${className}`} data-testid="piece-facts">
-      {located ? (
+    <dl className={`grid min-w-0 grid-cols-[auto_minmax(0,1fr)] items-start gap-x-2 gap-y-1 text-sm ${className}`} data-testid="piece-facts">
+      {where ? (
         <>
-          <dt className="flex items-center" title={tp("locationLabel")}>
+          <dt className="flex h-5 items-center" title={tp("locationLabel")}>
             <MapPin className="h-4 w-4 text-white/40" aria-hidden="true" />
             <span className="sr-only">{tp("locationLabel")}</span>
           </dt>
-          <dd className="min-w-0 truncate text-white/75" data-testid="piece-location">
-            {where}
-            {location.kind === "reseller" && location.kit ? <span className="font-mono text-white/45"> · {tp("locationKit", { id: location.kit })}</span> : null}
-          </dd>
+          <dd className="min-w-0 break-words text-white/75" data-testid="piece-location">{where}</dd>
         </>
       ) : null}
-      <dt className="flex items-center" title={tp("customerLabel")}>
-        <Building2 className="h-4 w-4 text-white/40" aria-hidden="true" />
-        <span className="sr-only">{tp("customerLabel")}</span>
-      </dt>
-      <dd className={`min-w-0 truncate ${tag.leadName ? "font-semibold text-white/85" : "text-white/45"}`} data-testid="piece-customer">
-        {tag.leadName ?? tt("noCustomer")}
-      </dd>
+      {tag.leadName ? (
+        <>
+          <dt className="flex h-5 items-center" title={tp("customerLabel")}>
+            <Building2 className="h-4 w-4 text-white/40" aria-hidden="true" />
+            <span className="sr-only">{tp("customerLabel")}</span>
+          </dt>
+          <dd className="min-w-0 break-words font-semibold text-white/85" data-testid="piece-customer">{tag.leadName}</dd>
+        </>
+      ) : null}
     </dl>
   );
 }

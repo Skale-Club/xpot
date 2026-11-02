@@ -1,10 +1,9 @@
 import { useState, type ReactNode } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { CHIP_STATUS_TONE, PROVISIONING_JOB_TONE, Pill, toneOf } from "@/components/xpot/StatusPill";
-import { CheckCircle2, Circle, Cpu } from "lucide-react";
+import { CheckCircle2, Circle } from "lucide-react";
 import { OPEN_JOB_STATUSES, type ProvisioningJobStatus } from "@shared/tagProvisioning";
 import type { ProvisionerDeviceItem, TagProvisioningState } from "@shared/tagsApi";
-import { AdminBadge } from "@/components/xpot/AdminBadge";
 import { Loader2 } from "@/components/ui/loader";
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/xpot/ConfirmDialog";
@@ -125,12 +124,8 @@ export function NfcProvisioningCard({
     onSettled: () => setConfirming(null),
   });
 
-  const header = (right?: ReactNode) => (
-    <div className="flex flex-wrap items-center justify-between gap-2">
-      <p className="flex items-center gap-2 text-sm font-semibold text-white"><Cpu className={`h-4 w-4 ${MODULE_ACCENT.tags.text}`} />{t("nfcCardTitle")}<AdminBadge /></p>
-      {right}
-    </div>
-  );
+  // The card sits inside the chip section, under "Desk writer": no second title, no badge, no second status pill.
+  const header = (right?: ReactNode) => (right ? <div className="flex justify-end">{right}</div> : null);
 
   if (isLoading) {
     return <section className={`${CARD} space-y-3 p-4`}>{header(<Loader2 className="h-4 w-4 text-white/40" />)}</section>;
@@ -155,16 +150,6 @@ export function NfcProvisioningCard({
 
   return (
     <section className={`${CARD} space-y-4 p-4`} data-testid="admin-nfc-provisioning-card">
-      {header(<NfcStatusPill status={state.status} />)}
-
-      <p className="text-xs text-white/50">
-        {t("mustHoldBefore")}
-        <code className="rounded bg-white/10 px-1 text-white/80">{nfcUrl}</code>
-        {t("mustHoldMiddle")}
-        <strong className="font-mono text-white">{publicCode}</strong>
-        {t("mustHoldAfter")}
-      </p>
-
       {open && latest ? (
         <div className="space-y-2 rounded-xl border border-white/10 bg-white/[0.03] p-3">
           <p className="flex items-center gap-2 text-sm font-medium text-white">

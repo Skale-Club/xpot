@@ -97,6 +97,7 @@ Mudança: em `pieceSituation`, peça vendida segue a mesma ordem das outras:
 A linha do estoque passa a usar os mesmos dois textos.
 Arquivos: client/src/components/piece/pieceView.ts:103, client/src/i18n/messages/pieceScreen.ts:106, client/src/pages/admin/tags/labels.ts:60, tests/piece-view.test.ts.
 Risco: nenhuma regra de negócio, só a escolha do que mostrar.
+Status: feito. `pieceStatus` separa "Sold · Live" de "Sold, not live" (âmbar, com a frase de que o cliente pagou), e a ação é gravar o chip ou colocar no ar. A linha do estoque usa os mesmos textos.
 
 ### PE-3 [S1] A mesma peça é "With a reseller", "In stock" e "No customer yet"
 Telas: owner/en-desktop/panel-stock e piece-popup-brightside-kit; rep-both/en-phone/tags-pieces e tags-piece-in-kit; partner/en-desktop/piece-popup-harbor-kit; platform/en-desktop/piece-popup-more-details.
@@ -104,6 +105,7 @@ Problema: ver a tabela do início. 7N7FKFSN é "With a reseller" na linha que a 
 Mudança: a pill "In stock" sai da peça. `situation_inStock` passa a dizer "No customer yet" / "Sem cliente" / "Sin cliente", o termo já fixado no glossário. A localização continua na linha de baixo ("With Jessica Alvarez" ou "Company stock"). Com a pill dizendo isso, a linha "No customer yet" sai do cabeçalho. O rótulo "Physical stock" sai junto (PE-23).
 Arquivos: client/src/i18n/messages/pieceScreen.ts:115, client/src/components/piece/PieceHeader.tsx:101, client/src/components/piece/pieceView.ts:128.
 Risco: nenhum. Peça com fornecedor ou impressão continua com "Not in stock yet".
+Status: feito. A pill diz "No customer yet"; a localização ("With Jessica", "With you", "Company stock") fica na linha de baixo; o bloco Digital/Physical stock saiu da peça (ver PE-23).
 
 ### PE-4 [S1] "Not in stock yet" e "Company stock" na mesma linha, e o filtro conta 76 onde o chip conta 19
 Telas: platform/en-desktop/panel-stock, stock-where-notReceived, stock-where-lost, stock-where-damaged, stock-rep-house; partner/en-desktop/stock-where-notReceived; platform/en-phone/panel-stock; platform/en-desktop/piece-page-pendingSupplier, piece-page-lost.
@@ -111,6 +113,7 @@ Problema: a coluna Where diz "Not in stock yet" e a coluna Reseller, na mesma li
 Mudança: na coluna Reseller, sem revendedor mostra "—" (a coluna Where já diz o resto). Vale também para o card do celular. A opção do filtro passa de "Company stock" para "No reseller" / "Sem revendedor" / "Sin revendedor". Na gestão, a linha "Held by" só aparece quando `pieceHasLocation` for verdadeiro.
 Arquivos: client/src/pages/admin/tags/piece-table.tsx:109,128,207; client/src/i18n/messages/manageTagsPieces.ts:17; client/src/components/piece/ManagementSection.tsx:58,90.
 Risco: nenhuma regra. Só texto e exibição.
+Status: feito. A coluna Reseller mostra "Company stock" só para peça que está mesmo no estoque da empresa e sem cliente, e "—" nas outras; o filtro virou "No reseller"; "With" some da gestão quando a peça não está com ninguém.
 
 ### PE-5 [S1] Botão forte para gravar chip em peça perdida, não impressa ou que nem existe; texto errado em peça danificada
 Telas: platform/pt-desktop/piece-page-lost, platform/es-desktop/piece-page-lost, platform/en-desktop/piece-page-pendingOldPrint, piece-page-pendingSupplier; platform/en-phone/piece-popup-pendingRequested, piece-popup-lost, piece-popup-damaged, piece-popup-houseAvailable.
@@ -118,6 +121,7 @@ Problema: VZGM3T1V está "Lost" e mostra os botões de gravar e de enviar ao gra
 Mudança: chip só aparece como ação se a peça estiver em estoque ou configurada. Para `lost`, `pending`, `damaged` e desativada, a seção mostra só a linha "Chip not written", sem botão, sem gravador e sem passos. Isso também elimina a frase errada.
 Arquivos: client/src/components/piece/ChipSection.tsx:47,100; client/src/pages/admin/tags/PieceDetail.tsx:97; client/src/i18n/messages/manageTagsPieces.ts:141.
 Risco: **depende do dono** num caso: gravar chip de peça do fornecedor antes de dar entrada. Recomendo bloquear na tela: a entrada leva um toque ("It's in company stock"). Não verifiquei se o servidor recusa; a mudança é só de tela.
+Status: feito. Peça perdida, ainda fora do estoque, danificada ou desativada mostra só o estado do chip, sem botão, sem gravador de mesa e sem passos. A decisão sobre gravar chip de peça do fornecedor antes da entrada fica como recomendado (bloqueia na tela; o servidor não foi alterado).
 
 ### PE-6 [S1] No celular do gestor, "Write chip" não faz nada visível, e a peça tem 4500 px
 Telas: platform/en-phone/piece-popup-write-chip, piece-popup-configuredNoChip, piece-popup-soldNotLive, piece-page-*; owner/en-phone/piece-popup-brightside-kit; partner/en-phone/piece-popup-harbor-live.
@@ -125,6 +129,7 @@ Problema: depois de tocar "Write chip", a tela é a mesma de antes (B890X9SR, me
 Mudança: uma linha: `layout={onClose || !isDesktop ? "stack" : "columns"}`. O celular do gestor passa a abrir como o do revendedor, e `reveal(chipRef)` rola até o chip. Depois, na condição de `ChipSection`, os passos só aparecem ao tocar: `manualFlow && manualOpen`, abrindo também quando a URL traz `?write=1`.
 Arquivos: client/src/pages/admin/tags/PieceDetail.tsx:91; client/src/components/piece/PieceBody.tsx:74; client/src/components/piece/ChipSection.tsx:62-69,100.
 Risco: nenhuma regra. Ajustar testes que esperam os passos abertos.
+Status: feito. O celular do gestor abre como o do revendedor (`stack`), e os passos do NFC Tools só aparecem ao tocar em "Write chip" ou com `?write=1`.
 
 ### PE-7 [S1] "Someone scanned these pieces" e a coluna "Last scan" vazia em todas
 Telas: platform/en-desktop/panel-tags-overview-scannedNotLive, owner/en-desktop/panel-tags-overview-scannedNotLive; platform/en-phone/panel-tags-overview-scannedNotLive.
@@ -132,6 +137,7 @@ Problema: o texto diz "Someone scanned these pieces in the last 7 days, but they
 Mudança: a coluna passa a mostrar a data do evento que colocou a peça na fila, inclusive no card do celular. Novo texto: "Scanned in the last 7 days, but not live. Set them up or put them live." / "Lidas nos últimos 7 dias, mas fora do ar. Configure ou coloque no ar." / "Leídas en los últimos 7 días, pero sin activar. Configúralas o actívalas."
 Arquivos: server/tags/queues.ts:14-20 (a fila conta `inventory_scan`, a coluna mostra outro campo), client/src/pages/admin/tags/OverviewTab.tsx:209, client/src/i18n/messages/adminTagsFlow.ts:131.
 Risco: é preciso expor a data desse evento na lista. Sem regra de negócio.
+Status: feito. A fila traz `lastInventoryScanAt` (só nessa consulta) e mostra a data na coluna "Scanned" e no card do celular; o texto mudou como pedido.
 
 ### PE-8 [S1] A fila "Chips to write" lista um chip que diz "Chip written"
 Telas: platform/en-desktop/panel-tags-overview-chipPending, owner/en-desktop/panel-tags-overview-chipPending.
@@ -139,6 +145,7 @@ Problema: C5BC2H74 está na fila com "Chip written", e tem 21 leituras NFC. O t�
 Mudança: `chip_programmed` passa a "Written, not tested" / "Gravado, falta testar" / "Grabado, falta probar". Título: "Chips to write or test" / "Chips para gravar ou testar" / "Chips por grabar o probar". Texto: "Pieces with a customer whose chip is missing or was never tested on a phone." / "Peças com cliente cujo chip falta ou nunca foi testado num celular." / "Piezas con cliente cuyo chip falta o nunca se probó en un teléfono."
 Arquivos: client/src/i18n/messages/tags.ts:135; client/src/i18n/messages/adminTagsFlow.ts:128-129.
 Risco: **pergunta ao dono**: peça com leitura NFC real deveria virar "verificada" sozinha? O popup diz "A real phone NFC scan reached this piece" como etapa. Recomendo sim. Pode ser efeito do seed, que criou leituras sem marcar o chip; confirmar antes de mudar a regra. O mesmo vale para F3G1VTJK, com 2 leituras NFC e "Chip not written".
+Status: feito (texto e título: "Chips to write or test", "Not tested"). pendente (decisão do dono): peça com leitura NFC real virar "verificada" sozinha; a regra não foi alterada.
 
 ### PE-9 [S1] "Change customer" ao lado de "Sold pieces keep their customer"
 Telas: platform/en-desktop/piece-popup-soldLive, piece-popup-soldNotLive; owner/en-desktop/piece-popup-brightside-sold; rep-both/en-phone/tags-piece-sold-live; platform/en-phone/tags-piece-soldNotLive.
@@ -146,6 +153,7 @@ Problema: o botão "Change customer" e, abaixo, "Sold pieces keep their customer
 Mudança: com venda registrada, "Change customer" sai (o lápis que corrige o nome fica). A frase vira: "To change the customer, cancel the sale first." / "Para trocar o cliente, cancele a venda primeiro." / "Para cambiar el cliente, cancela primero la venta."
 Arquivos: client/src/components/piece/CustomerDestinationSection.tsx:281,356; client/src/i18n/messages/manageTagsPieces.ts:73.
 Risco: **depende do dono**. Se trocar o cliente de peça vendida for permitido, a frase é que está errada. Recomendo manter a regra da frase. No código, só vi bloqueio quando a peça está no ar (`blockedByLive`, linha 122), então o servidor precisa ser conferido.
+Status: feito na tela: "Change customer" sai quando há venda, e a frase vira "To change the customer, cancel the sale first.". A regra do servidor para trocar o cliente de peça vendida não foi mexida nem conferida.
 
 ### PE-10 [S1] Peça desativada, sem cliente, manda "Remove the customer first"
 Telas: platform/en-desktop/piece-page-retired; platform/en-phone/piece-popup-retired.
@@ -153,6 +161,7 @@ Problema: BR1AESKH não tem cliente ("No destination yet") e o texto diz "Remove
 Mudança: testar desativada antes: "Deactivated pieces can't be transferred." / "Peças desativadas não podem ser transferidas." / "Las piezas desactivadas no se pueden transferir."
 Arquivos: client/src/components/piece/ManagementSection.tsx:175-177; client/src/i18n/messages/manageTagsPieces.ts:105-107.
 Risco: nenhum.
+Status: feito. A transferência não aparece para peça sem lugar (desativada, perdida, vendida, ainda fora do estoque).
 
 ---
 
@@ -164,6 +173,7 @@ Problema: Marcus e Daniela leem "No pieces here yet. Ask your manager for pieces
 Mudança: quem gerencia não lê essa parte. `stockBlocked_*` termina na primeira frase. My pieces vazia, para gestor: "No pieces with you. The company's pieces are in Stock." / "Nenhuma peça com você. As peças da empresa estão em Estoque." / "Ninguna pieza contigo. Las piezas de la empresa están en Stock.", com botão "Open Stock" / "Abrir estoque" / "Abrir stock". Para o revendedor, trocar "scan it into its batch" por "Ask your manager about this piece." (texto já existente, `hintAskManager`).
 Arquivos: client/src/i18n/messages/tags.ts:117,130-132; client/src/pages/tags/PiecesScreen.tsx; client/src/components/piece/SaleSection.tsx:125; client/src/components/piece/CustomerDestinationSection.tsx:319.
 Risco: `viewer.canManage` só vale para o admin global (shared/modules.ts:11). Para cobrir dono e parceiro, a condição precisa usar o papel na organização. Ver PE-53.
+Status: feito: `stockBlocked_*` termina na primeira frase (o aviso de falar com o gestor só aparece para quem não gerencia) e o My pieces vazio de gestor diz "No pieces with you. The company's pieces are in Stock." com "Open Stock". Gestor é quem tem alcance de gestão (`managementReach`), não só o admin global.
 
 ### PE-12 [S2] Vermelho em quase toda linha: "Chip not written" não é problema na maioria delas
 Telas: platform/en-desktop/panel-stock (cerca de 107 de 112 linhas, contagem por cor), partner/en-desktop/panel-stock (16 de 16), owner/en-desktop/panel-stock (10 de 15), stock-where-*; todos em phone no texto do card.
@@ -177,6 +187,7 @@ Mudança: a coluna usa a regra que já existe e que My pieces já usa, `chipNeed
 Em platform, sobram cerca de 7 pills em 112 linhas. O card do celular só cita o chip quando precisa.
 Arquivos: client/src/pages/admin/tags/piece-table.tsx:133,228; shared/tagApp.ts:235; client/src/components/xpot/StatusPill.tsx:86-92 (não mudar o mapa global, usar um local da lista); client/src/i18n/messages/manageTagsPieces.ts:26.
 Risco: nenhum.
+Status: feito. A coluna Chip só fala quando há ação: "Not written" e "Not tested" em âmbar, "Write failed" em vermelho, verificado ou lacrado em texto discreto, e "—" quando ainda não se pede chip (`chipNeedsWriting` e `pieceChipState`). O mapa global de tons não mudou.
 
 ### PE-13 [S2] Mais da metade do estoque são peças que ainda não entraram, em 8268 px
 Telas: platform/en-desktop/panel-stock, stock-search (5911 px), stock-rep-house (5813 px), stock-where-notReceived (4458 px); platform/en-phone/panel-stock (16176 px), stock-where-notReceived (9546 px); partner/en-desktop/panel-stock, partner/en-phone/panel-stock.
@@ -188,6 +199,7 @@ Mudança:
 4. Total no topo: "54 pieces" no lugar de "112 loaded", que é termo técnico.
 Arquivos: client/src/pages/admin/tags/PiecesTab.tsx:30-37, 183-195; client/src/pages/admin/tags/where-model.ts; client/src/components/xpot/pagination.tsx:139; client/src/pages/admin/tags/piece-table.tsx:183-197.
 Risco: **depende do dono**: esconder por padrão pode surpreender quem procura a peça. Recomendo esconder: o chip mostra "58", e a busca por código continua achando qualquer peça (a busca precisa ignorar esse padrão).
+Status: feito. A lista abre sem as peças ainda fora do estoque (`hidePending`, ignorado com busca, lote ou um status escolhido), uma linha por peça, cabeçalho e filtros fixos ao rolar e o total no topo ("54 pieces").
 
 ### PE-15 [S2] "Company" quer dizer duas coisas opostas na mesma tela
 Telas: todas `panel-stock` e `stock-where-*`; stock-more-filters-open; tags-pieces; piece-popup-*.
@@ -195,6 +207,7 @@ Problema: "In company stock" e "Company stock" são a dona das peças. Coluna "C
 Mudança: "Company stock" fica, por ser decisão do glossário. O cliente é sempre "Customer" / "Cliente" / "Cliente": coluna, filtro "All customers" / "Todos os clientes" / "Todos los clientes", busca "Search code, customer, label or batch" / "Buscar código, cliente, rótulo ou lote" / "Buscar código, cliente, etiqueta o lote". Em My pieces, idem.
 Arquivos: client/src/i18n/messages/manageTags.ts:85,160; client/src/i18n/messages/manageTagsPieces.ts:10,13; client/src/i18n/messages/tags.ts:111,461.
 Risco: **depende do dono**: o glossário fala em "business/empresa" para o cliente. Recomendo "Customer" nas telas de peça, porque a própria peça já fala assim. Alinhar com RCP-23.
+Status: feito para Estoque, My pieces, Pieces results e a busca: o cliente é "Customer" / "Cliente". "Companies" fica em Visits.
 
 ### PE-16 [S2] Kevin vê "With Kevin Brooks" na própria peça, e peça no cliente aparece "com" o revendedor
 Telas: reseller/en-phone/tags-piece-in-kit, tags-piece-live, tags-piece-configured-no-chip; reseller/pt-desktop/tags-piece-live ("Com Kevin Brooks"); reseller/es-desktop/tags-piece-in-kit ("Con Kevin Brooks"); rep-both/en-phone/tags-piece-live; owner/en-phone/tags-piece-in-kit ("With Priya Nair"); owner-multi/en-phone/tags-piece-in-kit ("With Tomas Lindgren"); owner/en-desktop/tags-piece-in-kit.
@@ -206,6 +219,7 @@ Mudança: em `PieceFacts`, comparar com `viewer.repId` (já disponível em `useP
 - com cliente, de outro: "Reseller: Jessica Alvarez" / "Revendedor: Jessica Alvarez" / "Revendedor: Jessica Alvarez".
 Arquivos: client/src/components/piece/PieceHeader.tsx:79-90; client/src/i18n/messages/pieceScreen.ts:19; client/src/i18n/messages/tags.ts:67.
 Risco: nenhum. É o mesmo achado de RCP-13: fazer uma vez só. "With me" do glossário continua para o botão de escolha.
+Status: feito (junto com RCP-13). "With you" para a própria peça, "With <nome>" sem cliente, "Reseller: <nome>" com cliente (só se for outra pessoa), nada quando o cliente já responde. O kit só aparece para quem gerencia.
 
 ### PE-17 [S2] Lost, Damaged, Deactivated, Reserved e Internal use são becos sem saída
 Telas: platform/en-desktop/piece-popup-lost, piece-popup-damaged, piece-popup-retired, piece-popup-reserved, piece-popup-internalUse; platform/en-phone das mesmas.
@@ -213,6 +227,7 @@ Problema: o popup mostra a pill e "More details". Nada diz quando foi, quem marc
 Mudança: uma linha abaixo da pill, com o último movimento: "Marked lost on Oct 3 by Marcus Reed" / "Marcada como perdida em 3 de out. por Marcus Reed" / "Marcada como perdida el 3 de oct. por Marcus Reed". O motivo, se houver, vem na linha seguinte. Em Reserved e Internal use, decidir uma coisa só: recomendo ação principal "Set up" nos dois lugares, porque a página já oferece. Em Lost e Damaged, trazer para o popup a ação de desfazer que está em "More actions", se ela existir para o estado (não abri esse menu nas capturas).
 Arquivos: client/src/components/piece/pieceView.ts:100-102,128-129; client/src/components/piece/PieceBody.tsx:93; client/src/components/piece/PieceHeader.tsx; client/src/components/piece/ManagementSection.tsx.
 Risco: a linha exige trazer o último movimento para o revendedor, ou mostrar só para gestão. Recomendo só para gestão.
+Status: parcial. Para o gestor, uma linha com o último movimento ("Marked lost · Nov 2 · by Marcus Reed") e o motivo. pendente: ação principal "Set up" em Reserved e Internal use, e levar o desfazer de "More actions" para o popup (decisão de produto; não conferi o desfazer de cada estado).
 
 ### PE-18 [S2] Impressão cancelada ou com falha aparece igual a qualquer outra
 Telas: platform/en-desktop/piece-popup-pendingCancelled, piece-popup-pendingFailed, piece-popup-pendingOldPrint; os mesmos em phone; piece-page-pendingOldPrint.
@@ -220,6 +235,7 @@ Problema: "Not in stock yet" e "Go to printing", sem uma palavra sobre o que hou
 Mudança: `printJobStatus` já vem na peça. Falha: pill vermelha "Print failed" / "Falha na impressão" / "Falló la impresión", com "Open the print to redo it." / "Abra a impressão para refazer." / "Abre la impresión para repetirla." Cancelada: pill cinza "Print cancelled" / "Impressão cancelada" / "Impresión cancelada", com "This print was cancelled, so this piece won't arrive." / "Esta impressão foi cancelada, então esta peça não vai chegar." / "Esta impresión se canceló, así que esta pieza no llegará."
 Arquivos: client/src/components/piece/pieceView.ts:105-113; client/src/i18n/messages/pieceScreen.ts:107-109; shared/tagsApi.ts:99.
 Risco: nenhum. Confirmar no banco o nome exato dos status.
+Status: feito. "Print failed" (vermelho) e "Print cancelled" (cinza) com a frase do que fazer, pelo `printJobStatus`, agora na lista e na peça.
 
 ### PE-19 [S2] Peça no ar sem chip não avisa, e "Write failed" vira "not written yet"
 Telas: platform/en-desktop/piece-popup-harborLive, piece-popup-houseLive; partner/en-desktop/piece-popup-harbor-live; platform/en-desktop/piece-popup-houseConfigured e platform/en-phone/piece-popup-houseConfigured.
@@ -227,6 +243,7 @@ Problema: F3G1VTJK e X2ED2GA4 estão no ar com chip não gravado. O popup diz "L
 Mudança: no ar com `chipNeedsWriting`: pill verde "Live", linha âmbar "QR works. The chip isn't written yet." / "O QR funciona. O chip ainda não foi gravado." / "El QR funciona. El chip aún no está grabado.", ação principal "Write chip". Falha: pill "Chip write failed" / "Falha ao gravar o chip" / "Falló la grabación del chip", ação "Try again" / "Tentar de novo" / "Reintentar".
 Arquivos: client/src/components/piece/pieceView.ts:120,124; client/src/i18n/messages/pieceScreen.ts:113.
 Risco: nenhum. Peça só com QR e sem NFC por escolha do cliente, se existir, precisaria ficar de fora; não vi esse caso nas capturas.
+Status: feito. Peça no ar ou vendida com o chip faltando mostra "QR works. The chip isn't written yet." e a ação principal é gravar o chip; falha mostra "The chip write failed. Try again.".
 
 ### PE-20 [S2] Da fila, "voltar" leva para onde a fila não está
 Telas: panel-tags-overview-* em todos os perfis, desktop e phone; piece-page-*.
@@ -234,6 +251,7 @@ Problema: a fila vem de "Today" (no código). O link de volta diz "Overview" e l
 Mudança: voltar da fila vai para "Today" ("Today" / "Hoje" / "Hoy"). No computador, a peça da fila abre no mesmo popup do estoque (`?piece=`), sem sair da fila. No celular, o link de volta da peça respeita de onde veio.
 Arquivos: client/src/pages/admin/tags/OverviewTab.tsx:198,208; client/src/pages/admin/tags/PieceDetail.tsx:35-36; client/src/i18n/messages/adminTagsFlow.ts:135.
 Risco: nenhum.
+Status: feito. Voltar da fila vai para "Today"; no computador a peça abre no popup sobre a fila (`?piece=`); no celular o voltar da peça volta para a fila (`?from=`).
 
 ### PE-21 [S2] A fila "Chips to write" no celular não diz o que há com o chip
 Telas: platform/en-phone/panel-tags-overview-chipPending, owner/en-phone/panel-tags-overview-chipPending, partner/en-phone/panel-tags-overview-chipPending.
@@ -241,6 +259,7 @@ Problema: o card mostra cliente, código e "Sold" ou "With a reseller". Nada sob
 Mudança: no card, mostrar a pill do chip sempre que a coluna `chip` foi pedida. Hoje ela só aparece dentro de `has("scans")`.
 Arquivos: client/src/pages/admin/tags/piece-table.tsx:226-231.
 Risco: nenhum.
+Status: feito (junto com NAV-8). O card mostra a pill do chip sempre que a coluna foi pedida; chip que falhou sobe para o topo da fila.
 
 ### PE-22 [S2] "Held by", "Owned by", "The reseller (bought)"
 Telas: platform/en-desktop/piece-page-live, piece-page-soldLive, piece-page-lost; platform/en-phone/piece-page-*.
@@ -248,6 +267,7 @@ Problema: duas linhas parecidas, com linguagem de contrato. Peça vendida: "Held
 Mudança: "Held by" vira "With" (pt já é "Com quem está"). "Owned by" vira "Belongs to" (pt já é "Pertence a"). "The reseller (bought)" vira "The reseller, who bought it" / "O revendedor, que comprou" / "El revendedor, que la compró". Peça vendida: troca "Held by" por "Sold by" / "Vendida por" / "Vendida por". Sem transferência possível, o bloco "Reseller" some (o texto explica só se a pessoa perguntar, em PE-32).
 Arquivos: client/src/i18n/messages/pieceScreen.ts:48-54; client/src/components/piece/ManagementSection.tsx:58,90-91,175-177; client/src/i18n/messages/manageTagsPieces.ts:105.
 Risco: nenhum.
+Status: feito. "With", "Belongs to", "The reseller, who bought it", "Sold by"; o bloco de transferência some quando não há como transferir.
 
 ### PE-23 [S2] "Digital", "Physical stock" e "Chip" ainda aparecem, e abertos na página
 Telas: platform/en-desktop/piece-page-*, piece-popup-more-details; platform/en-phone/piece-popup-*; owner/en-phone/piece-popup-brightside-sold.
@@ -255,6 +275,7 @@ Problema: "DIGITAL: No customer yet", "PHYSICAL STOCK: In stock", "CHIP: Not wri
 Mudança: o bloco sai da peça. Quem precisa dele vê em "Technical details", com rótulos "Link", "Stock" e "Chip", sem "Digital" e sem "Physical". Para o revendedor, sai por completo.
 Arquivos: client/src/components/piece/PieceBody.tsx:110,129; client/src/components/piece/PieceHeader.tsx:40-55; client/src/i18n/messages/pieceScreen.ts:8-10.
 Risco: testes procuram `piece-status-chips`. Sem regra de negócio.
+Status: feito. Digital, Physical stock e Chip saem da peça e da vista do revendedor; ficam em Management › Technical details como Link, Stock e Chip.
 
 ### PE-24 [S2] A coluna "Where" responde coisa que não é lugar, e a mesma coluna se chama "Status" em My pieces
 Telas: panel-stock, stock-where-* em todos os perfis; tags-pieces.
@@ -262,6 +283,7 @@ Problema: filtro "Where is it" com as opções "Live", "Sold", "Paused", "Deacti
 Mudança: coluna "Status" / "Situação" / "Estado". Filtro "All statuses" / "Todas as situações" / "Todos los estados". Isso resolve também a pergunta do chip "Live" no meio de lugares.
 Arquivos: client/src/i18n/messages/manageTags.ts:83,100.
 Risco: nenhum.
+Status: feito. Coluna e filtro "Status" / "All statuses".
 
 ### PE-25 [S2] Os números dos chips não acompanham os filtros
 Telas: platform/en-desktop/stock-rep-jessica, stock-method-nfc, stock-product-large-stand, stock-org-harbor, stock-search.
@@ -269,6 +291,7 @@ Problema: com "Jessica Alvarez", a lista tem 6 resultados e os chips continuam "
 Mudança: qualquer filtro além de `where` esconde os números, como já acontece com a organização.
 Arquivos: client/src/pages/admin/tags/PiecesTab.tsx:196.
 Risco: nenhum.
+Status: feito. Qualquer filtro além do status esconde os números dos chips. Conferido: cada chip é igual à lista que abre (teste de integração `stockList`).
 
 ### PE-26 [S2] "In company stock · Live" com cliente
 Telas: platform/en-desktop/stock-where-live, panel-tags-overview-chipPending; platform/en-phone/stock-where-live; platform/en-desktop/piece-popup-houseLive e piece-popup-houseConfigured.
@@ -276,6 +299,7 @@ Problema: X2ED2GA4 está em Harbor Light Nails, com 40 leituras, e aparece como 
 Mudança: peça com cliente não diz que está em estoque. Status: "Live" ou "Ready, not live". No popup, a linha "Company stock" some quando há cliente.
 Arquivos: client/src/pages/admin/tags/where-model.ts; client/src/pages/admin/tags/piece-table.tsx:53-57; client/src/components/piece/pieceView.ts (`pieceHasLocation`).
 Risco: **depende do dono**: o chip "In company stock" deve deixar de contar essas peças? Recomendo sim. Isso muda a métrica compartilhada em `shared/tagMetrics.ts`.
+Status: parcial. A linha do estoque e o popup não dizem mais "Company stock" para peça com cliente. pendente (decisão do dono): o chip "In company stock" ainda conta a peça no ar que o estoque da empresa guarda; a métrica compartilhada `house` e `withResellers` também alimenta a consignação (`unsold_count`), então não foi alterada.
 
 ### PE-27 [S2] A recusa fala de kit para um gestor, com link que não leva a nada
 Telas: partner/en-desktop/piece-popup-company-piece-denied.
@@ -283,6 +307,7 @@ Problema: "You do not have access to this. This piece is not in your kit." Danie
 Mudança: esconder "Open full page" em erro. Para gestor: "This piece belongs to another company." / "Esta peça é de outra empresa." / "Esta pieza es de otra empresa." "Kit" fica só para o revendedor (que já vê "This piece is not with you.").
 Arquivos: server/tags/routes.ts:338,473; client/src/pages/admin/tags/PieceDetail.tsx (`top`).
 Risco: confirmar que mostrar isso não revela a existência de peça alheia. Recomendo aceitar: é só um código.
+Status: feito. "This piece belongs to another company.", sem "Open full page".
 
 ### PE-28 [S2] Em My pieces no celular, a pill cobre o texto e o nome vira "Pho Sai..."
 Telas: rep-both/en-phone/tags-pieces, reseller/en-phone/tags-pieces, owner/en-phone/tags-pieces.
@@ -290,6 +315,7 @@ Problema: "Pho Sai...", "Copper Ket...", "Lowell ...", "Beacon...". O nome do cl
 Mudança: pills em linha própria, abaixo do código, em largura total. O nome usa a linha toda. Sai a limitação `max-w-[50%]`.
 Arquivos: client/src/pages/tags/PiecesScreen.tsx:285-291.
 Risco: nenhum. Ver RCP-9 e RCP-14.
+Status: feito. As pills ficam numa linha própria sob o nome, e o nome usa a linha toda.
 
 ### PE-29 [S2] Em "Top pieces" no celular, o nome passa por cima dos números
 Telas: owner/en-phone/panel-tags-overview, platform/en-phone/panel-tags-overview, partner/en-phone/panel-tags-overview.
@@ -297,6 +323,7 @@ Problema: "Maple Street Bakery" e "QR 102 · NFC 54" ocupam o mesmo espaço e se
 Mudança: números em linha própria abaixo do nome, abaixo de `sm`.
 Arquivos: client/src/pages/admin/tags/pieces-analytics.tsx:205-216.
 Risco: nenhum.
+Status: feito. Em "Top pieces" os números ficam abaixo do nome no celular.
 
 ### PE-30 [S2] No celular, a palavra "Stock" três vezes e a primeira peça na metade da tela
 Telas: platform/en-phone/panel-stock, owner/en-phone/panel-stock, stock-more-filters-open; platform/en-phone/piece-popup-* e piece-page-*.
@@ -312,6 +339,7 @@ Problema: 7N7FKFSN diz "With Jessica Alvarez" e, logo abaixo, Priya, a dona, lê
 Mudança: quem gerencia a organização da peça recebe o papel de gestor no `PieceViewer`, em `PieceDetail`. Com isso, o botão vira "Take back" / "Receber de volta" / "Devolver al stock", na gestão. O gravador de mesa e as notas de produção continuam só para o admin global.
 Arquivos: client/src/pages/admin/tags/PieceDetail.tsx:54-58; shared/modules.ts:11; client/src/components/piece/CustodyCard.tsx:92; client/src/components/piece/pieceView.ts (`pieceSections`); client/src/i18n/messages/pieceCustody.ts:19-21.
 Risco: **depende do dono**: o que dono e parceiro podem ver e fazer na peça é regra de negócio, e o servidor precisa aceitar. Recomendo: veem custo, responsável e histórico; transferem entre pessoas da própria organização. O mínimo, se preferir agora: esconder "Hand back" quando a peça estiver com outra pessoa.
+Status: feito na tela. Dono e parceiro recebem a gestão da peça (`canManage` pelo alcance de gestão; o servidor já aceita via `requireTagManager`); "Hand back" dá lugar à transferência dentro de Management. O gravador de mesa e as notas de produção continuam do admin global.
 
 ---
 
@@ -323,6 +351,7 @@ Problema: CODE, WHERE, COMPANY, RESELLER, CHIP, QR / NFC, LAST SCAN, BATCH. "BAT
 Mudança: ficam Code, Status, Customer, Reseller, Chip, Scans. "Scans" junta total e data: "67 · Nov 1", com o detalhe QR/NFC no `title`. "Batch" sai da lista: fica na peça, e a busca e o filtro continuam encontrando.
 Arquivos: client/src/pages/admin/tags/PiecesTab.tsx:37; client/src/pages/admin/tags/piece-table.tsx:136-158; client/src/i18n/messages/manageTags.ts:86.
 Risco: quem produz usa o lote para conferir. Ele continua no filtro "All batches" e no detalhe.
+Status: feito. Colunas: Code, Status, Customer, Reseller, Chip, Scans ("156 · Nov 2", QR e NFC no `title`). O lote saiu da linha; fica na peça e nos filtros.
 
 ### PE-31 [S3] Mesmos números duas vezes, e "Scans by piece" mostra scans por dia
 Telas: panel-tags-overview em todos os perfis, desktop e phone.
@@ -330,6 +359,7 @@ Problema: bloco 1 "Scans (QR + NFC)": 49, 166, 415, 393. Bloco 2: 415, 281, 134,
 Mudança: um bloco só: período, número grande e divisão QR/NFC. Título "Scans" / "Leituras" / "Lecturas". Filtros atrás de "More filters".
 Arquivos: client/src/pages/admin/tags/OverviewTab.tsx:83,97; client/src/i18n/messages/adminTagsFlow.ts:149.
 Risco: nenhum.
+Status: feito. Um bloco só de leituras ("Scans", período, QR e NFC), sem o bloco repetido.
 
 ### PE-32 [S3] Quatro botões fortes na mesma tela, e botões desativados que a regra dizia que não existiriam
 Telas: platform/en-desktop/piece-page-houseAvailable, piece-page-kitUnconfigured, piece-page-pendingSupplier, piece-page-lost, piece-page-retired.
@@ -337,6 +367,7 @@ Problema: em 9PJ2DDM9: "Set up" (roxo), "Write chip" (roxo), "Send to writer" (r
 Mudança: só um botão de marca: o principal. "Write chip" usa `secondary` quando não é o principal. "Sell this piece" fica neutro. Ação impossível some, com o aviso, e o motivo aparece uma vez, no topo.
 Arquivos: client/src/components/piece/ChipSection.tsx:133; client/src/components/piece/SaleSection.tsx:119-125; client/src/components/piece/ManagementSection.tsx; client/src/components/piece/CustomerDestinationSection.tsx:319.
 Risco: nenhum.
+Status: feito. Só um botão de marca por peça (o próximo passo), "Sell this piece" neutro, nenhum botão que não pode funcionar; a frase do motivo aparece uma vez.
 
 ### PE-33 [S3] Dois cartões de chip dentro do mesmo cartão
 Telas: platform/en-desktop/piece-page-live, piece-page-configuredChip, piece-page-soldLive; platform/en-phone/piece-popup-*.
@@ -344,6 +375,7 @@ Problema: "NFC CHIP / Chip verified / Rewrite chip" e, dentro, "NFC chip · desk
 Mudança: um cartão só. O gravador de mesa vira opção dentro do fluxo "Write chip". A conferência "Chip ↔ QR check" fica em "Technical details". O selo sai.
 Arquivos: client/src/pages/admin/tags/pieces-NfcProvisioningCard.tsx:130; client/src/components/piece/ChipSection.tsx.
 Risco: só afeta o admin global, que usa o gravador. Ouvir quem opera a impressora.
+Status: feito. O gravador de mesa virou uma seção "Desk writer" dentro do cartão do chip (aberta quando o chip é o próximo passo), sem o selo da plataforma e sem a frase de produção.
 
 ### PE-34 [S3] O nome do cliente se repete, cortado, e são quatro ações iguais
 Telas: platform/en-phone/tags-piece-*, reseller/en-phone/tags-piece-live, rep-both/en-phone/tags-piece-live, piece-popup-live.
@@ -351,6 +383,7 @@ Problema: "Fenway Fitness Club" no cabeçalho e, logo abaixo, "Fenway Fit…" no
 Mudança: a linha do nome no card sai. "Remove customer" e o lápis vão para "More details". Ficam "Change destination", "Pause" e "Change customer" (texto simples).
 Arquivos: client/src/components/piece/CustomerDestinationSection.tsx:270-285,330-350.
 Risco: nenhum. O pedido de confirmação de "Remove customer" continua.
+Status: parcial. O nome do cliente não se repete no cartão, e "Change customer" e "Remove customer" dividem uma linha. pendente: levar "Remove customer" e o lápis para "More details".
 
 ### PE-35 [S3] Formulário de configurar: "Destination" duas vezes e "UTM"
 Telas: platform/en-desktop/piece-page-set-up-editor, platform/en-phone/piece-popup-set-up-editor.
@@ -358,6 +391,7 @@ Problema: rótulo "Destination" nas abas e de novo no campo. "Add tracking param
 Mudança: segundo rótulo vira o tipo escolhido ("Link", "Email"). UTM vai para "Technical details", desligado. Botão: "Save" / "Salvar" / "Guardar".
 Arquivos: client/src/components/piece/CustomerDestinationSection.tsx:367-455.
 Risco: não confirmei se o revendedor vê o UTM (as capturas abertas são de gestor). Se vê, a gravidade sobe.
+Status: parcial. O UTM foi para "Technical details" (fechado) e o botão virou "Save". pendente: o segundo rótulo "Destination".
 
 ### PE-36 [S3] "New single piece" fala como o sistema
 Telas: platform/en-desktop/stock-new-piece-dialog, platform/en-phone/stock-new-piece-dialog.
@@ -365,6 +399,7 @@ Problema: "Provides the price and financial identity used when these pieces are 
 Mudança: "Sets the price when this piece is sold." / "Define o preço quando esta peça for vendida." / "Define el precio cuando se venda esta pieza." Rótulo "Product" / "Produto" / "Producto". Opção "Same as the product" / "Igual ao produto" / "Igual al producto".
 Arquivos: client/src/i18n/messages/manageTagsBatches.ts:18; client/src/i18n/messages/manageTagsPieces.ts:33-36; client/src/pages/admin/tags/PiecesTab.tsx:100-135.
 Risco: nenhum. Só o admin global vê.
+Status: feito. "Kind of piece", "Product" com "Sets the price when this piece is sold.", "Same as the product".
 
 ### PE-37 [S3] "More filters" com filtros que ninguém pediu
 Telas: stock-more-filters-open em todos os perfis, stock-method-nfc.
@@ -372,6 +407,7 @@ Problema: "Any method", com "Has NFC scans". "All organizations" ao lado de "All
 Mudança: "Any method" sai. Ficam revendedor, cliente e lote. O filtro de organização fica só para o admin global, como já é, e passa para o começo.
 Arquivos: client/src/pages/admin/tags/PiecesTab.tsx:40-44,275; client/src/i18n/messages/manageTagsPieces.ts:9,15.
 Risco: o link `?method=` deve continuar funcionando por compatibilidade.
+Status: feito. "Any method" saiu (o link `?method=` continua filtrando); ficam organização (só plataforma, primeiro), revendedor, cliente e lote.
 
 ### PE-38 [S3] Lista vazia sem saída, e "fila" na conversa
 Telas: stock-where-* sem resultado (owner, partner, owner-multi), platform/en-desktop/stock-empty-result, panel-tags-overview-noProduct.
@@ -379,6 +415,7 @@ Problema: "No pieces match these filters." quando o único filtro é um chip que
 Mudança: dizer qual e dar a saída: "Nothing in company stock." / "Nada no estoque da empresa." / "Nada en el stock de la empresa.", com botão "See all pieces" / "Ver todas as peças" / "Ver todas las piezas". Fila limpa: "All good." / "Tudo certo." / "Todo en orden." Título: "Pieces without a product" / "Peças sem produto" / "Piezas sin producto".
 Arquivos: client/src/pages/admin/tags/PiecesTab.tsx:226; client/src/i18n/messages/adminTagsFlow.ts:132-134,337,534.
 Risco: nenhum.
+Status: feito. A lista vazia diz o que está vazio e dá "See all pieces"; a fila limpa diz "All good."; "Pieces without a product".
 
 ### PE-39 [S3] Atividade em linguagem de log, com "Tag" e email
 Telas: platform/en-desktop/piece-page-soldLive, piece-page-live, piece-page-technical-details.
@@ -386,6 +423,7 @@ Problema: "Tag 0XBAXB57 activated", "Tag 0XBAXB57 assigned to Maple Street Baker
 Mudança: "Put live" / "Colocada no ar" / "Activada" e "Linked to Maple Street Bakery" / "Vinculada a Maple Street Bakery" / "Vinculada a Maple Street Bakery". Sempre o nome, nunca o email. Notas de produção só atrás de "Production log", que passa a "Production notes" / "Notas de produção" / "Notas de producción".
 Arquivos: server/tags/field.ts:125 e demais títulos em `server/tags`; client/src/components/piece/ActivitySection.tsx.
 Risco: entradas antigas já estão gravadas com o texto velho. Traduzir pela ação, não pelo título.
+Status: parcial. A atividade mostra nomes, nunca e-mails, e "Put live" / "Piece created" no lugar de "Tag … activated". pendente: "Linked to …" e as notas de produção só atrás do bloco de produção (as entradas antigas do servidor seguem com o título antigo).
 
 ### PE-40 [S3] Desempenho completo em peça que nunca esteve no ar
 Telas: platform/en-desktop/piece-page-houseAvailable, piece-page-pendingOldPrint, piece-page-lost, piece-page-retired; platform/en-phone/piece-popup-soldNotLive.
@@ -393,6 +431,7 @@ Problema: quatro atalhos de período, duas datas, "0 scans", "0 est. visitors", 
 Mudança: sem nenhuma leitura em toda a vida da peça, a seção vira uma linha: "No scans yet." / "Nenhuma leitura ainda." / "Sin lecturas todavía." O período personalizado fica atrás de "Custom" / "Personalizado" / "Personalizado".
 Arquivos: client/src/components/piece/PerformanceSection.tsx.
 Risco: nenhum.
+Status: feito. Peça nunca lida mostra "No scans yet." e não busca os números.
 
 ### PE-41 [S3] A atividade de "Pieces results" repete a mesma peça com dois títulos
 Telas: panel-tags-overview em platform, owner, partner, owner-multi.
@@ -400,6 +439,7 @@ Problema: "East Boston Bike Works: Went live" e, logo abaixo, "F3G1VTJK: Destina
 Mudança: uma linha por acontecimento, sempre cliente e código. A aba "All" não inclui leituras, que ficam só em "Scans". "Devices" vira uma linha, como na peça: "Mobile 95 · Tablet 31 · Desktop 30".
 Arquivos: client/src/pages/admin/tags/OverviewTab.tsx; client/src/pages/admin/tags/pieces-analytics.tsx:197.
 Risco: nenhum.
+Status: feito. A aba "All" não inclui leituras, e os aparelhos viraram uma linha.
 
 ### PE-42 [S3] My pieces: "No customer yet" duas vezes por linha, e ícone sem rótulo
 Telas: tags-pieces, tags-pieces-search em owner, owner-multi, reseller, rep-both, desktop; reseller/pt-desktop/tags-pieces.
@@ -407,6 +447,7 @@ Problema: coluna COMPANY "No customer yet" e STATUS "No customer yet". Em pt, at
 Mudança: célula do cliente vazia ("—") nessa situação. Ícone só aparece se houver problema, e já há pill para isso (`ChipMark`), então o ícone sai. Unificar pt em "Sem cliente" e es em "Sin cliente".
 Arquivos: client/src/pages/tags/ui.tsx:186-200; client/src/i18n/messages/tags.ts:218,678,1124.
 Risco: nenhum.
+Status: feito. A célula do cliente fica "—" sem cliente, o ícone solto do chip saiu (a pill só aparece com problema) e pt e es dizem "Sem cliente" e "Sin cliente".
 
 ### PE-43 [S3] Três caixas de busca na mesma tela
 Telas: panel-stock e stock-* no computador, em todos os perfis.
@@ -414,6 +455,7 @@ Problema: "Code or scanned link" com "Open", "Search Ctrl K" e "Search code, com
 Mudança: no estoque, a busca da página aceita código ou link lido; código exato abre a peça ao apertar Enter. "Code or scanned link" sai desta tela. "Search Ctrl K" fica, por ser global.
 Arquivos: client/src/pages/admin/tags/AdminTags.tsx; client/src/pages/admin/tags/PiecesTab.tsx:256.
 Risco: quem usa leitor de código de barras precisa continuar sem tirar a mão: testar com o leitor.
+Status: feito. A busca do estoque abre a peça ao apertar Enter com um código ou um link lido, e a caixa "Code or scanned link" sai desta tela. pendente: testar com leitor de código de barras de verdade (não tenho um).
 
 ### PE-44 [S3] Regra explicada em vez de estado
 Telas: platform/en-desktop/piece-page-*, platform/en-phone/piece-popup-*.
@@ -421,6 +463,7 @@ Problema: "No sale recorded. Going live is not a sale." é uma defesa do sistema
 Mudança: "Not sold yet." / "Ainda não vendida." / "Aún sin vender." A explicação fica só no diálogo de "Put live", onde já existe.
 Arquivos: client/src/i18n/messages/pieceScreen.ts:26,145.
 Risco: nenhum.
+Status: feito. "Not sold yet."
 
 ### PE-45 [S3] A mesma palavra, duas cores, na mesma tela
 Telas: platform/en-desktop/piece-page-paused, piece-page-configuredChip, stock-where-disabled; platform/en-phone/piece-popup-paused, piece-popup-configuredChip; rep-both/en-phone/tags-pieces.
@@ -428,6 +471,7 @@ Problema: "Paused" é âmbar no cabeçalho e vermelho logo abaixo, e vermelho na
 Mudança: uma cor por estado: Paused âmbar em todo lugar; Ready, not live azul em todo lugar.
 Arquivos: client/src/pages/admin/tags/piece-table.tsx:44; client/src/components/xpot/StatusPill.tsx:60-66; client/src/components/piece/pieceView.ts:124-127.
 Risco: nenhum.
+Status: feito. Uma cor por estado, na função compartilhada (Paused âmbar, Ready, not live azul).
 
 ### PE-46 [S3] "PLATE L #1": três etiquetas sem legenda, e a base do stand some no fundo
 Telas: panel-stock em todos os perfis; platform/en-desktop/piece-popup-soldLive; platform/pt-desktop/panel-stock, platform/es-desktop/panel-stock.
@@ -435,6 +479,7 @@ Problema: "S" e "L" não dizem que são tamanho, e em pt e es viram "P" e "G", c
 Mudança: texto único "Large plate" / "Chapa grande" / "Placa grande", sem "#n" na lista. A base preta do stand ganha um contorno claro.
 Arquivos: client/src/components/xpot/TagProductThumbnail.tsx:86; client/src/pages/admin/tags/piece-table.tsx:183-197.
 Risco: nenhum. Ver RCP-23 para "Chapa" e "placa".
+Status: parcial. "Large plate" / "Chapa grande" / "Placa grande" no lugar dos chips soltos, sem "#n" na lista; a base preta do stand ganha um contorno claro. pendente: a palavra "Chapa" e "placa" em pt (RCP-23).
 
 ### PE-54 [S3] Para o parceiro, o estoque fica dentro de "Production"
 Telas: partner/en-desktop/panel-stock, partner/en-phone/panel-stock, partner/en-desktop/stock-where-*, partner/en-phone/tags-pieces.
@@ -442,6 +487,7 @@ Problema: a área de Daniela se chama "Production", com o caminho "Production �
 Mudança: usar "My company" / "Minha empresa" / "Mi empresa" para o parceiro também. Dentro dela, um item "Production" fica só para a impressão.
 Arquivos: client/src/i18n/messages/shell.ts; client/src/i18n/messages/workspaces.ts.
 Risco: pode ser escolha deliberada para separar parceiro de dono. Recomendo unificar. Verificar com a área de navegação, que pode ter o mesmo achado.
+Status: pendente (nomes de menu em `shell.ts` e `workspaces.ts`, fora desta frente).
 
 ---
 
@@ -453,6 +499,7 @@ Problema: "Open as reseller view" não diz o que acontece ao clicar.
 Mudança: "See what the reseller sees" / "Ver como o revendedor vê" / "Ver lo que ve el revendedor".
 Arquivos: client/src/i18n/messages/pieceScreen.ts:22.
 Risco: nenhum.
+Status: feito. "See what the reseller sees".
 
 ### PE-48 [S4] "Kit" cortado no cabeçalho do celular
 Telas: platform/en-phone/piece-popup-configuredChip, piece-popup-withReseller, owner/en-phone/piece-popup-brightside-kit, owner-multi/en-phone/piece-popup-lindgren-any.
@@ -460,6 +507,7 @@ Problema: "With Jessica Alvarez · Kit ..." ao lado da figura.
 Mudança: permitir duas linhas na localização: tirar `truncate` e pôr o kit na linha de baixo.
 Arquivos: client/src/components/piece/PieceHeader.tsx:90.
 Risco: nenhum.
+Status: feito. A localização quebra linha, sem `truncate`.
 
 ### PE-49 [S4] "Harbor Print Co.." com dois pontos
 Telas: reseller/en-phone/tags-pieces, reseller/pt-desktop/tags-pieces, owner-multi/en-phone/tags-pieces.
@@ -467,6 +515,7 @@ Problema: "Your pieces come from Harbor Print Co.." Acontece com qualquer nome t
 Mudança: tirar o ponto final do texto: "Your pieces come from {name}" (pt e es idem). Ver RCP-33, que questiona o próprio bloco.
 Arquivos: client/src/i18n/messages/tags.ts:436,885,1331.
 Risco: nenhum.
+Status: feito. Sem o ponto final.
 
 ### PE-50 [S4] Texto de exemplo cortado no celular
 Telas: platform/en-phone/piece-popup-set-up-editor, platform/en-phone/piece-page-set-up-editor, platform/en-phone/stock-new-piece-dialog.
@@ -474,6 +523,7 @@ Problema: "Search companies or type a new nam", "https://customer.com/mer", "Fro
 Mudança: encurtar: "Search or type a new name" / "Busque ou digite um nome novo" / "Busca o escribe un nombre nuevo"; "customer.com/menu"; "Same as the product" (PE-36).
 Arquivos: client/src/components/piece/CustomerDestinationSection.tsx; client/src/i18n/messages/manageTagsPieces.ts:35.
 Risco: nenhum.
+Status: feito. Textos de exemplo mais curtos nos campos.
 
 ### PE-51 [S4] Sem "Read another piece" no computador
 Telas: rep-both/en-desktop/tags-piece-not-mine, reseller/en-desktop/tags-piece-unknown, rep-both/en-desktop/tags-piece-unknown.
@@ -481,6 +531,7 @@ Problema: o telefone tem o botão; o computador só tem o X. "No piece with code
 Mudança: adicionar "Check the code and try again." / "Confira o código e tente de novo." / "Revisa el código e inténtalo de nuevo."
 Arquivos: client/src/pages/tags/TagScreen.tsx; client/src/i18n/messages/tags.ts:93.
 Risco: nenhum.
+Status: pendente (`TagScreen`, F5).
 
 ### PE-52 [S4] "Recolher" fora do glossário em pt
 Telas: platform/pt-desktop/piece-page-lost.
@@ -488,6 +539,7 @@ Problema: o glossário fechou "Take back" como "Receber de volta". A tela diz "R
 Mudança: "Receber de volta".
 Arquivos: client/src/i18n/messages/pieceScreen.ts (chave `takeBack`).
 Risco: nenhum.
+Status: feito. pt "Receber de volta"; es "Recoger" (ID-09).
 
 ---
 
@@ -508,3 +560,21 @@ Risco: nenhum.
 - Não vi o menu "More actions" nem "Piece settings": as capturas não os abrem.
 - No código, sem captura: `viewerPrints` exige `canManage`, então parceiro que imprime as próprias peças nunca recebe "Go to printing" na peça pendente, apesar do comentário dizer que sim (client/src/components/piece/pieceView.ts:77). Conferir junto com PE-53.
 - Figura da peça: `Plate Large · Black` aparece com figura branca. Não registrei como achado: figura 2D é limitação do laboratório.
+
+---
+
+## Achados de outras áreas tratados por esta frente
+
+- RCP-13 Status: feito (ver PE-16).
+- RCP-14 Status: feito. A peça e a lista dizem a mesma coisa, pela mesma função (`pieceStatus`); a coluna do cliente fica "—" sem cliente.
+- RCP-18 Status: parcial. "See performance" virou botão secundário, abaixo do cartão do cliente, e o nome do cliente não se repete. pendente: o bloco único "Customer / Opens" com o lápis do cliente fora da peça.
+- ID-01 Status: feito (ver PE-3).
+- ID-08 Status: feito. O lote saiu da lista e a coluna do revendedor ganhou largura.
+- NAV-1 Status: feito. O Today da plataforma conta as filas de todas as organizações, que é o que a lista abre, com o filtro de organização à vista.
+- NAV-2 Status: feito (ver PE-7).
+- NAV-8 Status: feito (ver PE-21).
+- NAV-17 Status: parcial. Volta para "Today", título da fila, frase de ação e "Written, not tested" feitos. pendente: o título da barra superior ("Pieces results"), que vem da moldura do painel (F1).
+- NAV-20 Status: parcial. Um bloco só de leituras e uma só nota; "Est. visitors" saiu da linha principal e os aparelhos são uma linha. pendente: "5 scans while not live" como link para a fila, e os filtros recolhidos atrás de "Filter".
+- NAV-24 Status: feito (ver PE-15 e PE-4).
+- NAV-35 Status: feito. A aba Stock da organização lê as mesmas peças do Estoque e usa a mesma pill de situação.
+

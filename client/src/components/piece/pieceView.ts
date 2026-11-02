@@ -1,8 +1,9 @@
 import { OPEN_PRINT_JOB_STATUSES } from "@shared/printProduction";
 import { planTransition, type TagAction } from "@shared/tags";
+import { pieceStatus, chipIsMissing, type PieceChipState, type PieceStatus, type PieceStatusKey } from "./pieceStatus";
 import type { PieceCustodyActions } from "@shared/tagCustody";
 import type { TagDailyPoint, TagHistoryEntry, TagJourneyEntryItem, TagPieceSale, TagStockMovementItem } from "@shared/tagsApi";
-import { CHIP_STATUS_TONE, PIECE_STATUS_TONE, SOLD_TONE, STOCK_STATUS_TONE, toneOf, type PillTone } from "@/components/xpot/StatusPill";
+import { CHIP_STATUS_TONE, PIECE_STATUS_TONE, STOCK_STATUS_TONE, toneOf, type PillTone } from "@/components/xpot/StatusPill";
 
 // The one piece screen (components/piece), the pure part: what the header says
 // about a piece, which sections a viewer gets, where each action goes, and the
@@ -37,10 +38,8 @@ export function pieceStatusChips(tag: { status: string; stockStatus: string; nfc
 
 // ─── One situation ────────────────────────────────────────────────────────────
 
-/** What the header says in one pill: the answer to "is it ready?", not the three stored states. */
-export type PieceSituationKey =
-  | "damaged" | "lost" | "retired" | "sold" | "pending" | "waitingPrint"
-  | "live" | "paused" | "readyNoChip" | "readyOffline" | "inStock" | "other";
+/** What the header says in one pill: the answer to "is it ready?", not the three stored states (pieceStatus.ts). */
+export type PieceSituationKey = PieceStatusKey;
 
 /** The one thing to do next. `openPrint` carries its link; the rest run what the sections already do. */
 export type PieceActionKind = "openPrint" | "receive" | "viewPerformance" | "reactivate" | "writeChip" | "goLive" | "configure";
@@ -50,12 +49,19 @@ export interface PieceMainAction {
   href?: string;
 }
 
+/** A sentence about the chip under the pill, only for a piece whose chip is missing or failed. */
+export type PieceChipNote = "qrWorks" | "missing" | "failed";
+
 export interface PieceSituation {
   key: PieceSituationKey;
   tone: PillTone;
   action: PieceMainAction | null;
   /** One line under the status, when the next step is not obvious from it. */
-  hint?: "waitingPrint" | "askManager";
+  hint?: "waitingPrint" | "askManager" | "printFailed" | "printCancelled";
+  /** The piece is sold but not live: the customer paid and it does nothing yet. */
+  note: PieceStatus["note"];
+  chip: PieceChipState;
+  chipNote: PieceChipNote | null;
 }
 
 type SituationTag = {
@@ -89,44 +95,59 @@ export function showsReceive(tag: { printJobId?: string | null }, viewer: PieceV
 }
 
 /**
- * The piece in one status and one main action. First rule that matches wins. An action the business
- * rules refuse (a blocked activation, a receive with a blocker) is left out, never shown disabled.
+ * The piece in one status (pieceStatus) and one main action. An action the business rules refuse (a blocked
+ * activation, a receive with a blocker) is left out, never shown disabled. A piece that is live or sold with
+ * a chip that is missing asks for the chip first: the QR works, but a tap on the phone does nothing.
  */
 export function pieceSituation(tag: SituationTag, viewer: PieceViewer): PieceSituation {
-  const none = (key: PieceSituationKey, tone: PillTone): PieceSituation => ({ key, tone, action: null });
-  const act = (key: PieceSituationKey, tone: PillTone, action: PieceMainAction | null): PieceSituation => ({ key, tone, action });
-  const { status, stockStatus } = tag;
-
-  if (stockStatus === "damaged") return none("damaged", "red");
-  if (stockStatus === "lost") return none("lost", "red");
-  if (status === "retired" || stockStatus === "retired") return none("retired", "muted");
-  if (pieceIsSold(tag)) return none("sold", SOLD_TONE);
-
-  if (stockStatus === "pending") {
-    const receive = tag.custody?.receive;
-    const canReceive = !!receive && receive.blocker === null;
-    // Whoever produces opens the print of a house-printed piece; a supplier's lot (no print) and
-    // everyone who does not produce receive.
-    // Whoever produces opens the print; only one still open is "waiting to print". Anyone else is asked if it arrived.
-    if (!showsReceive(tag, viewer) && tag.printJobId) {
-      const action: PieceMainAction = { kind: "openPrint", href: `/admin/tags/production/jobs/${encodeURIComponent(tag.printJobId)}` };
-      const waiting = (OPEN_PRINT_JOB_STATUSES as readonly string[]).includes(tag.printJobStatus ?? "");
-      return waiting ? { key: "waitingPrint", tone: "amber", action, hint: "waitingPrint" } : { key: "pending", tone: "amber", action };
-    }
-    if (canReceive) return act("pending", "amber", { kind: "receive" });
-    return { key: "pending", tone: "amber", action: null, hint: "askManager" };
-  }
-
-  if (status === "active") return act("live", "green", { kind: "viewPerformance" });
+  const base = pieceStatus(tag);
+  const chipMissing = chipIsMissing(base.chip);
+  const chipNote: PieceChipNote | null = !chipMissing ? null : base.chip === "failed" ? "failed" : base.key === "live" || base.key === "soldLive" ? "qrWorks" : "missing";
+  const out = (action: PieceMainAction | null, hint?: PieceSituation["hint"]): PieceSituation => ({ key: base.key, tone: base.tone, note: base.note, chip: base.chip, chipNote, action, ...(hint ? { hint } : {}) });
   const canActivate = planTransition(tag, "activate").ok;
-  if (status === "disabled") return act("paused", "amber", canActivate ? { kind: "reactivate" } : null);
-  if (status === "assigned") {
-    // The same test as chipNeedsWriting (shared/tagApp.ts): not written yet, or the write failed.
-    if (tag.nfcStatus === "not_programmed" || tag.nfcStatus === "failed") return act("readyNoChip", "amber", { kind: "writeChip" });
-    return act("readyOffline", "sky", canActivate ? { kind: "goLive" } : null);
+  const writeOrGoLive = (): PieceMainAction | null => (chipMissing ? { kind: "writeChip" } : canActivate ? { kind: "goLive" } : null);
+
+  switch (base.key) {
+    case "damaged":
+    case "lost":
+    case "retired":
+    case "reserved":
+    case "internalUse":
+    case "other":
+      return out(null);
+    case "printFailed":
+    case "printCancelled": {
+      const hint = base.key;
+      // Whoever produces opens the print to redo it; everyone else asks.
+      if (!showsReceive(tag, viewer) && tag.printJobId) return out({ kind: "openPrint", href: `/admin/tags/production/jobs/${encodeURIComponent(tag.printJobId)}` }, hint);
+      return out(null, hint);
+    }
+    case "pending": {
+      const receive = tag.custody?.receive;
+      const canReceive = !!receive && receive.blocker === null;
+      // Whoever produces opens the print of a house-printed piece (only one still open is "waiting to print");
+      // a supplier's lot (no print) and everyone who does not produce receive.
+      if (!showsReceive(tag, viewer) && tag.printJobId) {
+        const waiting = (OPEN_PRINT_JOB_STATUSES as readonly string[]).includes(tag.printJobStatus ?? "");
+        return out({ kind: "openPrint", href: `/admin/tags/production/jobs/${encodeURIComponent(tag.printJobId)}` }, waiting ? "waitingPrint" : undefined);
+      }
+      if (canReceive) return out({ kind: "receive" });
+      return out(null, "askManager");
+    }
+    case "live":
+    case "soldLive":
+      return out(chipMissing ? { kind: "writeChip" } : { kind: "viewPerformance" });
+    case "paused":
+      return out(canActivate ? { kind: "reactivate" } : null);
+    case "ready":
+      return out(writeOrGoLive());
+    case "soldNotLive":
+      // Sold from a kit before it was set up for anyone: set it up first.
+      if (tag.status === "inventory") return out({ kind: "configure" });
+      return out(writeOrGoLive());
+    case "noCustomer":
+      return out({ kind: "configure" });
   }
-  if (status === "inventory" && stockStatus === "available") return act("inStock", "slate", { kind: "configure" });
-  return none("other", "slate");
 }
 
 /** Sold = a recorded financial sale (an active sales_sale_tags row), never going live. */
@@ -156,6 +177,32 @@ export type PieceLocation =
 export function pieceLocation(tag: { repId: number | null; repName: string | null; kitId: string | null; kitCode?: string | null }): PieceLocation {
   if (tag.repId === null) return { kind: "house" };
   return { kind: "reseller", repId: tag.repId, name: tag.repName, kit: kitShort(tag.kitId, tag.kitCode) };
+}
+
+/** Who has the piece, as the header says it. `null`: nothing to say (the customer's name already answers). */
+export type PieceHolderLine =
+  | { kind: "company" }
+  | { kind: "you" }
+  | { kind: "with"; repId: number; name: string | null; kit: string | null }
+  | { kind: "reseller"; repId: number; name: string | null; kit: string | null };
+
+/**
+ * Without a customer: company stock, "With you" for the viewer's own piece, "With <reseller>" for another's. With a
+ * customer the piece is at the customer, so the line is only left for a reseller who is not the viewer ("Reseller: <name>").
+ * Nobody holds a piece that is not in stock yet, sold, damaged, lost or deactivated. The kit is for those who manage.
+ */
+export function pieceHolderLine(
+  tag: { status: string; stockStatus: string; repId: number | null; repName: string | null; kitId: string | null; kitCode?: string | null; leadName: string | null },
+  viewer: Pick<PieceViewer, "repId" | "canManage">,
+): PieceHolderLine | null {
+  if (!pieceHasLocation(tag)) return null;
+  const location = pieceLocation(tag);
+  const hasCustomer = !!tag.leadName;
+  if (location.kind === "house") return hasCustomer ? null : { kind: "company" };
+  const mine = viewer.repId != null && location.repId === viewer.repId;
+  const kit = viewer.canManage ? location.kit : null;
+  if (hasCustomer) return mine ? null : { kind: "reseller", repId: location.repId, name: location.name, kit };
+  return mine ? { kind: "you" } : { kind: "with", repId: location.repId, name: location.name, kit };
 }
 
 // ─── Who sees what ────────────────────────────────────────────────────────────
