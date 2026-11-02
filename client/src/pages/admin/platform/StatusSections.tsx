@@ -188,6 +188,15 @@ export function SyncProblemsSection({ query }: { query: ReturnType<typeof useSyn
   });
 
   const problems = query.data?.problems ?? [];
+  // Nothing to retry is one line, not a card: the section only takes room when a record did not reach the CRM.
+  if (query.isSuccess && problems.length === 0) {
+    return (
+      <div id={CAUSE_ANCHOR.sync} className="scroll-mt-24 flex items-center gap-2 rounded-2xl border border-white/10 px-4 py-3 text-sm text-white/55" data-testid="status-sync">
+        <RefreshCw className="h-4 w-4 shrink-0 text-white/40" aria-hidden="true" />
+        <span>{tp("syncTitle")}: {tp("syncEmpty")}</span>
+      </div>
+    );
+  }
   return (
     <div id={CAUSE_ANCHOR.sync} className="scroll-mt-24">
       <SectionCard

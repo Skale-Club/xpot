@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useLocation, useSearchParams } from "wouter";
 import { Activity, AlertTriangle, Ban, ChevronDown, ChevronRight, Cpu, History, ListOrdered, RotateCw, ScrollText } from "lucide-react";
@@ -186,7 +186,8 @@ function SystemHealthOverview() {
             <span className={`h-2.5 w-2.5 shrink-0 rounded-full ${PILL_DOTS[overallTone]} ${overview.verdict === "healthy" || overview.verdict === "off" ? "" : "animate-pulse"}`} />
             <p className="font-semibold">{t(`overall_${overview.verdict}`)}</p>
           </div>
-          {overview.causes.length > 0 && (
+          {/* "Prospecting is not set up" says it all: a cause line repeating its name adds nothing. */}
+          {overview.causes.length > 0 && overview.verdict !== "off" && (
             <p className="mt-1 pl-[22px] text-xs text-white/60">
               {tp("causedBy")}{" "}
               {overview.causes.map((cause, index) => (
@@ -332,22 +333,18 @@ function SystemHealthOverview() {
 
       <SyncProblemsSection query={syncProblems} />
 
-      <Card title={t("errorsTitle")} icon={AlertTriangle}>
-        <div className="grid grid-cols-2 gap-3">
-          <Stat label={t("errors24h")} value={events.errors24h} tone={events.errors24h ? "bad" : undefined} />
-          <Stat label={t("warnings24h")} value={events.warnings24h} tone={events.warnings24h ? "warn" : undefined} />
-        </div>
-        {events.bySource24h.length > 0 && (
-          <div className="mt-3 flex flex-wrap gap-1.5">
-            {events.bySource24h.map((row) => (
-              <Pill key={`${row.source}:${row.level}`} tone={row.level === "error" ? "red" : "amber"} bordered>
-                {sourceLabel(t, row.source)} · {row.count}
-              </Pill>
-            ))}
+      <ProblemGroups
+        groups={events.groups}
+        t={t}
+        ago={ago}
+        onPick={(fp) => showLog(() => setFingerprint(fp))}
+        summary={(
+          <div className="grid max-w-sm grid-cols-2 gap-3">
+            <Stat label={t("errors24h")} value={events.errors24h} tone={events.errors24h ? "bad" : undefined} />
+            <Stat label={t("warnings24h")} value={events.warnings24h} tone={events.warnings24h ? "warn" : undefined} />
           </div>
         )}
-      </Card>
-      <ProblemGroups groups={events.groups} t={t} ago={ago} onPick={(fp) => showLog(() => setFingerprint(fp))} />
+      />
       <EventLog
         t={t}
         ago={ago}
@@ -462,14 +459,11 @@ function RecentSearches({ runs, t, ago, onShowEvents }: {
   );
 }
 
-function ProblemGroups({ groups, t, ago, onPick }: { groups: EventGroup[]; t: T; ago: (v: string | null) => string; onPick: (fp: string) => void }) {
-  return (
-    <Card title={t("groupsTitle")} icon={AlertTriangle}>
-      {groups.length === 0 ? (
-        <EmptyState compact dense icon={AlertTriangle} title={t("groupsEmpty")} cardStyle={{}} />
-      ) : (
-        <ul className="divide-y divide-white/5">
-          {groups.map((group) => (
+/** What went wrong in the last 7 days, one line per kind; what the browser reported (it rarely needs action) waits behind a fold. */
+function ProblemGroups({ groups, t, ago, onPick, summary }: { groups: EventGroup[]; t: T; ago: (v: string | null) => string; onPick: (fp: string) => void; summary: ReactNode }) {
+  const ours = groups.filter((group) => group.source !== "client");
+  const browser = groups.filter((group) => group.source === "client");
+  const row = (group: EventGroup) => (
             <li key={group.fingerprint}>
               <button
                 type="button"
@@ -489,8 +483,26 @@ function ProblemGroups({ groups, t, ago, onPick }: { groups: EventGroup[]; t: T;
                 </Pill>
               </button>
             </li>
-          ))}
-        </ul>
+  );
+  return (
+    <Card title={t("groupsTitle")} icon={AlertTriangle}>
+      <div className="mb-3">{summary}</div>
+      {groups.length === 0 ? (
+        <EmptyState compact dense icon={AlertTriangle} title={t("groupsEmpty")} cardStyle={{}} />
+      ) : (
+        <>
+          {ours.length ? <ul className="divide-y divide-white/5">{ours.map(row)}</ul> : null}
+          {browser.length ? (
+            <details className="group mt-2" data-testid="status-browser-problems">
+              <summary className="flex min-h-11 cursor-pointer list-none items-center gap-2 text-sm text-white/60 [&::-webkit-details-marker]:hidden">
+                <ChevronRight className="h-4 w-4 shrink-0 text-white/40 transition-transform group-open:rotate-90" aria-hidden="true" />
+                {t("groupsBrowser", { count: browser.length })}
+              </summary>
+              <p className="mb-1 pl-6 text-xs text-white/40">{t("groupsBrowserHint")}</p>
+              <ul className="divide-y divide-white/5">{browser.map(row)}</ul>
+            </details>
+          ) : null}
+        </>
       )}
     </Card>
   );

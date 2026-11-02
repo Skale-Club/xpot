@@ -35,7 +35,6 @@ const en = {
   queueFailed24h: "Failed 24h",
   queueRouteFailed24h: "Routes failed 24h",
 
-  errorsTitle: "Errors",
   errors24h: "Errors 24h",
   warnings24h: "Warnings 24h",
 
@@ -50,6 +49,8 @@ const en = {
   stuckJobsTitle: "Routes not built",
 
   groupsTitle: "Problems (7 days)",
+  groupsBrowser: "Reported by the browser ({count})",
+  groupsBrowserHint: "Messages the page itself raised on someone's phone or computer. They rarely need action.",
   groupsEmpty: "No errors recorded in the last 7 days.",
   groupCount: "{count}×",
   groupLastSeen: "last {time}",
@@ -138,7 +139,7 @@ const en = {
   todo_run_not_checked: "Wait for the next check; if it does not move, restart the server.",
   todo_past_time_limit: "Nothing: it fails on its own. Then start a smaller search.",
   todo_slower_than_usual: "Nothing yet; it usually finishes.",
-  todo_engine_not_configured: "Ask whoever runs the server to set the search engine address (PROSPECTING_ENGINE_URL) and restart it.",
+  todo_engine_not_configured: "Set it up in Integrations.",
   todo_worker_not_running: "Restart the server; if it keeps happening, check its logs.",
   todo_worker_not_ticking: "Restart the server; if it keeps happening, check its logs.",
   todo_tick_running_long: "Wait a few minutes; if it does not recover, restart the server.",
@@ -182,7 +183,6 @@ export const systemHealthMessages: Dictionary<typeof en> = {
     queueFailed24h: "Falharam 24h",
     queueRouteFailed24h: "Rotas falharam 24h",
 
-    errorsTitle: "Erros",
     errors24h: "Erros 24h",
     warnings24h: "Avisos 24h",
 
@@ -197,6 +197,10 @@ export const systemHealthMessages: Dictionary<typeof en> = {
     stuckJobsTitle: "Rotas não montadas",
 
     groupsTitle: "Problemas (7 dias)",
+
+    groupsBrowser: "Avisos do navegador ({count})",
+
+    groupsBrowserHint: "Mensagens que a própria página gerou no celular ou computador de alguém. Quase nunca pedem ação.",
     groupsEmpty: "Nenhum erro registrado nos últimos 7 dias.",
     groupCount: "{count}×",
     groupLastSeen: "último {time}",
@@ -284,7 +288,7 @@ export const systemHealthMessages: Dictionary<typeof en> = {
     todo_run_not_checked: "Espere a próxima conferência; se não andar, reinicie o servidor.",
     todo_past_time_limit: "Nada: ela falha sozinha. Depois, inicie uma busca menor.",
     todo_slower_than_usual: "Nada por enquanto; normalmente termina.",
-    todo_engine_not_configured: "Peça a quem cuida do servidor para definir o endereço do motor de busca (PROSPECTING_ENGINE_URL) e reiniciá-lo.",
+    todo_engine_not_configured: "Configure em Integrações.",
     todo_worker_not_running: "Reinicie o servidor; se continuar, veja os logs dele.",
     todo_worker_not_ticking: "Reinicie o servidor; se continuar, veja os logs dele.",
     todo_tick_running_long: "Espere alguns minutos; se não se recuperar, reinicie o servidor.",
@@ -325,7 +329,6 @@ export const systemHealthMessages: Dictionary<typeof en> = {
     queueFailed24h: "Fallidas 24h",
     queueRouteFailed24h: "Rutas fallidas 24h",
 
-    errorsTitle: "Errores",
     errors24h: "Errores 24h",
     warnings24h: "Avisos 24h",
 
@@ -340,6 +343,10 @@ export const systemHealthMessages: Dictionary<typeof en> = {
     stuckJobsTitle: "Rutas sin armar",
 
     groupsTitle: "Problemas (7 días)",
+
+    groupsBrowser: "Avisos del navegador ({count})",
+
+    groupsBrowserHint: "Mensajes que la propia página generó en el teléfono o el computador de alguien. Casi nunca piden acción.",
     groupsEmpty: "No hay errores en los últimos 7 días.",
     groupCount: "{count}×",
     groupLastSeen: "último {time}",
@@ -427,7 +434,7 @@ export const systemHealthMessages: Dictionary<typeof en> = {
     todo_run_not_checked: "Espera la próxima revisión; si no avanza, reinicia el servidor.",
     todo_past_time_limit: "Nada: falla sola. Después, inicia una búsqueda más pequeña.",
     todo_slower_than_usual: "Nada por ahora; normalmente termina.",
-    todo_engine_not_configured: "Pide a quien administra el servidor que defina la dirección del motor de búsqueda (PROSPECTING_ENGINE_URL) y lo reinicie.",
+    todo_engine_not_configured: "Configúralo en Integraciones.",
     todo_worker_not_running: "Reinicia el servidor; si sigue pasando, revisa sus registros.",
     todo_worker_not_ticking: "Reinicia el servidor; si sigue pasando, revisa sus registros.",
     todo_tick_running_long: "Espera unos minutos; si no se recupera, reinicia el servidor.",
