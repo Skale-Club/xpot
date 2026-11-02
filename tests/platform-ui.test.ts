@@ -12,6 +12,7 @@ import {
   servicesNeedingAttention,
   statusOverview,
 } from "../client/src/pages/admin/platform/servicesUi";
+import { xphereState } from "../client/src/pages/admin/integrationsUi";
 import type { ServiceStatus } from "../shared/integrations-registry";
 import type { SystemHealthSnapshot } from "../shared/system-health";
 
@@ -90,8 +91,22 @@ describe("the Status banner", () => {
     expect(statusOverview(stuck, [], 1)).toEqual({ verdict: "stalled", causes: ["stuck", "sync"] });
   });
 
+  it("prospecting nobody set up is amber and named, never red, and a real problem still outranks it", () => {
+    expect(statusOverview(snapshot({ overall: "off", worker: { verdict: "off" } }), [service({ status: "off" })], 0)).toEqual({ verdict: "off", causes: ["worker"] });
+    expect(statusOverview(snapshot({ overall: "off", worker: { verdict: "off" } }), [], 2)).toEqual({ verdict: "slow", causes: ["sync", "worker"] });
+  });
+
   it("CRM sync problems alone read as slower than usual, not down", () => {
     expect(statusOverview(snapshot(), [], 2).verdict).toBe("slow");
+  });
+});
+
+describe("a person's link to Xphere", () => {
+  it("is connected only with a token and the switch on; a token with the switch off is paused", () => {
+    expect(xphereState({ apiKeySet: true, isEnabled: true })).toBe("connected");
+    expect(xphereState({ apiKeySet: true, isEnabled: false })).toBe("paused");
+    expect(xphereState({ apiKeySet: false, isEnabled: true })).toBe("notConnected");
+    expect(xphereState({ apiKeySet: false, isEnabled: false })).toBe("notConnected");
   });
 });
 

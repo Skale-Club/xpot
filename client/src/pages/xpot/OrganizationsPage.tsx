@@ -367,8 +367,10 @@ function OrganizationWorkspace({ organizationId }: { organizationId: number }) {
             ) : (
             <div className={`divide-y divide-white/[0.06] overflow-hidden rounded-2xl ${GLASS_SUBTLE_CLASS}`} data-testid="organization-members">
               {(members.data ?? []).map((member) => {
-                const canChange = mayManageTeam && member.repId !== me?.rep.id && (platformManager || member.membershipRole !== "admin");
                 const suspended = !member.isActive || !!member.blockedAt;
+                // The server keeps the last owner: no button to suspend, remove or demote them.
+                const lastOwner = member.membershipRole === "admin" && !suspended && (members.data ?? []).filter((m) => m.membershipRole === "admin" && m.isActive && !m.blockedAt).length === 1;
+                const canChange = mayManageTeam && member.repId !== me?.rep.id && (platformManager || member.membershipRole !== "admin") && !lastOwner;
                 return (
                   <div key={member.repId} className="flex flex-wrap items-center gap-3 px-4 py-3">
                     <div className="min-w-0 flex-1">

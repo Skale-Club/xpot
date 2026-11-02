@@ -8,6 +8,7 @@ import { Pill } from "@/components/xpot/StatusPill";
 import { useT } from "@/i18n";
 import { adminTagsFlowMessages } from "@/i18n/messages/adminTagsFlow";
 import { manageTagsMessages } from "@/i18n/messages/manageTags";
+import { peopleWorkspaceMessages } from "@/i18n/messages/peopleWorkspace";
 import { ADMIN_TAGS_KEY, formatDate, getJson, STALE_MS, withQuery } from "./tags/api";
 import { SELL_BLOCKER_KEYS } from "./tags/distribution-model";
 import { Loading, LoadError } from "./tags/pieces-shared";
@@ -40,6 +41,7 @@ export function SellBlockerPills({ rep, testId }: { rep: Rep; testId?: string })
  */
 export function PersonTagsSales({ rep }: { rep: Rep }) {
   const t = useT(manageTagsMessages);
+  const tw = useT(peopleWorkspaceMessages);
   const [range, setRange] = useState<AnalyticsRange>({ preset: "30d" });
   const url = withQuery("/api/xpot/admin/tags/report", rangeParams(range));
   const { data, isLoading, error, refetch } = useQuery<TagTeamReport>({
@@ -53,19 +55,18 @@ export function PersonTagsSales({ rep }: { rep: Rep }) {
 
   return (
     <div className="space-y-3" data-testid={`person-tags-sales-${rep.id}`}>
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <SellBlockerPills rep={rep} testId={`person-cannot-sell-${rep.id}`} />
-        <RangePicker value={range} onChange={setRange} />
-      </div>
+      <h4 className="text-sm font-semibold text-white/80">{tw("salesTitle")}</h4>
+      <SellBlockerPills rep={rep} testId={`person-cannot-sell-${rep.id}`} />
+      <RangePicker value={range} onChange={setRange} />
       {isLoading ? (
         <Loading rows={2} />
       ) : error || !data ? (
         <LoadError what={t("whatTeamReport")} error={error} onRetry={() => void refetch()} />
       ) : (
         <>
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-            <Stat card label={t("teamColSold")} value={row?.soldInRange ?? 0} detail={t("teamPiecesSoldHint")} />
-            <Stat card label={t("teamColActivated")} value={row?.activationsInRange ?? 0} detail={t("teamActivationsHint")} />
+          <div className="grid grid-cols-2 gap-3">
+            <Stat card label={t("teamColSold")} value={row?.soldInRange ?? 0} />
+            <Stat card label={t("teamColActivated")} value={row?.activationsInRange ?? 0} />
             <Stat card label={t("teamColInStock")} value={row?.inStock ?? 0} />
             <Stat card label={t("teamScansTaps")} value={(row?.qr ?? 0) + (row?.nfc ?? 0)} detail={`${row?.qr ?? 0} QR · ${row?.nfc ?? 0} NFC`} />
           </div>

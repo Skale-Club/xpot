@@ -33,6 +33,36 @@ function Field({ label, value, onChange, multiline = false }: { label: string; v
   );
 }
 
+const AGREEMENT_PATHS = ["account.agreementBefore", "account.agreementAnd", "account.agreementAfter"] as const;
+// The page puts its own space around the links: the pieces are kept without the ones typed here.
+const AGREEMENT_SHAPE = /^([\s\S]*?)\s*\{terms\}\s*([\s\S]*?)\s*\{privacy\}([\s\S]*)$/;
+
+/**
+ * The sentence with the two links, as one text: "By continuing you agree to the {terms} and the {privacy}."
+ * It is saved as the three pieces around the links the page already stores. A sentence that lost a marker is
+ * not applied: the editor says so and keeps what was typed.
+ */
+function AgreementField({ content, onChange }: { content: LandingPageContent; onChange: (pieces: [string, string, string]) => void }) {
+  const t = useT(landingAdminMessages);
+  const saved = `${getAt(content, AGREEMENT_PATHS[0])} {terms} ${getAt(content, AGREEMENT_PATHS[1])} {privacy}${getAt(content, AGREEMENT_PATHS[2])}`;
+  const [text, setText] = useState(saved);
+  const valid = AGREEMENT_SHAPE.test(text);
+  return (
+    <div className="sm:col-span-2">
+      <KitField label={t("agreementLine")} hint={valid ? t("agreementHint") : undefined} error={valid ? undefined : t("agreementInvalid")}>
+        <Input
+          value={text}
+          onChange={(event) => {
+            setText(event.target.value);
+            const match = AGREEMENT_SHAPE.exec(event.target.value);
+            if (match) onChange([match[1], match[2], match[3]]);
+          }}
+        />
+      </KitField>
+    </div>
+  );
+}
+
 function Section({ title, children, open = false }: { title: string; children: ReactNode; open?: boolean }) {
   return (
     <details open={open} className={`group rounded-2xl ${GLASS_SUBTLE_CLASS}`}>
@@ -155,7 +185,12 @@ function Editor({ rows }: { rows: LandingContentResponse[] }) {
 
       <div className="space-y-3">
         <Section title={sectionTitle("navigation")} open>
-          {["navigation.audience", "navigation.how", "navigation.faq", "account.signIn", "account.dashboard", "account.welcomeTitle", "account.welcomeSub", "account.primaryCta", "account.authenticatedCta", "account.agreementBefore", "account.agreementAnd", "account.agreementAfter"].map(field)}
+          {["navigation.audience", "navigation.how", "navigation.faq", "account.signIn", "account.dashboard", "account.welcomeTitle", "account.welcomeSub", "account.primaryCta", "account.authenticatedCta"].map(field)}
+          <AgreementField
+            key={locale}
+            content={content}
+            onChange={(pieces) => change((next) => AGREEMENT_PATHS.forEach((path, index) => setAt(next, path, pieces[index])))}
+          />
         </Section>
 
         <Section title={sectionTitle("hero")}>

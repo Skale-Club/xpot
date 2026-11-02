@@ -66,7 +66,7 @@ export function ProductionIdentity({ model, hero = false }: { model: ProductionI
         <TagFaceIcon face={model.face} size="md" />
         <div className="min-w-0"><p className="text-[11px] text-white/45">{u("printedBrand")}</p><p className="text-sm font-medium leading-snug text-white/90">{labels.face(model.face)}</p></div>
       </div> : null}
-      {model.theme ? <span className="inline-flex rounded-lg border border-white/10 bg-white/[0.04] px-2.5 py-1 text-xs text-white/70">{model.theme}</span> : null}
+      {model.theme ? <span className="inline-flex rounded-lg border border-white/10 bg-white/[0.04] px-2.5 py-1 text-xs text-white/70">{themeName(model.theme)}</span> : null}
     </div>
   </div>;
 }

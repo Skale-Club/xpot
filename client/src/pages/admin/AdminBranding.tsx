@@ -1,4 +1,4 @@
-import { useRef, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { describeApiError } from "@/lib/apiErrors";
@@ -55,6 +55,50 @@ function WithBranding({ children }: { children: (branding: Branding) => ReactNod
   return <>{children(query.data)}</>;
 }
 
+/**
+ * Whether a good part of a logo is white (white letters), which vanishes on the light ground of the sign-in
+ * page. Read from the image itself; false when it cannot be read (another origin, still loading).
+ */
+function useMostlyLight(src: string, enabled: boolean): boolean {
+  const [light, setLight] = useState(false);
+  useEffect(() => {
+    setLight(false);
+    if (!enabled) return;
+    let cancelled = false;
+    const image = new Image();
+    image.crossOrigin = "anonymous";
+    image.onload = () => {
+      try {
+        const size = 48;
+        const canvas = document.createElement("canvas");
+        canvas.width = size;
+        canvas.height = Math.max(1, Math.round((size * image.naturalHeight) / Math.max(1, image.naturalWidth)));
+        const context = canvas.getContext("2d");
+        if (!context) return;
+        context.drawImage(image, 0, 0, canvas.width, canvas.height);
+        const { data } = context.getImageData(0, 0, canvas.width, canvas.height);
+        let seen = 0;
+        let bright = 0;
+        for (let i = 0; i < data.length; i += 4) {
+          if (data[i + 3] < 128) continue;
+          seen += 1;
+          if (0.2126 * data[i] + 0.7152 * data[i + 1] + 0.0722 * data[i + 2] > 215) bright += 1;
+        }
+        // Only a logo drawn on transparency can vanish: one with its own background keeps it.
+        const transparent = 1 - seen / (data.length / 4) > 0.1;
+        if (!cancelled) setLight(transparent && seen > 0 && bright / seen > 0.3);
+      } catch {
+        // A tainted canvas: no warning rather than a wrong one.
+      }
+    };
+    image.src = src;
+    return () => {
+      cancelled = true;
+    };
+  }, [src, enabled]);
+  return light;
+}
+
 /** A preview tile on a dark or light ground, so the image is checked on both. */
 function PreviewTile({ ground, label, wide, children }: { ground: "dark" | "light"; label: string; wide?: boolean; children: ReactNode }) {
   return (
@@ -87,6 +131,7 @@ function AssetCard({
   const isIcon = asset === "favicon";
   const custom = isIcon ? branding.faviconUrl : branding.logoUrl;
   const src = assetSrc(custom, branding.updatedAt, isIcon ? DEFAULT_ICON : DEFAULT_LOGO);
+  const hardOnLight = useMostlyLight(src, !isIcon);
   // The public icon, logo and manifest are cached for 5 minutes (branding.ts), so "done" needs that caveat.
   const done = (title: string) => {
     toast({ title, description: t("brandingCacheNote"), variant: "success" });
@@ -144,6 +189,7 @@ function AssetCard({
           </PreviewTile>
         )}
       </div>
+      {hardOnLight && <p className="mt-3 text-xs text-amber-200/80" data-testid="branding-logo-light-warning">{tp("logoHardOnLight")}</p>}
 
       <div className="mt-4 flex flex-wrap items-center gap-2">
         <input

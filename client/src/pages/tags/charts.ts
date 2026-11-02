@@ -19,7 +19,9 @@ export const NFC_SOFT = "rgba(167,139,250,0.15)";
 export function formatChartDay(day: string, locale: string, options: Intl.DateTimeFormatOptions): string {
   const date = new Date(`${day}T00:00:00Z`);
   if (Number.isNaN(date.getTime())) return day;
-  const formatted = date.toLocaleDateString(locale, { ...options, timeZone: "UTC" });
+  let formatted = date.toLocaleDateString(locale, { ...options, timeZone: "UTC" });
+  // An axis label is short: Portuguese writes "3 de out." and the start gets cut at the chart's edge; "3 out" fits.
+  if (locale.startsWith("pt") && !options.weekday && options.month === "short") formatted = formatted.replace(/ de /g, " ").replace(/\./g, "");
   return `${formatted.charAt(0).toLocaleUpperCase(locale)}${formatted.slice(1)}`;
 }
 

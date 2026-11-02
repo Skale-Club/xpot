@@ -3,8 +3,11 @@
 
 import type { SystemEventLevel } from "./schema/observability.js";
 
-/** healthy → slow → stalled/down: "slow" still moves, "stalled" has stopped moving. */
-export type HealthVerdict = "healthy" | "slow" | "stalled" | "down" | "idle";
+/**
+ * healthy → slow → stalled/down: "slow" still moves, "stalled" has stopped moving.
+ * "off" is a part nobody set up: not a failure, so never red.
+ */
+export type HealthVerdict = "healthy" | "off" | "slow" | "stalled" | "down" | "idle";
 
 /** Why a verdict was given, stable across languages (the screen words it and says what to do). */
 export type HealthReasonCode =

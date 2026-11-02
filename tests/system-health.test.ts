@@ -47,7 +47,7 @@ describe("assessWorker", () => {
     now,
   };
   it("is healthy while ticking", () => expect(assessWorker(worker).verdict).toBe("healthy"));
-  it("is down without an engine", () => expect(assessWorker({ ...worker, engineConfigured: false }).verdict).toBe("down"));
+  it("is off, not down, without an engine: nobody set it up, so nothing broke", () => expect(assessWorker({ ...worker, engineConfigured: false }).verdict).toBe("off"));
   it("is down when the ticks stop", () => expect(assessWorker({ ...worker, lastTickFinishedAt: new Date(now - 5 * MIN) }).verdict).toBe("down"));
   it("is stuck when the last tick failed", () => {
     expect(assessWorker({ ...worker, lastSuccessAt: new Date(now - 40_000), lastError: { message: "boom", at: new Date(now - 10_000) } }).verdict).toBe("stalled");
@@ -111,6 +111,8 @@ describe("helpers", () => {
   it("picks the worst verdict", () => {
     expect(worstVerdict(["healthy", "slow", "healthy"])).toBe("slow");
     expect(worstVerdict(["slow", "down", "stalled"])).toBe("down");
+    expect(worstVerdict(["healthy", "off"])).toBe("off");
+    expect(worstVerdict(["off", "slow"])).toBe("slow");
   });
   it("takes the median", () => {
     expect(median([])).toBeNull();

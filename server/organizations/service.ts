@@ -402,7 +402,7 @@ async function assertNotLastAdmin(organizationId: number, repId: number) {
     sql`${organizationMemberships.blockedAt} IS NULL`,
   ));
   if (admins.length === 1 && admins[0].repId === repId) {
-    throw new OrganizationError("Make someone else org admin before removing or suspending the last one.", 409, "organization_last_admin");
+    throw new OrganizationError("Make someone else an owner before removing or suspending the last one.", 409, "organization_last_admin");
   }
 }
 

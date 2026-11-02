@@ -1,44 +1,42 @@
 import { useState, type ReactNode } from "react";
 import { Link } from "wouter";
 import {
-  Ban, Building2, CalendarDays, Check, ChevronRight, Eye, EyeOff, KeyRound, LayoutGrid, Nfc, PackageOpen, Phone, RotateCcw, RotateCw,
-  ShieldCheck, Tag, Trash2, Webhook, X,
+  Building2, CalendarDays, Check, ChevronRight, KeyRound, LayoutGrid, Nfc, PackageOpen, Phone, RotateCcw,
+  ShieldCheck, Tag, Webhook, X, type LucideIcon,
 } from "lucide-react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
-import { Switch } from "@/components/ui/switch";
-import { AdminBadge, useIsSuperAdmin } from "@/components/xpot/AdminBadge";
+import { useIsSuperAdmin } from "@/components/xpot/AdminBadge";
 import { ConfirmDialog } from "@/components/xpot/ConfirmDialog";
-import { CopyButton } from "@/components/xpot/CopyButton";
-import { ErrorState } from "@/components/xpot/EmptyState";
 import { Field, Input, Select } from "@/components/xpot/Field";
 import { FormFooter } from "@/components/xpot/FormFooter";
 import { InlineAlert } from "@/components/xpot/InlineAlert";
-import { ListSkeleton } from "@/components/xpot/ListSkeleton";
-import { INTEGRATION_TONE, Pill, ROLE_TONE, toneOf, type PillTone } from "@/components/xpot/StatusPill";
+import { Pill, ROLE_TONE, toneOf, type PillTone } from "@/components/xpot/StatusPill";
 import { DANGER_OUTLINE, GLASS_CLASS } from "@/components/xpot/surface";
-import { formatDate, formatDateTime } from "@/lib/format";
+import { formatDate } from "@/lib/format";
 import { XPOT_MODULES, repModules, type XpotModule } from "@shared/modules";
 import { formatPhone } from "@shared/phone";
 import { blockNote } from "@shared/repAccess";
-import { translate, useT } from "@/i18n";
+import { LANG_LABELS, translate, useT, type Lang } from "@/i18n";
 import { adminUiMessages } from "@/i18n/messages/adminUi";
 import { commonMessages } from "@/i18n/messages/common";
-import { integrationsMessages } from "@/i18n/messages/integrations";
-import { manageMessages, type ManageKey } from "@/i18n/messages/manage";
+import { manageMessages } from "@/i18n/messages/manage";
 import { peopleWorkspaceMessages } from "@/i18n/messages/peopleWorkspace";
 import { settingsMessages } from "@/i18n/messages/settings";
 import type { XpotMeResponse } from "@/pages/xpot/types";
-import { isXphereQueryKey, maskInboundKey } from "./integrationsUi";
-import { SERVICES_KEY } from "./platform/servicesUi";
 import { personStatus, type PeopleStatus } from "./peopleFilters";
+import { DangerZone } from "./PersonDanger";
+import { Memberships } from "./PersonOrganizations";
 import { PersonTagsSales } from "./PersonTagsSales";
+import { XphereConnection } from "./PersonXphere";
 
 // One person in Account › People (/admin/reps/:repId): every decision about
 // them in one pane, by section. Access (approve, refuse, block, unblock,
 // delete), role and modules, organization memberships, the Tags terms, their
-// Xphere connection (the global admin's) and links to what they did.
+// Xphere connection (the global admin's) and links to what they did. Each
+// state of a person gets only what applies: a sign-up waiting or refused has
+// its data, modules and the decision; a blocked account its reason and history.
 
 export type Rep = {
   id: number;
@@ -57,6 +55,8 @@ export type Rep = {
   access: "pending" | "active" | "blocked";
   /** Blocked because their sign-up was refused (shared/repAccess.ts). */
   refused: boolean;
+  /** The organizations they are an active member of (a personal workspace left out), with their role in each. */
+  teams: { id: number; name: string; role: "admin" | "member" }[];
   blockedAt: string | null;
   blockedReason: string | null;
   createdAt: string | null;
@@ -83,14 +83,9 @@ export const REPS_KEY = ["/api/xpot/admin/reps"];
 export const MODULE_KEYS = { visits: "moduleVisits", tags: "moduleTags" } as const satisfies Record<XpotModule, keyof typeof commonMessages.en>;
 export const ROLES = ["rep", "admin"] as const;
 export const ROLE_KEYS = { rep: "role_rep", admin: "role_admin" } as const satisfies Record<(typeof ROLES)[number], keyof typeof settingsMessages.en>;
+/** The "Role" of old, said as what it is: whether the person administers the platform. */
+export const PLATFORM_ACCESS_KEYS = { rep: "platformAccessNo", admin: "platformAccessYes" } as const satisfies Record<(typeof ROLES)[number], keyof typeof peopleWorkspaceMessages.en>;
 export const STATUS_TONE: Record<PeopleStatus, PillTone> = { pending: "amber", active: "green", blocked: "red", refused: "slate" };
-const SYNC_STATUS_TONE: Record<string, PillTone> = { synced: "green", pending: "slate", needs_review: "amber", failed: "red" };
-const SYNC_STATUS_KEYS: Record<string, ManageKey> = {
-  pending: "syncStatus_pending",
-  synced: "syncStatus_synced",
-  failed: "syncStatus_failed",
-  needs_review: "syncStatus_needs_review",
-};
 
 export async function send<T>(url: string, body: unknown = {}, method = "POST"): Promise<T> {
   const res = await fetch(url, {
@@ -150,23 +145,38 @@ export function Setting({ label, hint, children }: { label: string; hint?: strin
   );
 }
 
-/** Pills for where someone stands, their role and their modules; used by the list rows too. */
-export function PersonPills({ rep }: { rep: Rep }) {
+/**
+ * Pills for who someone is: where they stand (`showStatus`, not in a list already grouped by it), their place
+ * (platform administrator, or their role in their organization) and their modules. A sign-up still waiting or
+ * refused has no place and no modules yet: those are chosen when it is approved.
+ */
+export function PersonPills({ rep, showStatus = true }: { rep: Rep; showStatus?: boolean }) {
   const t = useT(manageMessages);
   const tc = useT(commonMessages);
   const tse = useT(settingsMessages);
+  const tw = useT(peopleWorkspaceMessages);
   const status = personStatus(rep);
+  const undecided = status === "pending" || status === "refused";
+  const platform = rep.role === "admin";
   const roleKey = ROLE_KEYS[rep.role as (typeof ROLES)[number]];
+  const first = rep.teams[0];
+  const place = platform
+    ? (roleKey ? tse(roleKey) : rep.role)
+    : rep.teams.length > 1
+      ? tw("personOrgCount", { count: rep.teams.length })
+      : first
+        ? tw("personOrgLine", { role: tw(first.role === "admin" ? "orgRoleAdmin" : "orgRoleMember"), org: first.name })
+        : tw("personNoOrg");
   return (
     <>
-      <Pill tone={STATUS_TONE[status]}>{t(`status_${status}`)}</Pill>
-      <Pill tone={toneOf(ROLE_TONE, rep.role)}>{roleKey ? tse(roleKey) : rep.role}</Pill>
-      <span className="text-xs text-white/45">{repModules({ role: rep.role, modules: rep.modules }).map((m) => tc(MODULE_KEYS[m])).join(" · ")}</span>
+      {showStatus && <Pill tone={STATUS_TONE[status]}>{t(`status_${status}`)}</Pill>}
+      {!undecided && <Pill tone={platform ? toneOf(ROLE_TONE, rep.role) : "slate"} className="max-w-full">{place}</Pill>}
+      {!undecided && <span className="text-xs text-white/45">{repModules({ role: rep.role, modules: rep.modules }).map((m) => tc(MODULE_KEYS[m])).join(" · ")}</span>}
     </>
   );
 }
 
-function Section({ title, icon: Icon, children, testId }: { title: string; icon: typeof Ban; children: ReactNode; testId?: string }) {
+export function Section({ title, icon: Icon, children, testId }: { title: string; icon: LucideIcon; children: ReactNode; testId?: string }) {
   return (
     <section className="space-y-3 border-t border-white/[0.06] pt-4" data-testid={testId}>
       <h3 className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-white/45">
@@ -184,8 +194,10 @@ export function PersonDetail({ rep, onClose, onGone }: { rep: Rep; onClose?: () 
   const tw = useT(peopleWorkspaceMessages);
   const t = useT(manageMessages);
   const isSuperAdmin = useIsSuperAdmin();
-  const modules = repModules({ role: rep.role, modules: rep.modules });
   const status = personStatus(rep);
+  // What applies: a sign-up waiting or refused has no modules, organizations, terms or connections yet.
+  const modules = status === "pending" || status === "refused" ? [] : repModules({ role: rep.role, modules: rep.modules });
+  const member = status === "active" || status === "blocked";
   return (
     <div className={`space-y-4 rounded-2xl ${GLASS_CLASS} p-4 sm:p-5`} data-testid={`person-${rep.id}`}>
       <header className="flex items-start gap-3">
@@ -207,7 +219,7 @@ export function PersonDetail({ rep, onClose, onGone }: { rep: Rep; onClose?: () 
       </header>
 
       <Section title={tw("sectionAccess")} icon={ShieldCheck} testId="person-access">
-        <AccessSection key={`${rep.id}-${status}`} rep={rep} onGone={onGone} />
+        <AccessSection key={`${rep.id}-${status}`} rep={rep} />
       </Section>
 
       {/* A sign-up gets its modules when approved (Access); a blocked account keeps what it had. */}
@@ -217,26 +229,28 @@ export function PersonDetail({ rep, onClose, onGone }: { rep: Rep; onClose?: () 
         </Section>
       )}
 
-      <Section title={tw("sectionOrganizations")} icon={Building2} testId="person-orgs">
-        <Memberships rep={rep} />
-      </Section>
+      {member && (
+        <Section title={tw("sectionOrganizations")} icon={Building2} testId="person-orgs">
+          <Memberships rep={rep} />
+        </Section>
+      )}
 
-      {modules.includes("tags") && (
+      {status === "active" && modules.includes("tags") && (
         <Section title={tw("sectionTags")} icon={Tag} testId="person-tags">
           <TagsTerms key={rep.id} rep={rep} />
           {/* What the Resellers screen used to show for them (the Tags report); a sign-up has no sales yet. */}
-          {status !== "pending" && <div className="mt-4 border-t border-white/[0.06] pt-4"><PersonTagsSales key={rep.id} rep={rep} /></div>}
+          <div className="mt-4 border-t border-white/[0.06] pt-4"><PersonTagsSales key={rep.id} rep={rep} /></div>
         </Section>
       )}
 
       {/* Xphere is set by the platform only. */}
-      {isSuperAdmin && modules.includes("visits") && rep.userId && (
+      {isSuperAdmin && status === "active" && modules.includes("visits") && rep.userId && (
         <Section title={tw("sectionVisits")} icon={Webhook} testId="person-xphere">
           <XphereConnection key={rep.id} rep={rep} userId={rep.userId} />
         </Section>
       )}
 
-      {(modules.includes("tags") || modules.includes("visits")) && (
+      {member && (modules.includes("tags") || modules.includes("visits")) && (
         <Section title={tw("sectionActivity")} icon={ChevronRight} testId="person-activity">
           <div className="flex flex-wrap gap-2">
             {/* The visits history narrowed to this person (management mode, ?rep=). */}
@@ -258,17 +272,19 @@ export function PersonDetail({ rep, onClose, onGone }: { rep: Rep; onClose?: () 
           </div>
         </Section>
       )}
+
+      <DangerZone rep={rep} onGone={onGone} />
     </div>
   );
 }
 
 // ─── Access ──────────────────────────────────────────────────────────────────
 
-function AccessSection({ rep, onGone }: { rep: Rep; onGone: () => void }) {
+function AccessSection({ rep }: { rep: Rep }) {
   const status = personStatus(rep);
   if (status === "pending") return <PendingAccess rep={rep} />;
   if (status === "active") return <ActiveAccess rep={rep} />;
-  return <BlockedAccess rep={rep} onGone={onGone} />;
+  return <BlockedAccess rep={rep} />;
 }
 
 function Application({ rep }: { rep: Rep }) {
@@ -278,16 +294,16 @@ function Application({ rep }: { rep: Rep }) {
   const availabilityKey = a.availability ? `applicationAvailability_${a.availability}` as const : null;
   const experienceKey = a.salesExperience ? `applicationSales_${a.salesExperience}` as const : null;
   const readinessKey = a.fieldSalesReadiness ? `applicationReadiness_${a.fieldSalesReadiness}` as const : null;
-  const item = (label: string, value: ReactNode) => (
-    <div><dt className="text-xs text-white/35">{label}</dt><dd className="mt-0.5 break-words text-white/75">{value || "—"}</dd></div>
+  const item = (label: string, value: ReactNode, wide = false) => (
+    <div className={wide ? "sm:col-span-2" : undefined}><dt className="text-xs text-white/35">{label}</dt><dd className="mt-0.5 break-words text-white/75">{value || "—"}</dd></div>
   );
   // The form no longer asks these; they show only on applications sent before.
   const legacy = (label: string, value: ReactNode) => (value ? item(label, value) : null);
-  const languages = [...(a.languages ?? []), a.otherLanguages].filter(Boolean).join(", ");
+  const languages = [...(a.languages ?? []).map((code) => LANG_LABELS[code as Lang] ?? code), a.otherLanguages].filter(Boolean).join(", ");
   return (
     <div data-testid={`application-${rep.id}`}>
       <dl className="grid gap-x-6 gap-y-3 text-sm sm:grid-cols-2">
-        {item(t("applicationEmail"), a.email)}
+        {item(t("applicationEmail"), a.email, true)}
         {item(t("applicationCity"), [a.workCity, a.workRegion].filter(Boolean).join(", "))}
         {item(t("applicationVehicle"), a.hasVehicle === null ? null : a.hasVehicle ? t("applicationYes") : t("applicationNo"))}
         {legacy(t("applicationOccupation"), a.occupation)}
@@ -362,11 +378,9 @@ function ActiveAccess({ rep }: { rep: Rep }) {
   const tc = useT(commonMessages);
   const tw = useT(peopleWorkspaceMessages);
   const isSuperAdmin = useIsSuperAdmin();
-  const [dialog, setDialog] = useState<"block" | "phone" | null>(null);
+  const [dialog, setDialog] = useState<"phone" | null>(null);
   const [newPhone, setNewPhone] = useState("");
-  const block = useRepAction((r) => t("repBlocked", { name: r.displayName }));
   const phone = useRepAction((r) => t("repPhoneChanged", { name: r.displayName }));
-  // Blocking yourself would lock you out of the admin you are using.
   const { data: me } = useQuery<XpotMeResponse>({ queryKey: ["/api/xpot/me"], retry: false });
   const isSelf = !!me && rep.id === me.rep.id;
   // Only the platform acts on platform users; anyone else on reps (the server answers 403).
@@ -385,24 +399,6 @@ function ActiveAccess({ rep }: { rep: Rep }) {
           )}
         </div>
       </Setting>
-      {mayManage && !isSelf && (
-        <Button variant="outline" size="sm" className={DANGER_OUTLINE} onClick={() => setDialog("block")} data-testid={`block-${rep.id}`}>
-          <Ban />
-          {t("blockTitle")}
-        </Button>
-      )}
-      <ConfirmDialog
-        open={dialog === "block"}
-        onOpenChange={(o) => !o && setDialog(null)}
-        tone="danger"
-        title={t("confirmBlock", { name: rep.displayName })}
-        description={t("blockHint")}
-        reason="optional"
-        reasonLabel={t("reasonOptional")}
-        confirmLabel={t("block")}
-        onConfirm={(reason) => block.mutateAsync({ url: `/api/xpot/admin/reps/${rep.id}/block`, body: { reason: reason || null }, rep })}
-        testId={`block-${rep.id}-confirm`}
-      />
       <ConfirmDialog
         open={dialog === "phone"}
         onOpenChange={(o) => !o && setDialog(null)}
@@ -420,11 +416,13 @@ function ActiveAccess({ rep }: { rep: Rep }) {
   );
 }
 
-function BlockedAccess({ rep, onGone }: { rep: Rep; onGone: () => void }) {
+function BlockedAccess({ rep }: { rep: Rep }) {
   const t = useT(manageMessages);
   const tw = useT(peopleWorkspaceMessages);
   const isSuperAdmin = useIsSuperAdmin();
   const unblock = useRepAction((r) => t("repCanSignInAgain", { name: r.displayName }));
+  // A refused sign-up was never blocked: the same action is an approval, worded as one.
+  const approveAfterAll = rep.refused;
   const date = rep.blockedAt ? formatDate(rep.blockedAt) : "";
   const note = blockNote(rep.blockedReason);
   return (
@@ -434,92 +432,19 @@ function BlockedAccess({ rep, onGone }: { rep: Rep; onGone: () => void }) {
         {(rep.refused ? t("refusedOn", { date }) : t("blockedOn", { date })).trim()}
         {note ? ` · ${note}` : ""}
       </p>
-      <div className="flex flex-wrap gap-2">
-        {(isSuperAdmin || rep.role === "rep") && (
-          <Button
-            variant="secondary"
-            size="sm"
-            loading={unblock.isPending}
-            onClick={() => unblock.mutate({ url: `/api/xpot/admin/reps/${rep.id}/unblock`, rep })}
-            data-testid={`unblock-${rep.id}`}
-          >
-            <RotateCcw />
-            {t("unblock")}
-          </Button>
-        )}
-        <DeleteAccountButton rep={rep} onGone={onGone} />
-      </div>
+      {(isSuperAdmin || rep.role === "rep") && (
+        <Button
+          variant="secondary"
+          size="sm"
+          loading={unblock.isPending}
+          onClick={() => unblock.mutate({ url: `/api/xpot/admin/reps/${rep.id}/unblock`, rep })}
+          data-testid={`unblock-${rep.id}`}
+        >
+          {approveAfterAll ? <Check /> : <RotateCcw />}
+          {approveAfterAll ? tw("approveAfterAll") : t("unblock")}
+        </Button>
+      )}
     </div>
-  );
-}
-
-type DeletionResult = { account: "deleted" | "anonymized"; leadsDeleted: number; leadsUnassigned: number; visitsDeleted: number; files: { deleted: number; failed: number } };
-
-/** Delete the account and its data, when the person asks (privacy policy, "How long we keep it"). */
-function DeleteAccountButton({ rep, onGone }: { rep: Rep; onGone: () => void }) {
-  const t = useT(manageMessages);
-  const { toast } = useToast();
-  const queryClient = useQueryClient();
-  const isSuperAdmin = useIsSuperAdmin();
-  const word = t("deleteAccountWord");
-  const [open, setOpen] = useState(false);
-  const [typed, setTyped] = useState("");
-  const remove = useMutation({
-    // The API's own guard word is always "DELETE"; the one typed is localized.
-    mutationFn: () => send<DeletionResult>(`/api/xpot/admin/reps/${rep.id}`, { confirm: "DELETE" }, "DELETE"),
-    onSuccess: (r) => {
-      setOpen(false);
-      toast({
-        title: t("accountDeleted", { name: rep.displayName }),
-        description: [
-          t("accountDeletedSummary", { leads: r.leadsDeleted, visits: r.visitsDeleted, files: r.files.deleted }),
-          r.leadsUnassigned ? t("accountDeletedKept", { count: r.leadsUnassigned }) : "",
-          r.files.failed ? t("accountDeletedFilesFailed", { count: r.files.failed }) : "",
-        ].filter(Boolean).join(" "),
-        variant: r.files.failed ? "destructive" : "success",
-      });
-      void queryClient.invalidateQueries({ queryKey: REPS_KEY });
-      onGone();
-    },
-    onError: (e: Error) => toast({ title: t("error"), description: e.message, variant: "destructive" }),
-  });
-  // The global admin only, like the server (requireSuperAdmin), so it carries the "Admin" tag.
-  if (!isSuperAdmin) return null;
-  return (
-    <>
-      <Button
-        variant="outline"
-        size="sm"
-        className={DANGER_OUTLINE}
-        loading={remove.isPending}
-        onClick={() => {
-          setTyped("");
-          setOpen(true);
-        }}
-        data-testid={`delete-${rep.id}`}
-      >
-        <Trash2 />
-        {t("deleteAccount")}
-        <AdminBadge />
-      </Button>
-      <ConfirmDialog
-        open={open}
-        onOpenChange={setOpen}
-        title={t("deleteAccountTitle", { name: rep.displayName })}
-        description={t("deleteAccountBody")}
-        confirmLabel={t("deleteAccount")}
-        destructive
-        busy={remove.isPending}
-        // The word is typed in the admin's language and in capitals, like the hint says.
-        confirmDisabled={typed.trim() !== word}
-        onConfirm={() => remove.mutate()}
-        testId={`delete-dialog-${rep.id}`}
-      >
-        <Field label={t("deleteAccountTypeHint", { word })}>
-          <Input autoFocus value={typed} onChange={(e) => setTyped(e.target.value)} placeholder={word} autoComplete="off" data-testid={`delete-word-${rep.id}`} />
-        </Field>
-      </ConfirmDialog>
-    </>
   );
 }
 
@@ -540,6 +465,7 @@ function profileBody(rep: Rep, patch: { role?: string; modules?: string[]; costP
 function RoleEditor({ rep }: { rep: Rep }) {
   const { toast } = useToast();
   const t = useT(manageMessages);
+  const tw = useT(peopleWorkspaceMessages);
   const tc = useT(commonMessages);
   const tse = useT(settingsMessages);
   const queryClient = useQueryClient();
@@ -585,9 +511,9 @@ function RoleEditor({ rep }: { rep: Rep }) {
     <div className="space-y-4" data-testid={`rep-editor-${rep.id}`}>
       <div className="grid gap-4 sm:grid-cols-2">
         <div className="min-w-0 space-y-2">
-          <Field label={t("fieldRole")} hint={isSelf ? t("ownRoleLocked") : !isSuperAdmin ? t("roleAdminOnly") : undefined}>
+          <Field label={tw("platformAccess")} hint={isSelf ? t("ownRoleLocked") : !isSuperAdmin ? t("roleAdminOnly") : undefined}>
             <Select value={role} onChange={(e) => setRole(e.target.value)} disabled={roleLocked} data-testid={`role-${rep.id}`}
-              options={ROLES.map((r) => ({ value: r, label: tse(ROLE_KEYS[r]) }))} />
+              options={ROLES.map((r) => ({ value: r, label: tw(PLATFORM_ACCESS_KEYS[r]) }))} />
           </Field>
           {adminChanges && (
             <div data-testid={`admin-warning-${rep.id}`}>
@@ -621,133 +547,6 @@ function RoleEditor({ rep }: { rep: Rep }) {
         onConfirm={() => save.mutate()}
         testId={`confirm-admin-${rep.id}`}
       />
-    </div>
-  );
-}
-
-// ─── Organizations ───────────────────────────────────────────────────────────
-
-type Membership = {
-  organizationId: number;
-  name: string;
-  personal: boolean;
-  organizationActive: boolean;
-  role: "admin" | "member";
-  isActive: boolean;
-  blockedAt: string | null;
-};
-type OrganizationOption = { id: number; name: string; personal: boolean };
-
-function Memberships({ rep }: { rep: Rep }) {
-  const { toast } = useToast();
-  const queryClient = useQueryClient();
-  const t = useT(manageMessages);
-  const tw = useT(peopleWorkspaceMessages);
-  const key = [`/api/xpot/admin/reps/${rep.id}/organizations`];
-  const memberships = useQuery<Membership[]>({ queryKey: key });
-  const organizations = useQuery<OrganizationOption[]>({ queryKey: ["/api/xpot/organizations"] });
-  const [orgId, setOrgId] = useState("");
-  const [role, setRole] = useState<"member" | "admin">("member");
-  const [removing, setRemoving] = useState<Membership | null>(null);
-
-  const refresh = (organizationId: number) => {
-    void queryClient.invalidateQueries({ queryKey: key });
-    void queryClient.invalidateQueries({ queryKey: ["/api/xpot/organizations"] });
-    void queryClient.invalidateQueries({ queryKey: [`/api/xpot/organizations/${organizationId}`] });
-    void queryClient.invalidateQueries({ queryKey: [`/api/xpot/organizations/${organizationId}/members`] });
-  };
-  const add = useMutation({
-    mutationFn: (organizationId: number) => send(`/api/xpot/organizations/${organizationId}/members`, { repId: rep.id, membershipRole: role }),
-    onSuccess: (_d, organizationId) => {
-      const org = organizations.data?.find((o) => o.id === organizationId);
-      toast({ title: tw("addedToOrg", { name: rep.displayName, org: org?.name ?? "" }), variant: "success" });
-      setOrgId("");
-      setRole("member");
-      refresh(organizationId);
-    },
-    onError: (e: Error) => toast({ title: t("error"), description: e.message, variant: "destructive" }),
-  });
-  const remove = useMutation({
-    mutationFn: (m: Membership) => send(`/api/xpot/organizations/${m.organizationId}/members/${rep.id}`, {}, "DELETE"),
-    onSuccess: (_d, m) => {
-      setRemoving(null);
-      toast({ title: tw("removedFromOrg", { name: rep.displayName, org: m.name }), variant: "success" });
-      refresh(m.organizationId);
-    },
-    onError: (e: Error) => {
-      setRemoving(null);
-      toast({ title: t("error"), description: e.message, variant: "destructive" });
-    },
-  });
-
-  if (memberships.isLoading) return <ListSkeleton rows={2} rowClassName="h-11 rounded-xl" />;
-  if (memberships.isError || !memberships.data) {
-    return <ErrorState compact message={tw("orgsLoadFailed")} onRetry={() => void memberships.refetch()} />;
-  }
-  const joined = new Set(memberships.data.map((m) => m.organizationId));
-  // Other people's personal workspaces are not somewhere to add someone.
-  const options = (organizations.data ?? []).filter((o) => !joined.has(o.id) && !o.personal);
-  const activeCount = memberships.data.filter((m) => m.isActive && !m.blockedAt).length;
-  const suspended = (m: Membership) => !m.isActive || !!m.blockedAt;
-
-  return (
-    <div className="space-y-3">
-      {memberships.data.length === 0 ? (
-        <p className="text-xs text-white/45">{tw("noOrganizations")}</p>
-      ) : (
-        <ul className="divide-y divide-white/[0.06] overflow-hidden rounded-xl border border-white/[0.07]">
-          {memberships.data.map((m) => (
-            <li key={m.organizationId} className="flex items-center gap-2 px-3 py-2">
-              {/* The name on its own line, the pills under it: a long name never squeezes out. */}
-              <div className="min-w-0 flex-1">
-                <Link href={`/organizations/${m.organizationId}`} className="flex min-h-9 min-w-0 items-center gap-1 text-sm font-medium text-white hover:text-blue-200" aria-label={tw("openOrganization", { name: m.name })}>
-                  <span className="truncate">{m.name}</span>
-                  <ChevronRight className="h-3.5 w-3.5 shrink-0 text-white/30" aria-hidden="true" />
-                </Link>
-                <div className="flex flex-wrap gap-1.5 pb-1">
-                  <Pill tone={m.role === "admin" ? "blue" : "slate"}>{m.role === "admin" ? tw("orgRoleAdmin") : tw("orgRoleMember")}</Pill>
-                  {m.personal && <Pill tone="slate">{tw("personalWorkspace")}</Pill>}
-                  {suspended(m) && <Pill tone="red">{tw("orgSuspended")}</Pill>}
-                </div>
-              </div>
-              <Button variant="ghost" size="icon" className="text-red-300/80 hover:text-red-200" onClick={() => setRemoving(m)} aria-label={tw("removeFromOrg")} title={tw("removeFromOrg")} data-testid={`remove-org-${m.organizationId}`}>
-                <X />
-              </Button>
-            </li>
-          ))}
-        </ul>
-      )}
-
-      {options.length > 0 ? (
-        <div className="space-y-2">
-          <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto_auto]">
-            <Select value={orgId} onChange={(e) => setOrgId(e.target.value)} aria-label={tw("addToOrganization")} placeholder={tw("chooseOrganization")}
-              options={options.map((o) => ({ value: String(o.id), label: o.name }))} data-testid="person-add-org" />
-            <Select value={role} onChange={(e) => setRole(e.target.value as "member" | "admin")} aria-label={tw("orgRole")}
-              options={[{ value: "member", label: tw("orgRoleMember") }, { value: "admin", label: tw("orgRoleAdmin") }]} />
-            <Button variant="secondary" disabled={!orgId} loading={add.isPending} onClick={() => add.mutate(Number(orgId))}>
-              {tw("add")}
-            </Button>
-          </div>
-          {role === "admin" && <p className="text-xs text-white/45">{tw("orgAdminWarning")}</p>}
-        </div>
-      ) : organizations.data ? (
-        <p className="text-xs text-white/40">{tw("allOrgsJoined")}</p>
-      ) : null}
-
-      <ConfirmDialog
-        open={!!removing}
-        onOpenChange={(o) => !o && setRemoving(null)}
-        tone="danger"
-        title={tw("removeFromOrgTitle", { name: rep.displayName, org: removing?.name ?? "" })}
-        description={tw("removeFromOrgBody")}
-        confirmLabel={tw("removeFromOrg")}
-        busy={remove.isPending}
-        onConfirm={() => removing && remove.mutate(removing)}
-        testId="person-remove-org-confirm"
-      >
-        {removing && !suspended(removing) && activeCount === 1 && <InlineAlert tone="warning">{tw("removeOnlyOrgWarning")}</InlineAlert>}
-      </ConfirmDialog>
     </div>
   );
 }
@@ -827,134 +626,3 @@ function TagsTerms({ rep }: { rep: Rep }) {
   );
 }
 
-// ─── Visits: Xphere ──────────────────────────────────────────────────────────
-
-type XphereDetail = {
-  userId: string;
-  repId: number;
-  inboundApiKey: string | null;
-  apiUrl: string;
-  apiKeySet: boolean;
-  isEnabled: boolean;
-  lastSync: { status: string; at: string | null; error: string | null } | null;
-};
-
-function XphereConnection({ rep, userId }: { rep: Rep; userId: string }) {
-  const { toast } = useToast();
-  const queryClient = useQueryClient();
-  const t = useT(integrationsMessages);
-  const tm = useT(manageMessages);
-  const tc = useT(commonMessages);
-  const tw = useT(peopleWorkspaceMessages);
-  const key = [`/api/xpot/admin/xphere/${userId}`];
-  const query = useQuery<XphereDetail>({ queryKey: key });
-  const [token, setToken] = useState("");
-  const [revealed, setRevealed] = useState(false);
-  const [rotating, setRotating] = useState(false);
-  // This person's connection and the Integrations › Xphere list.
-  const refresh = () => void queryClient.invalidateQueries({ predicate: (q) => isXphereQueryKey(q.queryKey) });
-  const fail = (e: Error) => toast({ title: tm("errorSaving"), description: e.message, variant: "destructive" });
-
-  const put = useMutation({
-    mutationFn: (body: { apiKey?: string; isEnabled?: boolean }) => send(`/api/xpot/admin/xphere/${userId}`, body, "PUT"),
-    onSuccess: (_d, body) => {
-      if (body.isEnabled !== undefined) toast({ title: tw(body.isEnabled ? "syncOnSaved" : "syncOffSaved", { name: rep.displayName }), variant: "success" });
-      else toast({ title: t("xphereSavedFor", { name: rep.displayName }), variant: "success" });
-      setToken("");
-      refresh();
-      // Integrations › Services and Status count who is connected.
-      void queryClient.invalidateQueries({ queryKey: [...SERVICES_KEY] });
-    },
-    onError: fail,
-  });
-  const rotate = useMutation({
-    mutationFn: () => send(`/api/xpot/admin/xphere/${userId}/rotate-inbound-key`),
-    onSuccess: () => {
-      setRotating(false);
-      setRevealed(true);
-      toast({ title: t("keyRotated", { name: rep.displayName }), variant: "success" });
-      refresh();
-    },
-    onError: (e: Error) => {
-      setRotating(false);
-      fail(e);
-    },
-  });
-
-  if (query.isLoading) return <ListSkeleton rows={2} rowClassName="h-11 rounded-xl" />;
-  if (query.isError || !query.data) return <ErrorState compact message={tw("xphereLoadFailed")} onRetry={() => void query.refetch()} />;
-  const x = query.data;
-  const tokenTone = INTEGRATION_TONE[x.apiKeySet ? (x.isEnabled ? "live" : "idle") : "off"];
-  const sync = x.lastSync;
-
-  return (
-    <div className="space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <Pill tone={tokenTone}>{x.apiKeySet ? t("tokenSaved") : t("noToken")}</Pill>
-        <label className="flex min-h-11 cursor-pointer items-center gap-2.5 text-sm font-medium text-white/70">
-          {t("xphereEnabled")}
-          <Switch checked={x.isEnabled} disabled={put.isPending} onCheckedChange={(on) => put.mutate({ isEnabled: on })} data-testid="person-xphere-enabled" />
-        </label>
-      </div>
-
-      <Setting label={t("inboundKey")}>
-        {x.inboundApiKey ? (
-          <div className="flex flex-wrap items-center gap-2">
-            <code className="min-w-0 flex-1 break-all rounded-xl border border-white/10 bg-black/20 px-3.5 py-2.5 font-mono text-xs text-white/75" data-testid="person-xphere-key">
-              {revealed ? x.inboundApiKey : maskInboundKey(x.inboundApiKey)}
-            </code>
-            <Button variant="secondary" size="icon" onClick={() => setRevealed((v) => !v)} aria-label={revealed ? t("hideKey") : t("revealKey")} title={revealed ? t("hideKey") : t("revealKey")}>
-              {revealed ? <EyeOff /> : <Eye />}
-            </Button>
-            <CopyButton value={x.inboundApiKey} label={t("copyKey")} iconOnly />
-            <Button variant="secondary" size="sm" onClick={() => setRotating(true)} loading={rotate.isPending}>
-              <RotateCw />
-              {t("rotateKey")}
-            </Button>
-          </div>
-        ) : (
-          <p className="text-xs text-white/40">{t("noInboundKeyYet")}</p>
-        )}
-      </Setting>
-
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
-        <Field label={t("outboundToken")} className="min-w-0 flex-1">
-          <Input type="password" autoComplete="off" value={token} onChange={(e) => setToken(e.target.value)} placeholder={x.apiKeySet ? t("keepCurrentToken") : "xph_..."} />
-        </Field>
-        <Button variant="brand" disabled={!token.trim()} loading={put.isPending && !!token} onClick={() => put.mutate({ apiKey: token.trim() })}>
-          {tc("save")}
-        </Button>
-      </div>
-
-      <Setting label={tw("lastSync")}>
-        {sync ? (
-          <div className="space-y-1">
-            <p className="flex flex-wrap items-center gap-2 text-sm text-white/70">
-              <Pill tone={toneOf(SYNC_STATUS_TONE, sync.status, "amber")}>{SYNC_STATUS_KEYS[sync.status] ? tm(SYNC_STATUS_KEYS[sync.status]) : sync.status}</Pill>
-              {sync.at ? formatDateTime(sync.at) : null}
-            </p>
-            {sync.error && <p className="break-words text-xs text-red-300">{sync.error}</p>}
-          </div>
-        ) : (
-          <p className="text-xs text-white/40">{tw("noSyncYet")}</p>
-        )}
-      </Setting>
-
-      <Link href="/admin/integrations/xphere" className="inline-flex min-h-11 items-center gap-1 text-xs font-medium text-blue-300 hover:text-blue-200">
-        {tw("allConnections")}
-        <ChevronRight className="h-3.5 w-3.5" aria-hidden="true" />
-      </Link>
-
-      <ConfirmDialog
-        open={rotating}
-        onOpenChange={setRotating}
-        title={t("rotateTitle", { name: rep.displayName })}
-        description={t("rotateBody")}
-        confirmLabel={t("rotateKey")}
-        destructive
-        busy={rotate.isPending}
-        onConfirm={() => rotate.mutate()}
-      />
-    </div>
-  );
-}

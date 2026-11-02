@@ -15,7 +15,7 @@ const STARTING_STALL_MS = 2 * 60 * 1000;
 /** auto-route.ts takes a "building" route back after 15 min; past that it is stuck. */
 const ROUTE_STUCK_MS = 20 * 60 * 1000;
 
-const RANK: Record<HealthVerdict, number> = { idle: 0, healthy: 1, slow: 2, stalled: 3, down: 4 };
+const RANK: Record<HealthVerdict, number> = { idle: 0, healthy: 1, off: 2, slow: 3, stalled: 4, down: 5 };
 export function worstVerdict(verdicts: HealthVerdict[]): HealthVerdict {
   return verdicts.reduce<HealthVerdict>((worst, v) => (RANK[v] > RANK[worst] ? v : worst), "healthy");
 }
@@ -68,7 +68,7 @@ export function assessWorker(input: {
   pollMs: number;
   now: number;
 }): Assessment {
-  if (!input.engineConfigured) return { verdict: "down", reasonCode: "engine_not_configured", reason: "PROSPECTING_ENGINE_URL is not configured." };
+  if (!input.engineConfigured) return { verdict: "off", reasonCode: "engine_not_configured", reason: "PROSPECTING_ENGINE_URL is not configured." };
   if (!input.startedAt) return { verdict: "down", reasonCode: "worker_not_running", reason: "The worker is not running in this process." };
   const lastBeat = input.lastTickFinishedAt?.getTime() ?? input.startedAt.getTime();
   if (input.now - lastBeat > input.pollMs * 3 && !input.ticking) {

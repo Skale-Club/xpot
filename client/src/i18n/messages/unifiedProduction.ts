@@ -102,7 +102,7 @@ export const unifiedProductionMessages: Dictionary<typeof en> = {
     output: "Archivos de impresión",
     requestFiles: "Generar archivos",
     requestCreated: "Producción solicitada. Sigue la generación de archivos, la impresión y la recepción en este pedido.",
-    filesHint: "El ordenador de la impresora debe estar encendido para generar los archivos. Descárgalos del pedido cuando estén listos, imprime y escanea las piezas terminadas al stock.",
+    filesHint: "La computadora de la impresora debe estar encendido para generar los archivos. Descárgalos del pedido cuando estén listos, imprime y escanea las piezas terminadas al stock.",
     externalHint: "Esta opción emite códigos o recibe piezas existentes. No genera archivos de impresión de Bambu.",
     reuseCodesHint: "Usa los mismos códigos. No se crean piezas nuevas.",
     prepareExisting: "Preparar {code} para impresión",

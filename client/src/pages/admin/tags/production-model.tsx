@@ -23,6 +23,7 @@ import { EmptyState } from "@/components/xpot/EmptyState";
 import { Loading, LoadError } from "./pieces-shared";
 import { MaterialsDialog, MaterialsNeeded } from "./production-materials";
 import { PrintDialog, RequestList } from "./production-orders";
+import { useThemeName } from "./production-identity";
 import { PrintPreviewCard } from "./production-preview";
 import { useModelName } from "./production-identity";
 import { ModelStatusPill, PRODUCTION_BASE, bedSummary, formatBytes, uploadFile, useProductionAccess, useThemeOptions } from "./production-shared";
