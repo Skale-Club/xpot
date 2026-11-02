@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useCallback, useState } from "react";
+import { useLocation, useSearchParams } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import {
   Activity,
@@ -8,6 +9,7 @@ import {
   CalendarRange,
   ClipboardCheck,
   Layers,
+  Network,
   Package,
   ScanLine,
   UserRound,
@@ -20,15 +22,21 @@ import { useReasonText } from "@/components/piece/reasonText";
 import { KpiTile, SectionCard } from "@/components/xpot/DashboardKit";
 import { EmptyState } from "@/components/xpot/EmptyState";
 import { FilterBar, FilterChips, FilterSelect } from "@/components/xpot/filters";
+import { MasterDetail } from "@/components/xpot/MasterDetail";
 import { BackLink } from "@/components/xpot/PageHeader";
 import { Pill } from "@/components/xpot/StatusPill";
+import { useIsDesktop } from "@/hooks/use-is-desktop";
 import { useUrlFilters } from "@/hooks/use-url-filters";
+import { useViewerAccess } from "@/lib/adminMode";
 import { useT } from "@/i18n";
 import { manageTagsMessages } from "@/i18n/messages/manageTags";
 import { adminTagsFlowMessages } from "@/i18n/messages/adminTagsFlow";
+import { commonMessages } from "@/i18n/messages/common";
+import { workspacesMessages } from "@/i18n/messages/workspaces";
 import { ADMIN_TAGS_KEY, formatShare, getJson, STALE_MS, withQuery } from "./api";
 import { formatDate } from "@/lib/format";
-import { Loading, LoadError, useBatchOptions, useLeads, useReps } from "./pieces-shared";
+import { Loading, LoadError, organizationFilterOptions, useBatchOptions, useLeads, useOrganizations, useReps } from "./pieces-shared";
+import { PieceDetail } from "./PieceDetail";
 import { useTagLabels } from "./labels";
 import { PieceTable } from "./piece-table";
 import { AnalyticsPanel, RangePicker, useDeviceLabel, type AnalyticsRange } from "./pieces-analytics";
@@ -183,35 +191,81 @@ function ActivityFeed({ overview, go }: { overview: TagOverview; go: Go }) {
   );
 }
 
-/** /admin/tags/overview/<queue>: the pieces behind a Today count, by the same rule (GET /api/xpot/tags?queue=). */
+/** A queue's rows in the order they are worked: a chip write that failed first, it is the one somebody already tried. */
+const byChipTrouble = (a: TagListItem, b: TagListItem) => Number(b.nfcStatus === "failed") - Number(a.nfcStatus === "failed");
+
+/**
+ * /admin/tags/overview/<queue>: the pieces behind a Today count, by the same rule (GET /api/xpot/tags?queue=). The
+ * platform sees every organization's, which is what its Today counts, with the organization filter in view; a piece
+ * opens in the pop-up over the list (a phone gets its page), so resolving seven chips never leaves the queue.
+ */
 export function OverviewQueue({ queue, go }: { queue: TagPieceQueue; go: Go }) {
   const t = useT(adminTagsFlowMessages);
+  const tw = useT(workspacesMessages);
+  const tg = useT(manageTagsMessages);
+  const tc = useT(commonMessages);
+  const [, navigate] = useLocation();
   const card = pieceQueueCard(queue);
-  const url = withQuery("/api/xpot/tags", { queue, limit: 2000 });
+  const { canManage } = useViewerAccess();
+  const { data: organizations = [] } = useOrganizations(canManage);
+  const filters = useUrlFilters({ org: "" });
+  const org = filters.values.org;
+  const isDesktop = useIsDesktop();
+  const [params, setParams] = useSearchParams();
+  const paneId = params.get("piece") || null;
+  const setPane = useCallback(
+    (id: string | null) => setParams((current) => {
+      const next = new URLSearchParams(current);
+      if (id) next.set("piece", id);
+      else next.delete("piece");
+      return next;
+    }, { replace: !id || new URLSearchParams(window.location.search).has("piece") }),
+    [setParams],
+  );
+  const url = withQuery("/api/xpot/tags", { queue, limit: 2000, organizationId: /^\d+$/.test(org) ? org : undefined });
   const { data = [], isLoading, error, refetch } = useQuery<TagListItem[]>({
     queryKey: [ADMIN_TAGS_KEY, "pieces", url],
     queryFn: () => getJson(url),
     staleTime: STALE_MS,
   });
+  const rows = queue === "chipPending" ? [...data].sort(byChipTrouble) : data;
+  const open = (id: string) => (isDesktop ? setPane(id) : go(`/pieces/${id}?from=${queue}`));
+  // A phone has no pop-up: a shared ?piece= link shows the piece's page.
+  if (!isDesktop && paneId) return <PieceDetail id={paneId} go={go} />;
+  const list = (
+    <SectionCard
+      accent="tags"
+      icon={ClipboardCheck}
+      title={`${t(card.labelKey)} (${isLoading ? "…" : data.length})`}
+      actions={canManage ? (
+        <FilterSelect value={org} onChange={(next) => filters.set({ org: next })} placeholder={tg("allOrganizations")} options={organizationFilterOptions(organizations, org, (id) => tg("organizationNumber", { id }))} icon={Network} testId="admin-queue-org" />
+      ) : undefined}
+    >
+      <p className="mb-3 text-sm text-white/60">{t(card.actionKey)}</p>
+      {isLoading ? (
+        <Loading rows={4} />
+      ) : error ? (
+        <LoadError what={t("thePieces")} error={error} onRetry={() => void refetch()} />
+      ) : (
+        <PieceTable
+          pieces={rows}
+          onOpen={open}
+          selectedId={paneId}
+          columns={queue === "chipPending" ? ["customer", "reseller", "chip"] : queue === "scannedNotLive" ? ["customer", "reseller", "scanned"] : ["reseller", "batch"]}
+          pageSize={50}
+          empty={t("queueEmpty")}
+        />
+      )}
+    </SectionCard>
+  );
   return (
     <div className="min-w-0 space-y-4" data-testid={`admin-tags-queue-${queue}`}>
-      <BackLink onBack={() => go("/overview")}>{t("backToOverview")}</BackLink>
-      <SectionCard accent="tags" icon={ClipboardCheck} title={`${t(card.labelKey)} (${isLoading ? "…" : data.length})`}>
-        <p className="mb-3 text-xs text-white/50">{t(card.hintKey)}</p>
-        {isLoading ? (
-          <Loading rows={4} />
-        ) : error ? (
-          <LoadError what={t("thePieces")} error={error} onRetry={() => void refetch()} />
-        ) : (
-          <PieceTable
-            pieces={data}
-            onOpen={(id) => go(`/pieces/${id}`)}
-            columns={queue === "chipPending" ? ["customer", "reseller", "chip"] : queue === "scannedNotLive" ? ["customer", "reseller", "lastInteraction"] : ["reseller", "batch"]}
-            pageSize={50}
-            empty={t("queueEmpty")}
-          />
-        )}
-      </SectionCard>
+      <BackLink onBack={() => navigate("/admin")}>{tw("todayTitle")}</BackLink>
+      {isDesktop ? (
+        <MasterDetail popup closeLabel={tc("close")} onClose={() => setPane(null)} list={list} detail={paneId ? <PieceDetail key={paneId} id={paneId} go={go} onClose={() => setPane(null)} /> : null} />
+      ) : (
+        list
+      )}
     </div>
   );
 }

@@ -30,11 +30,13 @@ function usePendingOrders() {
 
 type Today = { blocks: TodayBlock[]; loading: boolean; error: unknown; retry: () => void };
 
-/** Platform: people to approve and Stuscle orders to separate, then its own company's production and Tags queues. */
+/**
+ * Platform: people to approve, Stuscle orders to separate and the Tags queues of every organization (the list a queue
+ * opens holds every organization's pieces, so its count does too), then its own company's production.
+ */
 function usePlatformToday(me: XpotMeResponse | undefined): Today {
-  // The company's numbers, not the whole fleet's: the company is one of the platform's organizations.
   const companyId = me?.organizations?.find((organization) => organization.slug === COMPANY_ORGANIZATION_SLUG)?.id;
-  const overview = useTagOverview(companyId);
+  const overview = useTagOverview();
   const requests = usePrintRequests("all", undefined, companyId);
   const orders = usePendingOrders();
   const people = useQuery<Array<{ access: string }>>({ queryKey: ["/api/xpot/admin/reps"] });

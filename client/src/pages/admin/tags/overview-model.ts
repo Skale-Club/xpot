@@ -31,10 +31,17 @@ export function needsActionQueues(counts: TagQueueCounts, isAdmin: boolean): Que
   return QUEUES.filter((q) => isAdmin || !q.adminOnly).map(({ adminOnly: _adminOnly, ...q }) => ({ ...q, count: counts[q.id] }));
 }
 
+/** What to do on a piece queue's list page: the one sentence under its title. */
+const QUEUE_ACTION: Record<TagPieceQueue, FlowKey> = {
+  chipPending: "queueChipPendingAction",
+  scannedNotLive: "queueScannedNotLiveAction",
+  noProduct: "queueNoProductAction",
+};
+
 /** The labels of a piece queue's own list page. */
-export function pieceQueueCard(queue: TagPieceQueue): Omit<QueueCard, "count"> {
+export function pieceQueueCard(queue: TagPieceQueue): Omit<QueueCard, "count"> & { actionKey: FlowKey } {
   const { adminOnly: _adminOnly, ...card } = QUEUES.find((q) => q.id === queue)!;
-  return card;
+  return { ...card, actionKey: QUEUE_ACTION[queue] };
 }
 
 // ─── Activity feed ────────────────────────────────────────────────────────────

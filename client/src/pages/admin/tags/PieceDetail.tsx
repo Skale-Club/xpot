@@ -10,6 +10,7 @@ import { PieceBody } from "@/components/piece/PieceBody";
 import { PieceProvider, type PieceContextValue } from "@/components/piece/PieceContext";
 import { PieceHeader } from "@/components/piece/PieceHeader";
 import type { PieceViewer } from "@/components/piece/pieceView";
+import { useIsDesktop } from "@/hooks/use-is-desktop";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient } from "@/lib/queryClient";
 import { useViewerAccess } from "@/lib/adminMode";
@@ -20,6 +21,9 @@ import { NfcProvisioningCard } from "./pieces-NfcProvisioningCard";
 import { useT } from "@/i18n";
 import { shellMessages } from "@/i18n/messages/shell";
 import { manageTagsPiecesMessages } from "@/i18n/messages/manageTagsPieces";
+import { adminTagsFlowMessages } from "@/i18n/messages/adminTagsFlow";
+import { isTagPieceQueue } from "@shared/tagQueues";
+import { pieceQueueCard } from "./overview-model";
 
 // Admin › Tags › a piece: the management side of the one piece screen
 // (components/piece), with every section. On a computer the working sections
@@ -31,6 +35,16 @@ type Go = (path: string) => void;
 
 function Back({ go }: { go: Go }) {
   const ts = useT(shellMessages);
+  const tf = useT(adminTagsFlowMessages);
+  // A piece opened from a Today queue goes back to that queue, not to Stock.
+  const from = new URLSearchParams(window.location.search).get("from");
+  if (isTagPieceQueue(from)) {
+    return (
+      <span data-testid="admin-piece-back">
+        <BackLink onBack={() => go(`/overview/${from}`)}>{tf(pieceQueueCard(from).labelKey)}</BackLink>
+      </span>
+    );
+  }
   return (
     <span data-testid="admin-piece-back">
       <BackLink onBack={() => go("/pieces")}>{ts("managePieces")}</BackLink>
@@ -44,6 +58,7 @@ export function PieceDetail({ id, go, onClose }: { id: string; go: Go; /** Shown
   const access = useViewerAccess();
   const modules = useXpotModules();
   const { prints } = useProductionAccess();
+  const isDesktop = useIsDesktop();
   const queryKey = [ADMIN_TAGS_KEY, "piece", id];
   const { data: tag, isLoading, error, refetch } = useQuery<TagDetail>({
     queryKey,
@@ -53,9 +68,10 @@ export function PieceDetail({ id, go, onClose }: { id: string; go: Go; /** Shown
   });
   const changed = useCallback((detail: TagDetail) => queryClient.setQueryData(queryKey, detail), [id]); // eslint-disable-line react-hooks/exhaustive-deps
   const viewer = useMemo<PieceViewer>(
-    // Management URLs keep the piece in the manager's or super admin's workspace.
-    () => ({ surface: "admin", canManage: access.hasAdminAccess, isAdmin: access.isSuperAdmin, hasVisits: modules.includes("visits"), repId: access.me?.rep.id ?? null, producesPrints: prints }),
-    [access.hasAdminAccess, access.isSuperAdmin, prints, modules, access.me?.rep.id],
+    // Management URLs keep the piece in the workspace of whoever manages it: the platform, a partner or an owner (the
+    // server scopes every call to their organization). The desk writer and the production notes stay the admin's.
+    () => ({ surface: "admin", canManage: access.adminMode, isAdmin: access.isSuperAdmin, hasVisits: modules.includes("visits"), repId: access.me?.rep.id ?? null, producesPrints: prints }),
+    [access.adminMode, access.isSuperAdmin, prints, modules, access.me?.rep.id],
   );
 
   const top = onClose ? <PaneBar fullHref={`/admin/tags/pieces/${encodeURIComponent(id)}`} onClose={onClose} testId="admin-piece-pane" /> : <Back go={go} />;
@@ -88,7 +104,7 @@ export function PieceDetail({ id, go, onClose }: { id: string; go: Go; /** Shown
         {top}
         <PieceHeader tag={tag} />
         <PieceBody
-          layout={onClose ? "stack" : "columns"}
+          layout={onClose || !isDesktop ? "stack" : "columns"}
           desktopWriter={
             <NfcProvisioningCard
               tagId={tag.id}
