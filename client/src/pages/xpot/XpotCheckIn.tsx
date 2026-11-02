@@ -359,6 +359,13 @@ export function XpotCheckIn() {
   const [checkoutStatus, setCheckoutStatus] = useState<VisitStatus | null>(null);
   const [createLeadDialogOpen, setCreateLeadDialogOpen] = useState(false);
   const [activeVisitPanel, setActiveVisitPanel] = useState<"sales" | "note" | "checkout" | "cancel" | null>(null);
+  // Expiration can finish a visit while a dialog is open, without navigating away.
+  // Its choice and open panel must not carry over into the next check-in.
+  useEffect(() => {
+    setCheckoutStatus(null);
+    setActiveVisitPanel(null);
+    setEditLeadOpen(false);
+  }, [activeVisit?.id]);
   // A sale recorded during the visit makes "Sale made" the result it starts with at check-out.
   const visitHasSale = ((activeVisit as { visitSales?: { transactions: number } } | null)?.visitSales?.transactions ?? 0) > 0;
   const activeLeadDetails: VisitLead | null = activeVisit?.lead
