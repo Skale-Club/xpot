@@ -117,7 +117,8 @@ async function lockFulfillmentTags(tx: Tx, rawCodes: string[]) {
     .from(tags)
     .leftJoin(tagBatches, eq(tags.batchId, tagBatches.id))
     .where(inArray(tags.publicCode, normalized))
-    .for("update");
+    // Only the pieces are locked: Postgres refuses FOR UPDATE on the nullable side of the batch join.
+    .for("update", { of: tags });
   if (rows.length !== normalized.length) throw new TagSaleError("One or more pieces were not found", 404, "tag_not_found");
   // Orders are fulfilled from the company's stock: another organization's house pieces are not ours to hand over.
   const companyId = await companyOrganizationId();
@@ -140,6 +141,7 @@ export async function fulfillAcquisition(acquisitionId: string, codes: string[],
 
     const [kit] = await tx.insert(tagKits).values({
       organizationId,
+      sourceOrganizationId: await companyOrganizationId(),
       repId: acquisition.repId,
       note: acquisition.source === "stuscle" ? `Stuscle order ${acquisition.externalRef}` : "Manual acquisition",
       createdByUserId: userId,
@@ -212,9 +214,17 @@ export async function listAcquisitions(filter: { repId?: number; organizationIds
     .from(salesReps)
     .where(inArray(salesReps.id, Array.from(new Set(acquisitions.map((item) => item.repId)))));
   const repNames = new Map(reps.map((rep) => [rep.id, rep.displayName]));
+  // The product's own name ("Large Plate"), so the screen never shows the store's SKU.
+  const productIds = Array.from(new Set(lines.map((line) => line.salesProductId).filter((id): id is number => id !== null)));
+  const products = productIds.length ? await db.select({ id: salesProducts.id, name: salesProducts.name }).from(salesProducts).where(inArray(salesProducts.id, productIds)) : [];
+  const productNames = new Map(products.map((product) => [product.id, product.name]));
   return acquisitions.map((acquisition) => ({
     acquisition,
     repName: repNames.get(acquisition.repId) ?? null,
-    lines: lines.filter((line) => line.acquisitionId === acquisition.id).map((line) => ({ ...line, fulfilledUnits: countByLine.get(line.id) ?? 0 })),
+    lines: lines.filter((line) => line.acquisitionId === acquisition.id).map((line) => ({
+      ...line,
+      fulfilledUnits: countByLine.get(line.id) ?? 0,
+      productName: line.salesProductId !== null ? productNames.get(line.salesProductId) ?? null : null,
+    })),
   }));
 }
