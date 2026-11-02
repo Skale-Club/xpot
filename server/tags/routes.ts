@@ -1019,10 +1019,8 @@ export function registerTagRoutes(app: Express) {
   app.post("/api/xpot/admin/tag-kits/return", requireTagManager, async (req, res) => {
     try {
       const { codes } = z.object({ codes: codeList }).strict().parse(req.body);
-      const scope = tagScopeOf(req);
-      // Back into the receiver's house stock: the company's, or (an owner running one organization, or the pieces' own) theirs.
-      const house = scope === null ? undefined : scope.length === 1 ? scope[0] : (await repo.getOrganizationOfCode(codes[0]));
-      res.json(await repo.returnToHouse(codes, userIdOf(req), "admin", scope, house ?? undefined));
+      // Each piece goes back into the stock of the organization its kit came from (repo.returnToHouse).
+      res.json(await repo.returnToHouse(codes, userIdOf(req), "admin", tagScopeOf(req)));
     } catch (err) {
       fail(res, err, "Failed to return pieces");
     }

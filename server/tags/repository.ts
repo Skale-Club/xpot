@@ -1,6 +1,7 @@
 import { and, eq, inArray, isNull, sql, type SQL } from "drizzle-orm";
 import { db } from "../db.js";
 import {
+  organizations,
   salesLeads,
   salesProducts,
   salesReps,
@@ -40,7 +41,7 @@ import type {
 import { JOURNEY_PRODUCT_LABELS, tagActionEntry, type JourneySource } from "#shared/tagJourney.js";
 import { resolveTagFace } from "#shared/tagFace.js";
 import type { TagStockMetric } from "#shared/tagMetrics.js";
-import { kitCode } from "#shared/tagKits.js";
+import { kitCode, takeBackDestination } from "#shared/tagKits.js";
 import { tagSystemReason } from "#shared/tagReasons.js";
 import { checkCodes, handOutBlocker, takeBackBlocker, type DistributionCheck, type DistributionPiece } from "#shared/tagDistribution.js";
 import type { TagPieceQueue } from "#shared/tagQueues.js";
@@ -893,7 +894,7 @@ export async function deliverKit(input: KitInput, userId: string | null, source:
 
     const [kit] = await tx
       .insert(tagKits)
-      .values({ organizationId, repId: input.repId, note: input.note ?? null, createdByUserId: userId })
+      .values({ organizationId, sourceOrganizationId: input.sourceOrganizationId ?? null, repId: input.repId, note: input.note ?? null, createdByUserId: userId })
       .returning({ id: tagKits.id });
     const now = new Date();
     const ownershipType = input.unitCostCents === undefined ? "company" : input.ownershipType ?? "rep";
@@ -993,8 +994,9 @@ export async function listKits(filter: { repId?: number; kitId?: string; organiz
     id: string; kit_number: number; rep_id: number; rep_name: string | null; note: string | null; created_at: Date; piece_count: number;
     unsold_count: number; returnable_count: number; sold_count: number; acquisition_source: string | null; unit_cost_cents: number | null;
     handed_out: number; returned: number; moved: number; ownership_type: string | null;
+    organization_id: number; source_organization_id: number | null;
   }>(sql`
-    SELECT k.id, k.kit_number, k.rep_id, r.display_name AS rep_name, k.note, k.created_at,
+    SELECT k.id, k.kit_number, k.rep_id, r.display_name AS rep_name, k.note, k.created_at, k.organization_id, k.source_organization_id,
       count(t.id)::int AS piece_count,
       count(t.id) FILTER (WHERE t.rep_id = k.rep_id AND ${stockMetricSql("withResellers")})::int AS unsold_count,
       count(t.id) FILTER (WHERE t.rep_id = k.rep_id AND ${stockMetricSql("returnable")})::int AS returnable_count,
@@ -1026,10 +1028,16 @@ export async function listKits(filter: { repId?: number; kitId?: string; organiz
       ORDER BY m.created_at LIMIT 1
     ) own ON true
     WHERE ${sql.join(conds, sql` AND `)}
-    GROUP BY k.id, r.display_name, acq.source, acq.unit_cost_cents, items.handed_out, items.returned, items.moved, own.to_ownership_type
+    GROUP BY k.id, k.organization_id, k.source_organization_id, r.display_name, acq.source, acq.unit_cost_cents, items.handed_out, items.returned, items.moved, own.to_ownership_type
     ORDER BY k.created_at DESC
   `);
-  return list.map((k) => {
+  // Where "Take back unsold" sends this kit's pieces, for the person asking (a kit's pieces sit in the receiver's organization).
+  const companyId = await companyOrganizationId();
+  const destinations = list.map((k) => takeBackDestination({
+    kitSourceOrganizationId: k.source_organization_id, pieceOrganizationId: k.organization_id, companyOrganizationId: companyId, scope: filter.scope ?? null,
+  }));
+  const names = await organizationNames(Array.from(new Set(destinations)));
+  return list.map((k, index) => {
     const pieceCount = Number(k.piece_count);
     const soldCount = Number(k.sold_count);
     return {
@@ -1052,6 +1060,7 @@ export async function listKits(filter: { repId?: number; kitId?: string; organiz
       soldCount,
       acquisitionSource: k.acquisition_source,
       unitCostCents: k.unit_cost_cents === null ? null : Number(k.unit_cost_cents),
+      takeBackTo: { organizationId: destinations[index], name: names.get(destinations[index]) ?? "", company: destinations[index] === companyId },
     };
   });
 }
@@ -1091,12 +1100,13 @@ export async function getKitItems(kitId: string, scope: OrganizationScope = null
 type CheckRow = {
   id: string; public_code: string; status: string; stock_status: string; rep_id: number | null; rep_name: string | null;
   serial_number: number | null; batch_code: string | null; product_type: string; kit_number: number | null; sold: boolean;
+  organization_id: number; kit_source_organization_id: number | null; ownership_type: string;
 };
 
 async function piecesForCheck(where: SQL, limit?: number): Promise<CheckRow[]> {
   return rows<CheckRow>(sql`
     SELECT t.id, t.public_code, t.status, t.stock_status, t.rep_id, r.display_name AS rep_name, t.serial_number, b.batch_code,
-           t.product_type, k.kit_number,
+           t.product_type, k.kit_number, t.organization_id, k.source_organization_id AS kit_source_organization_id, t.ownership_type,
            EXISTS (SELECT 1 FROM sales_sale_tags st WHERE st.tag_id = t.id AND st.status = 'active') AS sold
     FROM tags t
     LEFT JOIN sales_reps r ON r.id = t.rep_id
@@ -1141,10 +1151,21 @@ export async function checkHandOut(
   return checkCodes(codes, new Map(found.map((r) => [r.public_code, r])), (r) => handOutBlocker(checkPiece(r)), describeCheck);
 }
 
-/** Take back, dry run: per code, can it come back to house stock now and why not. Nothing moves. */
+/**
+ * Take back, dry run: per code, can it come back to stock now and why not, and for a piece that can, whose stock it
+ * goes into (the same destination returnToHouse uses). Nothing moves.
+ */
 export async function checkTakeBack(codes: string[], scope: OrganizationScope = null): Promise<DistributionCheck> {
   const found = codes.length ? await piecesForCheck(sql`t.public_code IN ${sqlList(Array.from(new Set(codes)))} AND ${inOrganizations(sql`t.organization_id`, scope)}`) : [];
-  return checkCodes(codes, new Map(found.map((r) => [r.public_code, r])), (r) => takeBackBlocker(checkPiece(r)), describeCheck);
+  const companyId = await companyOrganizationId();
+  const destinationOf = (r: CheckRow) => takeBackDestination({ kitSourceOrganizationId: r.kit_source_organization_id, pieceOrganizationId: r.organization_id, companyOrganizationId: companyId, scope });
+  const names = await organizationNames(Array.from(new Set(found.filter((r) => takeBackBlocker(checkPiece(r)) === null).map(destinationOf))));
+  return checkCodes(codes, new Map(found.map((r) => [r.public_code, r])), (r) => takeBackBlocker(checkPiece(r)), (code, r) => ({
+    ...describeCheck(code, r),
+    goesTo: r && takeBackBlocker(checkPiece(r)) === null ? { organizationId: destinationOf(r), name: names.get(destinationOf(r)) ?? "", company: destinationOf(r) === companyId } : null,
+    // Bought by the reseller: taking it back does not give their money back.
+    bought: r?.ownership_type === "rep",
+  }));
 }
 
 /** `(a, b, c)` for an IN list (never empty: callers check). */
@@ -1152,17 +1173,17 @@ function sqlList(values: readonly string[]): SQL {
   return sql`(${sql.join(values.map((v) => sql`${v}`), sql`, `)})`;
 }
 
-/** The organization holding a piece, by printed code. */
-export async function getOrganizationOfCode(code: string): Promise<number | null> {
-  const [tag] = await db.select({ organizationId: tags.organizationId }).from(tags).where(eq(tags.publicCode, code)).limit(1);
-  return tag?.organizationId ?? null;
+/** What Take back needs to know about the organizations: its name, and the company's id. */
+async function organizationNames(ids: readonly number[]): Promise<Map<number, string>> {
+  const list = ids.length ? await db.select({ id: organizations.id, name: organizations.name }).from(organizations).where(inArray(organizations.id, [...ids])) : [];
+  return new Map(list.map((o) => [o.id, o.name]));
 }
 
-/** Admin: unsold pieces back from a reseller to house stock (kit returned, reseller left). */
 /**
- * Unsold pieces a reseller hands back go to house stock. A typo must not pass
- * silently: unknown codes are refused, and pieces already in house stock are
- * reported instead of counted.
+ * Admin: unsold pieces back from a reseller to stock (kit returned, reseller left). A piece goes back to the
+ * organization its kit came from (shared/tagKits.ts takeBackDestination), and the answer says where each group went.
+ * A typo must not pass silently: unknown codes are refused, and pieces already in house stock are reported instead
+ * of counted.
  */
 export async function returnToHouse(
   codes: string[],
@@ -1170,23 +1191,23 @@ export async function returnToHouse(
   source: JourneySource = "admin",
   /** Whose pieces may come back: another organization's codes read as unknown. */
   scope: OrganizationScope = null,
-  /** Whose house stock they come back to; the owner of an organization takes them into its stock. Default: the company's. */
-  houseOrganizationId?: number,
-): Promise<{ returned: number; alreadyInHouse: string[] }> {
-  const organizationId = houseOrganizationId ?? await companyOrganizationId();
+): Promise<{ returned: number; alreadyInHouse: string[]; to: Array<{ organizationId: number; name: string; company: boolean; count: number }> }> {
+  const companyId = await companyOrganizationId();
   let moved: Array<{
     id: string; publicCode: string; repId: number | null; kitId: string | null; stockStatus: string;
-    ownershipType: string; custodianRepId: number | null;
+    ownershipType: string; custodianRepId: number | null; destination: number;
   }> = [];
   const result = await db.transaction(async (tx) => {
     const picked = await tx
       .select({
         id: tags.id, publicCode: tags.publicCode, status: tags.status, stockStatus: tags.stockStatus,
         ownershipType: tags.ownershipType, custodianRepId: tags.custodianRepId, repId: tags.repId, kitId: tags.kitId,
+        organizationId: tags.organizationId, kitSourceOrganizationId: tagKits.sourceOrganizationId,
       })
       .from(tags)
+      .leftJoin(tagKits, eq(tags.kitId, tagKits.id))
       .where(scope === null ? inArray(tags.publicCode, codes) : and(inArray(tags.publicCode, codes), inArray(tags.organizationId, [...scope])))
-      .for("update");
+      .for("update", { of: tags });
     const found = new Set(picked.map((t) => t.publicCode));
     const missing = codes.filter((c) => !found.has(c));
     if (missing.length) throw new TagError(`Unknown codes: ${missing.join(", ")}`, 404, "tag_codes_unknown", { codes: missing.join(", ") });
@@ -1200,26 +1221,31 @@ export async function returnToHouse(
     const configured = picked.filter((t) => t.status !== "inventory" || t.stockStatus !== "available").map((t) => t.publicCode);
     if (configured.length) throw new TagError(`Clear the customer of these set-up pieces before returning them: ${configured.join(", ")}`, 409, "return_configured", { codes: configured.join(", ") });
     const alreadyInHouse = picked.filter((t) => t.repId === null).map((t) => t.publicCode);
-    const moving = picked.filter((t) => t.repId !== null);
+    const moving = picked.filter((t) => t.repId !== null).map((t) => ({
+      ...t,
+      destination: takeBackDestination({ kitSourceOrganizationId: t.kitSourceOrganizationId, pieceOrganizationId: t.organizationId, companyOrganizationId: companyId, scope }),
+    }));
     if (moving.length) {
       const now = new Date();
       await tx
         .update(tagAcquisitionUnits)
         .set({ returnedAt: now })
         .where(and(inArray(tagAcquisitionUnits.tagId, moving.map((t) => t.id)), isNull(tagAcquisitionUnits.returnedAt)));
-      await tx
-        .update(tags)
-        .set({
-          organizationId,
-          repId: null,
-          kitId: null,
-          custodianRepId: null,
-          ownershipType: "company",
-          stockStatus: "available",
-          stockUpdatedAt: now,
-          updatedAt: now,
-        })
-        .where(inArray(tags.id, moving.map((t) => t.id)));
+      for (const organizationId of Array.from(new Set(moving.map((t) => t.destination)))) {
+        await tx
+          .update(tags)
+          .set({
+            organizationId,
+            repId: null,
+            kitId: null,
+            custodianRepId: null,
+            ownershipType: "company",
+            stockStatus: "available",
+            stockUpdatedAt: now,
+            updatedAt: now,
+          })
+          .where(inArray(tags.id, moving.filter((t) => t.destination === organizationId).map((t) => t.id)));
+      }
       await markKitItemsLeft(tx, moving.map((t) => ({ kitId: t.kitId, tagId: t.id })), "returned", now);
       await tx.insert(tagStockMovements).values(moving.map((tag) => ({
         tagId: tag.id,
@@ -1239,6 +1265,14 @@ export async function returnToHouse(
     }
     return { returned: moving.length, alreadyInHouse };
   });
+  const destinations = Array.from(new Set(moved.map((t) => t.destination)));
+  const names = await organizationNames(destinations);
+  const to = destinations.map((organizationId) => ({
+    organizationId,
+    name: names.get(organizationId) ?? "",
+    company: organizationId === companyId,
+    count: moved.filter((t) => t.destination === organizationId).length,
+  }));
   if (moved.length) {
     const reps = new Set(moved.map((t) => t.repId));
     const kits = new Set(moved.map((t) => t.kitId));
@@ -1247,7 +1281,7 @@ export async function returnToHouse(
     await recordJourney({
       kind: "execution",
       action: "returned_to_house",
-      title: `${moved.length} ${moved.length === 1 ? "piece" : "pieces"} returned to company stock${rep ? ` by ${rep.name}` : ""}`,
+      title: `${moved.length} ${moved.length === 1 ? "piece" : "pieces"} returned to ${to.length !== 1 ? "stock" : to[0].organizationId === companyId ? "company stock" : `${to[0].name} stock`}${rep ? ` by ${rep.name}` : ""}`,
       repId,
       // Only a single kit: a batch id here would also make the entry
       // batch-wide for every piece of the batch.
@@ -1255,7 +1289,7 @@ export async function returnToHouse(
       metadata: { codes: moved.map((t) => t.publicCode), count: moved.length },
     }, journeyContext(userId, source));
   }
-  return result;
+  return { ...result, to };
 }
 
 // ─── Batches ──────────────────────────────────────────────────────────────────

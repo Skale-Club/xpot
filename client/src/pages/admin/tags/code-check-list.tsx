@@ -11,6 +11,7 @@ import { adminTagsFlowMessages } from "@/i18n/messages/adminTagsFlow";
 import { ADMIN_TAGS_KEY, errorMessage, sendJson } from "./api";
 import { reasonKey } from "./distribution-model";
 import { useTagLabels } from "./labels";
+import { useStockLabel } from "./take-back-destination";
 
 // The code list Hand out and Take back build: every code with the server's dry-run answer (can it go / come back,
 // and why not), newest first, each removable. The dry run moves nothing (POST …/tag-kits/check, …/return/check).
@@ -61,6 +62,7 @@ export function CodeCheckList({
 }) {
   const t = useT(adminTagsFlowMessages);
   const labels = useTagLabels();
+  const stockLabel = useStockLabel();
   if (codes.length === 0) {
     return <EmptyState compact dense tone="tags" icon={ListChecks} title={t(kind === "handOut" ? "listEmptyHandOut" : "listEmptyTakeBack")} cardStyle={{}} />;
   }
@@ -107,7 +109,9 @@ export function CodeCheckList({
                 {!item ? (
                   <Pill tone="muted">{t("listChecking")}</Pill>
                 ) : item.ok ? (
-                  <Pill tone="violet">{t(kind === "handOut" ? "statusReady" : "statusCanComeBack")}</Pill>
+                  <Pill tone="violet" className="!whitespace-normal text-left">
+                    {kind === "handOut" ? t("statusReady") : item.goesTo ? t("statusBackTo", { stock: stockLabel(item.goesTo) }) : t("statusCanComeBack")}
+                  </Pill>
                 ) : (
                   <Pill tone={item.reason === "unknown" ? "red" : "amber"} className="!whitespace-normal text-left">
                     {key ? t(key, { name: item.repName ?? "" }) : item.reason}

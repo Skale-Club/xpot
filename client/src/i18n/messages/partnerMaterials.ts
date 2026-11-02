@@ -45,7 +45,7 @@ const en = {
   releasedEmpty: "No model in the catalog yet.",
   releasedError: "Could not load the catalog.",
 
-  newPartner: "New partner",
+  newPartner: "New partner that prints",
   newPartnerTitle: "New partner",
   newPartnerIntro: "Creates the person, their organization and the models it may print, in one step. They sign in with their phone.",
   partnerOrgName: "Organization name",
@@ -106,7 +106,7 @@ export const partnerMaterialsMessages: Dictionary<typeof en> = {
     releasedEmpty: "Ainda não há modelo no catálogo.",
     releasedError: "Não foi possível carregar o catálogo.",
 
-    newPartner: "Novo parceiro",
+    newPartner: "Novo parceiro que imprime",
     newPartnerTitle: "Novo parceiro",
     newPartnerIntro: "Cria a pessoa, a organização dela e os modelos que pode imprimir, em um só passo. Ela entra com o telefone.",
     partnerOrgName: "Nome da organização",
@@ -164,7 +164,7 @@ export const partnerMaterialsMessages: Dictionary<typeof en> = {
     releasedEmpty: "Aún no hay modelos en el catálogo.",
     releasedError: "No se pudo cargar el catálogo.",
 
-    newPartner: "Nuevo socio",
+    newPartner: "Nuevo socio que imprime",
     newPartnerTitle: "Nuevo socio",
     newPartnerIntro: "Crea a la persona, su organización y los modelos que puede imprimir, en un solo paso. Entra con su teléfono.",
     partnerOrgName: "Nombre de la organización",

@@ -181,6 +181,7 @@ Problema: sob "MY COMPANY", Pieces results soma 415 scans e o Top pieces traz Je
 Mudança: tirar o título "MY COMPANY" do menu e agrupar por tarefa (seção Navegação final). Pieces results e Stock ganham a etiqueta "All organizations" (PT "Todas as organizações", ES "Todas las organizaciones") no filtro, para deixar claro o alcance.
 Arquivos: client/src/components/xpot/moduleNav.ts:336-357
 Risco: decisão do dono: a plataforma quer abrir na própria empresa ou em todas? Recomendo todas, com o filtro à vista, porque é o que as telas já fazem.
+Status: pendente (o titulo "MY COMPANY" e as etiquetas do menu estao em `moduleNav.ts`, da F1). Na tela de Entregar o filtro "All organizations" ja fica a vista no historico.
 
 ### NAV-4 [S1] Take back não diz para qual estoque vai, e pode mudar a peça de empresa
 Telas: platform/en-desktop/panel-kits-returns, platform/en-desktop/panel-kits-history, owner-multi/en-desktop/panel-kits-history
@@ -188,6 +189,7 @@ Problema: a tela só diz "company stock". Do código, não visto em tela: quando
 Mudança: devolver cada peça à empresa dona dela, agrupando no servidor. O botão e a confirmação dizem o destino: "Back to Harbor Print Co. stock" (PT "Volta ao estoque de Harbor Print Co.", ES "Vuelve al stock de Harbor Print Co."). Precisa de teste em `tests/tags/custody.integration.test.ts`.
 Arquivos: server/tags/routes.ts:1017-1027, server/tags/repository.ts:1152-1205, client/src/pages/admin/tags/returns-station.tsx
 Risco: regra de negócio. Recomendo voltar à organização de onde o kit saiu; conferir antes a entrega entre organizações ligadas, em que a organização atual da peça pode não ser a de origem, e se algum fluxo depende de ir para a Skale Club.
+Status: feito. `tag_kits.source_organization_id` (migracao 0072, aditiva, preenchida pelo lote das pecas quando nao ha duvida); regra pura `takeBackDestination` com teste de tabela e `tests/tags/takeBackOrigin.integration.test.ts`. A lista de Take back diz "Back to Harbor Print Co. stock" por peca, a confirmacao e o aviso depois dizem para onde foi. Dono de varias empresas: nunca empurra peca para empresa que nao alcanca (fica na empresa que a tem). Kit antigo sem origem mantem o destino antigo.
 
 ### NAV-5 [S3] Nome do painel repetido 6 vezes, e a moldura consome a tela
 Telas: platform/en-desktop/panel-today, partner/en-desktop/panel-today, owner/en-desktop/panel-today, platform/en-phone/panel-today
@@ -249,6 +251,7 @@ Mudança:
 Saem as pílulas "Cost rule" e "Can receive pieces" e a frase. Os avisos de bloqueio ficam. O campo de preço só aparece em "They buy them now" ou quando a regra exige (NAV-16). A nota vai para o passo de confirmar, recolhida.
 Arquivos: client/src/pages/admin/tags/kits-give-form.tsx:90-99,213-262, client/src/i18n/messages/adminTagsFlow.ts:59-78 (e blocos PT, ES), client/src/i18n/messages/manageTagsBatches.ts:116-117
 Risco: `consignment` sai da tela, não do banco. "Price" no lugar de "cost" é escolha de texto: confirme com o dono.
+Status: feito. "Who gets the pieces?" / "Who pays for them?", "They pay when they sell" / "They buy them now", "Usual for {name}", preco por peca; saem as pilulas e a frase de regra; nota recolhida no passo de confirmar. Dicas de "dele" trocadas por texto neutro em pt.
 
 ### NAV-11 [S2] Falta de custo só aparece no passo 4, longe do campo
 Telas: platform/en-desktop/handout-form-codes-checked, platform/en-desktop/handout-from-batch, platform/en-phone/handout-form-codes-checked, platform/en-phone/handout-from-batch
@@ -256,6 +259,7 @@ Problema: "Enter the cost per piece to continue." aparece em amarelo pequeno, ao
 Mudança: erro abaixo do próprio campo do preço, com borda. No botão apagado, o texto diz o que falta e leva ao campo: "Enter the price to continue" (PT "Informe o preço para continuar", ES "Indica el precio para continuar"). O aviso só aparece com peças na lista.
 Arquivos: client/src/pages/admin/tags/kits-give-form.tsx:238-246,374
 Risco: nenhum.
+Status: feito. Erro sob o proprio campo de preco (borda vermelha) so com pecas na lista; o botao diz "Enter the price to continue" e leva o foco ao campo.
 
 ### NAV-12 [S2] Porta do painel parece campo desabilitado, e há portas demais
 Telas: owner/en-phone/tags-home, platform/en-phone/visits-dashboard, platform/en-phone/settings-profile, platform/en-phone/settings-administration, platform/en-desktop/settings-administration
@@ -271,6 +275,7 @@ Problema: 7 de 8 kits são "Reseller purchase", e a tela disse antes que "the pi
 Mudança: em kit comprado, a confirmação acrescenta: "Jessica bought these pieces. Xpot does not refund: settle the money with them." (PT "Jessica comprou estas peças. O Xpot não faz reembolso: acerte o valor com ela.", ES "Jessica compró estas piezas. Xpot no hace reembolsos: arregla el importe con ella.")
 Arquivos: client/src/pages/admin/tags/kits-list.tsx:283-296, client/src/i18n/messages/manageTagsBatches.ts:153-157
 Risco: regra de negócio. O dono precisa confirmar que o dinheiro é mesmo acertado fora do sistema; recomendo o aviso até haver um fluxo de reembolso.
+Status: feito. Em kit comprado (Take back unsold, pecas marcadas e a tela Take back), a confirmacao acrescenta o aviso de que o Xpot nao reembolsa.
 
 ### NAV-14 [S2] Settings: "My organization", Add person repetido e "ask the platform" para o dono da plataforma
 Telas: platform/en-desktop/settings-administration, platform/en-phone/settings-profile
@@ -294,6 +299,7 @@ Problema: com Jessica, o card "Company-owned" diz que o custo é só referência
 Mudança: quando a regra exigir, o card diz "Jessica's rule requires a price." (PT "A regra de Jessica exige um preço.", ES "La regla de Jessica exige un precio."), usando o nome da pessoa. Sem outra dica no campo.
 Arquivos: client/src/pages/admin/tags/kits-give-form.tsx:142,233,240, client/src/i18n/messages/adminTagsFlow.ts:75,77
 Risco: regra de negócio mantida; só o texto muda.
+Status: feito. O card da regra diz "{name}'s rule requires a price." e o campo nao repete dica.
 
 ### NAV-17 [S2] Filas: nome antigo, sem ação e sem saber o que fazer
 Telas: platform/en-desktop/panel-tags-overview-chipPending, platform/en-desktop/panel-tags-overview-scannedNotLive, platform/en-desktop/panel-tags-overview-noProduct, owner/en-phone/panel-tags-overview-scannedNotLive
@@ -325,6 +331,7 @@ Problema: cada pedido tem um campo com Add, Use camera e uma caixa de texto para
 Mudança: cards recolhidos, abre um por vez. Um só campo, com a lista abaixo, como em Hand out. "Large Plate × 10" no lugar do SKU. Botão "Give 10 pieces to Jessica" (PT "Entregar 10 peças a Jessica", ES "Entregar 10 piezas a Jessica"). Etiqueta neutra.
 Arquivos: client/src/pages/admin/tags/KitsTab.tsx:112-145, client/src/i18n/messages/manageTagsBatches.ts:98-103
 Risco: o SKU precisa de mapeamento para nome de produto; sem ele, manter o SKU como fallback.
+Status: feito. Cartoes recolhidos (um aberto por vez; pedido unico abre sozinho), um campo so com a lista conferida como em Hand out, "Large Plate × 10" no lugar do SKU (nome do produto vem do servidor), botao "Give 10 pieces to Jessica", etiqueta ambar removida.
 
 ### NAV-20 [S2] "Pieces results" só mostra leituras, e números se repetem
 Telas: platform/en-desktop/panel-tags-overview, owner/en-desktop/panel-tags-overview, partner/en-desktop/panel-tags-overview, owner-multi/en-desktop/panel-tags-overview

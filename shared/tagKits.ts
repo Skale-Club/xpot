@@ -41,6 +41,24 @@ export function parseKitUnitCost(text: string, rule: KitCostPolicy | boolean): K
   return { ok: true, cents: Math.round(amount * 100) };
 }
 
+/**
+ * Whose stock a piece taken back goes into. The organization the kit came from (tag_kits.source_organization_id),
+ * when the person taking back can reach it: an owner never pushes pieces into an organization they cannot see.
+ * Otherwise the old destination: the company for the platform, the organization an owner runs, and for an owner of
+ * several, the one that holds the piece now. `scope` is the organizations the person reaches; null is the platform.
+ */
+export function takeBackDestination(input: {
+  kitSourceOrganizationId: number | null;
+  pieceOrganizationId: number;
+  companyOrganizationId: number;
+  scope: readonly number[] | null;
+}): number {
+  const { kitSourceOrganizationId: source, pieceOrganizationId: held, companyOrganizationId: company, scope } = input;
+  if (source !== null && (scope === null || scope.includes(source))) return source;
+  if (scope === null) return company;
+  return scope.length === 1 ? scope[0] : held;
+}
+
 /** A kit's short code, from its sequential number: 7 → "K-0007" (more digits once past 9999). */
 export function kitCode(kitNumber: number | null | undefined): string {
   if (!kitNumber || !Number.isInteger(kitNumber) || kitNumber < 1) return "K-????";

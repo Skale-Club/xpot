@@ -226,8 +226,8 @@ export function createOrganizationsRouter() {
     await assertOrganizationAccess(actor, organizationId, true);
     const since = teamActivitySince(req.query);
     if (!since) throw new OrganizationError("Choose a period of up to 400 days.", 400, "activity_period");
-    const members = await listOrganizationMembers(organizationId, actor);
-    return teamActivity(since, members.map((member) => member.repId));
+    // The work done on this organization's companies, by anyone: not the sum of its members' work in every organization.
+    return teamActivity(since, undefined, organizationId);
   }));
   // What the team bought: the owner follows the orders, they don't approve them (the payment is Stuscle's).
   router.get("/organizations/:organizationId/purchases", route(async (req) => {

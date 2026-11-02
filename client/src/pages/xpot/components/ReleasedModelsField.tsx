@@ -31,7 +31,7 @@ export function ReleasedModelsField({ value, onChange, disabled = false }: {
           <p className="text-sm text-white/85" aria-hidden="true">{m("releasedTitle")}</p>
           <p className="mt-0.5 text-xs text-white/40">{value === null ? m("releasedUnrestricted") : value.length ? m.plural("releasedCount", value.length) : m("releasedNone")}</p>
         </div>
-        {models.length ? (
+        {models.length && !disabled ? (
           <div className="flex gap-3 text-xs">
             <button type="button" className="text-violet-300 underline underline-offset-2 disabled:opacity-50" disabled={disabled} onClick={() => onChange(models.map((model) => model.slug))}>{m("releasedAll")}</button>
             <button type="button" className="text-white/60 underline underline-offset-2 disabled:opacity-50" disabled={disabled} onClick={() => onChange([])}>{m("releasedClear")}</button>

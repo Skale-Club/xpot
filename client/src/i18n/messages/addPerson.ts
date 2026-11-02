@@ -28,6 +28,8 @@ const en = {
   employeeHint: "You work for this company. Your pieces and customers stay under your name.",
   team: "People in this organization",
   openTeam: "Manage team",
+  companiesCount_one: "{count} company",
+  companiesCount_other: "{count} companies",
   soloHint: "Selling on your own? Add someone to work with you, like a partner or a relative. Each of you keeps your own pieces.",
 };
 
@@ -55,6 +57,8 @@ export const addPersonMessages: Dictionary<typeof en> = {
     employeeHint: "Você trabalha para esta empresa. Suas peças e clientes ficam no seu nome.",
     team: "Pessoas desta organização",
     openTeam: "Gerenciar equipe",
+    companiesCount_one: "{count} empresa",
+    companiesCount_other: "{count} empresas",
     soloHint: "Vende sozinho? Adicione alguém para trabalhar com você, como um sócio ou um parente. Cada um fica com as próprias peças.",
   },
   es: {
@@ -79,6 +83,8 @@ export const addPersonMessages: Dictionary<typeof en> = {
     employeeHint: "Trabajas para esta empresa. Tus piezas y clientes quedan a tu nombre.",
     team: "Personas de esta organización",
     openTeam: "Gestionar equipo",
+    companiesCount_one: "{count} empresa",
+    companiesCount_other: "{count} empresas",
     soloHint: "¿Vendes por tu cuenta? Agrega a alguien para trabajar contigo, como un socio o un familiar. Cada uno conserva sus propias piezas.",
   },
 };

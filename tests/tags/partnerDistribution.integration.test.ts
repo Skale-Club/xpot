@@ -148,6 +148,16 @@ test.skipIf(!enabled)("partner distribution: own hands kits to linked organizati
     assert.deepEqual(mine.json.map((p: any) => [p.id, p.organizationName ?? null]).sort(), [
       [rep["pd-linked-buyer"], "PD Linked"], [rep["pd-own-member"], null], [rep["pd-own-owner"], null],
     ].sort(), "their own people, then the linked organization's, labelled");
+    // Someone in two linked organizations is one person to hand to, naming both (not two options with the same id).
+    const linked2 = await org("pd-linked2", "PD Linked Two");
+    await db.execute(sql`INSERT INTO users (id, email, first_name, is_admin) VALUES ('pd-two', 'two@pd.test', 'Two', false)`);
+    const two = await one<{ id: number }>(sql`INSERT INTO sales_reps (user_id, display_name, email, role, is_active, cost_policy, cost_policy_configured_at) VALUES ('pd-two', 'PD Two', 'two@pd.test', 'rep', true, 'zero', now()) RETURNING id`);
+    await db.execute(sql`INSERT INTO organization_memberships (organization_id, rep_id, role) VALUES (${linked}, ${two.id}, 'member'), (${linked2}, ${two.id}, 'member')`);
+    await db.execute(sql`INSERT INTO organization_links (producer_id, seller_id) VALUES (${own}, ${linked2})`);
+    const twice = (await people("pd-own-owner")).json.filter((p: any) => p.id === two.id);
+    assert.deepEqual(twice.map((p: any) => p.organizationName), ["PD Linked, PD Linked Two"]);
+    await db.execute(sql`DELETE FROM organization_links WHERE seller_id = ${linked2}`);
+    await db.execute(sql`DELETE FROM organization_memberships WHERE rep_id = ${two.id}`);
     assert.deepEqual((await recipients("pd-usa-owner")).json, [], "a partner on xpot has none");
     assert.deepEqual((await recipients("pd-unlinked-owner")).json, []);
     assert.deepEqual((await recipients("pd-admin")).json, [], "the platform sees everyone, unlabelled");
