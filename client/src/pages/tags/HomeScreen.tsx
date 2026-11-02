@@ -327,7 +327,7 @@ export default function HomeScreen() {
             setSheet(null);
             navigate(directPath());
           }}
-          className="mt-4 min-h-10 w-full text-center text-sm text-white/50 underline-offset-2 hover:text-white/80 hover:underline"
+          className="mt-4 min-h-10 w-full text-center text-sm text-white/50 underline underline-offset-2 hover:text-white/80"
           data-testid="link-write-direct"
         >
           {t("navDirect")}
