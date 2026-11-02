@@ -267,6 +267,7 @@ export const salesVisits = pgTable("sales_visits", {
   scheduledAt: timestamp("scheduled_at"),
   checkedInAt: timestamp("checked_in_at"),
   checkedOutAt: timestamp("checked_out_at"),
+  expiredAt: timestamp("expired_at"),
   durationSeconds: integer("duration_seconds"),
   checkInLat: text("check_in_lat"),
   checkInLng: text("check_in_lng"),

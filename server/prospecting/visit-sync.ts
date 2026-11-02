@@ -92,11 +92,11 @@ export async function markStopOfVisitCheckedIn(tx: Tx, visitId: number) {
 }
 
 /** Checkout (or cancellation) of a visit that is a route stop. */
-export async function markStopOfVisitFinished(tx: Tx, visitId: number, cancelled: boolean) {
+export async function markStopOfVisitFinished(tx: Tx, visitId: number, cancelled: boolean, skipReason = "visit_cancelled") {
   const stop = await stopOfVisit(tx, visitId);
   if (stop) {
     // The visit itself just finished, so there is no planned visit to cancel.
-    await finishStop(tx, { ...stop, visitId: null }, cancelled ? { visited: false, skipReason: "visit_cancelled" } : { visited: true });
+    await finishStop(tx, { ...stop, visitId: null }, cancelled ? { visited: false, skipReason } : { visited: true });
   }
   return stop;
 }

@@ -25,6 +25,8 @@ import { Link, useLocation } from "wouter";
 import { fileSrc } from "@/lib/files";
 import { CompanyInlineEditor } from "./leads/CompanyInlineEditor";
 import { NewTaskDialog } from "./leads/TaskForm";
+import { InlineAlert } from "@/components/xpot/InlineAlert";
+import { VISIT_MAX_HOURS } from "@shared/visit-time-limit";
 
 export type VisitLike = {
   id: number;
@@ -34,6 +36,7 @@ export type VisitLike = {
   scheduledAt?: string | Date | null;
   checkedInAt?: string | Date | null;
   checkedOutAt?: string | Date | null;
+  expiredAt?: string | Date | null;
   durationSeconds?: number | null;
   note?: SalesVisitNote | null;
   visitSales?: { transactions: number; pieces: number; items?: number; totalCents: number };
@@ -68,7 +71,7 @@ function VisitOutcomeEditor({ visit }: { visit: VisitLike }) {
     }
   }
 
-  if (visit.status === "planned") return null;
+  if (visit.status === "planned" || visit.expiredAt) return null;
   if (isOpenVisit(visit)) {
     return (
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -198,7 +201,7 @@ export function VisitSummaryPage({ visit, onBack, onDelete }: { visit: VisitLike
               <div className="min-w-0 max-w-xl flex-1 basis-48">
                 <InlineField label="" large value={lead?.name || tl("leadNumber", { id: visit.leadId })} onSave={handleLeadNameSave} />
               </div>
-              <StatusBadge status={visit.status} />
+              <StatusBadge status={visit.status} expiredAt={visit.expiredAt} />
             </div>
             <p className="mt-1 text-xs text-white/40 first-letter:uppercase">{visitDate}</p>
             {lead?.phone ? (
@@ -220,7 +223,7 @@ export function VisitSummaryPage({ visit, onBack, onDelete }: { visit: VisitLike
       {/* The sales tile only when something was sold: "$0.00 · 0 sales" on every visit said nothing. */}
       <div className={`grid overflow-hidden rounded-2xl sm:grid-cols-2 ${hasSale ? "xl:grid-cols-4" : "xl:grid-cols-3"} ${GLASS_SUBTLE_CLASS}`}>
         <VisitMetric className="border-b sm:border-r xl:border-b-0" icon={<CalendarClock className="h-3.5 w-3.5" />} label={t("checkIn")} value={formatTime(visit.checkedInAt ?? visit.scheduledAt)} />
-        <VisitMetric className="border-b xl:border-b-0 xl:border-r" icon={<CalendarClock className="h-3.5 w-3.5" />} label={t("checkOut")} value={formatTime(visit.checkedOutAt)} />
+        <VisitMetric className="border-b xl:border-b-0 xl:border-r" icon={<CalendarClock className="h-3.5 w-3.5" />} label={t("checkOut")} value={visit.expiredAt ? "—" : formatTime(visit.checkedOutAt)} />
         <VisitMetric className={hasSale ? "border-b sm:border-b-0 sm:border-r" : ""} icon={<Clock3 className="h-3.5 w-3.5" />} label={t("duration")} value={formatDuration(visit.durationSeconds)} />
         {hasSale ? (
           <VisitMetric icon={<DollarSign className="h-3.5 w-3.5" />} label={t("visitSales")} value={formatCents(visit.visitSales?.totalCents ?? 0)} detail={`${t.plural("visitSalesN", visit.visitSales?.transactions ?? 0)} · ${t.plural("visitItemsN", visit.visitSales?.items ?? 0)}`} />
@@ -229,7 +232,9 @@ export function VisitSummaryPage({ visit, onBack, onDelete }: { visit: VisitLike
 
       <LocationExceptionNotice visit={visit} />
 
-      {visit.status !== "planned" ? (
+      {visit.expiredAt ? <InlineAlert tone="warning" title={t("visitExpired")}>{t("visitExpiredHint", { hours: VISIT_MAX_HOURS })}</InlineAlert> : null}
+
+      {visit.status !== "planned" && !visit.expiredAt ? (
         <section className={`rounded-2xl px-4 py-4 sm:px-6 ${GLASS_SUBTLE_CLASS}`}>
           <VisitOutcomeEditor visit={visit} />
         </section>
@@ -359,7 +364,7 @@ export function VisitRow({ visit, onOpen }: { visit: VisitLike; onOpen?: () => v
           <div className="mt-0.5 truncate text-[11px] tabular-nums text-white/45">
             {[when ? `${when.date} · ${when.time}` : "—", visit.lead?.locations?.[0]?.city].filter(Boolean).join(" · ")}
           </div>
-          <div className="mt-1.5 flex flex-wrap items-center gap-1.5"><StatusBadge status={visit.status} /><LocationExceptionBadge visit={visit} /></div>
+          <div className="mt-1.5 flex flex-wrap items-center gap-1.5"><StatusBadge status={visit.status} expiredAt={visit.expiredAt} /><LocationExceptionBadge visit={visit} /></div>
         </div>
         <ChevronRight className="mt-1 h-4 w-4 shrink-0 text-white/25" aria-hidden="true" />
       </div>

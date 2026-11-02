@@ -5,6 +5,9 @@ import type { Dictionary } from "../index";
 // check-in, visit and sync hooks. A sales lead is "cliente" in pt and es.
 
 const en = {
+  visitTimeLimit: "Visits close automatically after {hours} hours if you forget to check out.",
+  visitLimitReached: "Time limit reached",
+  visitExpired: "Closed automatically",
   // Active lead fields (inline edit)
   saved: "Saved",
   saveFailed: "Failed to save",
@@ -208,6 +211,9 @@ const en = {
 export const checkinMessages: Dictionary<typeof en> = {
   en,
   pt: {
+    visitTimeLimit: "A visita é encerrada automaticamente após {hours} horas se você esquecer o check-out.",
+    visitLimitReached: "Limite de tempo atingido",
+    visitExpired: "Encerrada automaticamente",
     saved: "Salvo",
     saveFailed: "Não foi possível salvar",
     fieldPhone: "Telefone",
@@ -392,6 +398,9 @@ export const checkinMessages: Dictionary<typeof en> = {
     useLocationInstead: "Tentar localização de novo",
   },
   es: {
+    visitTimeLimit: "La visita se cierra automáticamente después de {hours} horas si olvidas el check-out.",
+    visitLimitReached: "Límite de tiempo alcanzado",
+    visitExpired: "Cerrada automáticamente",
     saved: "Guardado",
     saveFailed: "No se pudo guardar",
     fieldPhone: "Teléfono",

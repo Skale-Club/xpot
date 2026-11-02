@@ -68,7 +68,7 @@ export function VisitsTable({
       key: "outcome",
       label: t("colOutcome"),
       cellClassName: "whitespace-nowrap",
-      render: (visit) => <div className="flex items-center gap-1.5"><StatusBadge status={visit.status} /><LocationExceptionBadge visit={visit} /></div>,
+      render: (visit) => <div className="flex items-center gap-1.5"><StatusBadge status={visit.status} expiredAt={visit.expiredAt} /><LocationExceptionBadge visit={visit} /></div>,
     },
     {
       key: "duration",

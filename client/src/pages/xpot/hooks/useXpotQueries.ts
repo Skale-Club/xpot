@@ -46,6 +46,7 @@ export function useXpotQueries() {
     queryKey: ["/api/xpot/me"],
     retry: false,
     refetchOnMount: true,
+    refetchInterval: (query) => query.state.data?.activeVisit ? 30_000 : false,
   });
 
   const xpotMeStatus = getHttpStatus(xpotMeQuery.error);

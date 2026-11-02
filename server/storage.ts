@@ -5,6 +5,7 @@
 
 import { and, asc, desc, eq, ilike, inArray, or, sql } from "drizzle-orm";
 import { db } from "./db.js";
+import { expireOverdueVisits } from "./visit-timeout.js";
 import { decryptSecret, encryptSecret } from "./lib/token-crypto.js";
 import {
   // Schema tables
@@ -736,6 +737,8 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getActiveSalesVisitForRep(repId: number): Promise<SalesVisit | undefined> {
+    // Also enforce the deadline immediately on resume / a new check-in, without waiting for the worker.
+    await expireOverdueVisits(repId);
     const [visit] = await db
       .select()
       .from(salesVisits)
