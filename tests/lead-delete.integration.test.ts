@@ -76,7 +76,7 @@ test.skipIf(!enabled)("deleting a company: free ones go with their records, held
   const rows = async (table: string, leadId: number) => (await one<{ n: number }>(sql`SELECT count(*)::int AS n FROM ${sql.raw(table)} WHERE lead_id = ${leadId}`)).n;
   const exists = async (leadId: number) => (await one<{ n: number }>(sql`SELECT count(*)::int AS n FROM sales_leads WHERE id = ${leadId}`)).n === 1;
   const listed = async (leadId: number) => (await api("GET", "/api/xpot/leads?limit=200", "ld-admin")).json.find((l: any) => l.id === leadId);
-  const NONE = { sales: 0, consignments: 0, pieces: 0, visits: 0, tasks: 0, deals: 0 };
+  const NONE = { orders: 0, sales: 0, consignments: 0, pieces: 0, visits: 0, tasks: 0, deals: 0 };
 
   try {
     const product = await one<{ id: number }>(sql`INSERT INTO sales_products (sku, name, kind, base_price_cents, is_active, consignable)

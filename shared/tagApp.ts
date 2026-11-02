@@ -265,9 +265,10 @@ export function parsePieceFilters(values: { status?: string | null; sale?: strin
 }
 
 export function matchesPieceFilters(
-  tag: { status: string; saleId: number | null; nfcStatus: string },
+  tag: { status: string; saleId: number | null; nfcStatus: string;customerOrderLineId?:string|null },
   filters: PieceFilters,
 ): boolean {
+  if(tag.customerOrderLineId && ['setup','finish','off'].includes(filters.status))return false;
   if (filters.status === "finish" && tag.status !== "assigned" && !chipNeedsWriting(tag)) return false;
   if (filters.status === "setup" && tag.status !== "inventory") return false;
   if (filters.status === "active" && tag.status !== "active") return false;
@@ -279,7 +280,7 @@ export function matchesPieceFilters(
 }
 
 /** What is waiting for a reseller, one number per kind, from the pieces they hold (the Home "To do" block). */
-export function resellerTodo(pieces: ReadonlyArray<{ status: string; saleId: number | null; nfcStatus: string }>): { finish: number; noCustomer: number; paused: number } {
+export function resellerTodo(pieces: ReadonlyArray<{ status: string; saleId: number | null; nfcStatus: string;customerOrderLineId?:string|null }>): { finish: number; noCustomer: number; paused: number } {
   const count = (status: PieceStatusFilter) => pieces.filter((piece) => matchesPieceFilters(piece, { status, sale: "all", chip: "all" })).length;
   return { finish: count("finish"), noCustomer: count("setup"), paused: count("off") };
 }

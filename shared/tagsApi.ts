@@ -13,6 +13,9 @@ export interface TagMetrics {
 }
 
 export interface TagListItem {
+  customerOrderLineId?: string | null;
+  customerOrderId?: string | null;
+  hasAcquisitionCost?: boolean;
   id: string;
   publicCode: string;
   serialNumber: number | null;
@@ -610,4 +613,4 @@ export interface McpConnectionItem {
 }
 
 /** What a static MCP token may do: every tool family (server/mcp/routes.ts). */
-export const MCP_TOKEN_SCOPES = ["xpot:journey", "xpot:prospecting", "xpot:tasks"] as const;
+export const MCP_TOKEN_SCOPES = ["xpot:journey", "xpot:prospecting", "xpot:tasks", "xpot:orders"] as const;

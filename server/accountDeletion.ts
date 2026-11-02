@@ -104,6 +104,8 @@ export async function deleteRepAccountRows(repId: number) {
         tx.selectDistinct({ id: salesConsignments.leadId }).from(salesConsignments).where(inArray(salesConsignments.leadId, ownedLeadIds)),
       ]);
       for (const row of [...withSales, ...withConsignments]) retainedLeadIds.add(row.id);
+      const orderLeads = await tx.execute(sql`SELECT DISTINCT lead_id FROM customer_orders WHERE lead_id IN (${sql.join(ownedLeadIds.map(id => sql`${id}`), sql`,`)})`);
+      for (const row of orderLeads.rows) retainedLeadIds.add(Number(row.lead_id));
     }
     const deletableLeadIds = ownedLeadIds.filter((id) => !retainedLeadIds.has(id));
     let visitsDeleted = deletableLeadIds.length
@@ -129,13 +131,13 @@ export async function deleteRepAccountRows(repId: number) {
     }
 
     // Opportunities, tasks and suggested actions the rep owns anywhere.
-    const opportunityIds = (await tx.select({ id: salesOpportunitiesLocal.id }).from(salesOpportunitiesLocal).where(eq(salesOpportunitiesLocal.repId, repId))).map((o) => o.id);
+    const opportunityIds = (await tx.select({ id: salesOpportunitiesLocal.id }).from(salesOpportunitiesLocal).where(and(eq(salesOpportunitiesLocal.repId, repId),sql`NOT EXISTS(SELECT 1 FROM customer_orders o WHERE o.opportunity_id=${salesOpportunitiesLocal.id})`))).map((o) => o.id);
     if (opportunityIds.length) {
       await tx.delete(salesTasks).where(inArray(salesTasks.opportunityId, opportunityIds));
       await tx.delete(salesSyncEvents).where(and(eq(salesSyncEvents.entityType, "sales_opportunity"), inArray(salesSyncEvents.entityId, opportunityIds.map(String))));
       await tx.delete(salesOpportunitiesLocal).where(inArray(salesOpportunitiesLocal.id, opportunityIds));
     }
-    await tx.delete(salesTasks).where(eq(salesTasks.repId, repId));
+    await tx.delete(salesTasks).where(and(eq(salesTasks.repId, repId),isNull(salesTasks.customerOrderId)));
     await tx.delete(salesVisitActions).where(eq(salesVisitActions.repId, repId));
     await tx.update(salesVisitNotes).set({ createdByRepId: null }).where(eq(salesVisitNotes.createdByRepId, repId));
 

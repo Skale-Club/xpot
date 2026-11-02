@@ -53,6 +53,8 @@ import { salesStorage } from "../storage-sales.js";
 import { companyOrganizationId, organizationIdForRep, printingOrganization } from "../organizations/service.js";
 import { handOutProducers } from "../organizations/links.js";
 import { handOutSource } from "./distribution.js";
+import { registerCustomerOrderRoutes } from "../customerOrders/routes.js";
+import { hideProfitFromMembers } from '../routes/xpot/profitVisibility.js';
 
 // Xpot Tags HTTP API. Four audiences:
 //   /q/:code, /n/:code           — public redirects printed/programmed on pieces
@@ -311,6 +313,8 @@ export function analyticsWindow(query: { range?: string; from?: string; to?: str
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function fail(res: Response, err: unknown, fallback: string) {
+  if ((err as {cause?:{message?:string}})?.cause?.message?.includes('order_piece_design')) return res.status(409).json({code:'order_piece_design',message:'This design belongs to a different customer order'});
+  if ((err as {cause?:{message?:string}})?.cause?.message?.includes('order_piece_allocated')) return res.status(409).json({code:'order_piece_allocated',message:'This piece is set aside for a customer order'});
   if (err instanceof repo.TagError) return res.status(err.status).json(repo.tagErrorBody(err));
   if (err instanceof TagSaleError) return res.status(err.status).json({ code: err.code, message: err.message, ...(err.params ? { params: err.params } : {}) });
   if (err instanceof z.ZodError) {
@@ -425,6 +429,8 @@ const completeSchema = z.object({
 // ─── Routes ───────────────────────────────────────────────────────────────────
 
 export function registerTagRoutes(app: Express) {
+  app.use(['/api/xpot/tags','/api/xpot/tag-sales'],hideProfitFromMembers);
+  registerCustomerOrderRoutes(app);
   // Public redirects.
   const publicDeps = {
     findByCode: repo.findPublicTagByCode,

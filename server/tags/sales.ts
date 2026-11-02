@@ -11,6 +11,7 @@ import {
   salesSaleTags,
   salesSyncEvents,
   salesVisits,
+  customerOrderDeliveries,
   tagAcquisitionLines,
   tagAcquisitionUnits,
   tagAcquisitions,
@@ -37,7 +38,7 @@ function fingerprint(input: TagSaleCreateInput): string {
   return createHash("sha256").update(JSON.stringify(input)).digest("hex");
 }
 
-export async function createTagSale(input: TagSaleCreateInput, actor: TagActor, idempotencyKey: string) {
+export async function createTagSaleWithin(input: TagSaleCreateInput, actor: TagActor, idempotencyKey: string, tx: Tx) {
   const normalizedKey = idempotencyKey.trim();
   if (!normalizedKey || normalizedKey.length > 120) {
     throw new TagSaleError("A valid Idempotency-Key header is required", 400, "idempotency_key_required");
@@ -48,7 +49,7 @@ export async function createTagSale(input: TagSaleCreateInput, actor: TagActor, 
     throw new TagSaleError("Only managers can record a sale for another seller", 403, "seller_forbidden");
   }
 
-  const transactionResult = await db.transaction(async (tx) => {
+  return (async () => {
     const [existing] = await tx
       .select({ id: salesSales.id, fingerprint: salesSales.idempotencyFingerprint })
       .from(salesSales)
@@ -297,7 +298,11 @@ export async function createTagSale(input: TagSaleCreateInput, actor: TagActor, 
       payload: { saleId: sale.id, source: "tags" },
     });
     return { saleId: sale.id, replayed: false };
-  });
+  })();
+}
+
+export async function createTagSale(input: TagSaleCreateInput, actor: TagActor, idempotencyKey: string) {
+  const transactionResult = await db.transaction(tx => createTagSaleWithin(input, actor, idempotencyKey, tx));
   const createdSaleId = transactionResult.saleId;
 
   const sale = await salesStorage.getSale(createdSaleId);
@@ -338,6 +343,9 @@ export async function cancelTagLinksForSale(saleId: number, actorUserId: string 
  */
 export async function cancelSale(saleId: number, reason: string | null, actorUserId: string | null) {
   await db.transaction(async (tx) => {
+    const [delivery] = await tx.select({ id: customerOrderDeliveries.id }).from(customerOrderDeliveries)
+      .where(and(eq(customerOrderDeliveries.saleId, saleId), eq(customerOrderDeliveries.status, 'confirmed')));
+    if (delivery) throw new TagSaleError('Reverse this delivery from its customer order', 409, 'order_delivery_cancel');
     const [sale] = await tx.select({ status: salesSales.status }).from(salesSales).where(eq(salesSales.id, saleId)).for("update");
     if (!sale) throw new TagSaleError("Sale not found", 404, "sale_not_found");
     if (sale.status !== "cancelled") {
@@ -351,7 +359,7 @@ export async function cancelSale(saleId: number, reason: string | null, actorUse
 
 type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
 
-async function releaseSalePieces(tx: Tx, saleId: number, actorUserId: string | null) {
+export async function releaseSalePieces(tx: Tx, saleId: number, actorUserId: string | null) {
   const links = await tx
     .select({ tagId: salesSaleTags.tagId })
     .from(salesSaleTags)

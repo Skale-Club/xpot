@@ -35,6 +35,11 @@ export function consentLang(acceptLanguage: string | undefined | null): ConsentL
 }
 
 const SCOPE_LABELS: Record<string, Record<ConsentLang, { title: string; detail: string }>> = {
+  'xpot:orders': {
+    en:{title:'Manage customer orders',detail:'Read and create orders, reserve pieces, request production, record artwork approval, delivery sales and completed payments. Access follows your account; refunds and reversals require an owner. No automatic money transfers.'},
+    pt:{title:'Gerenciar pedidos de clientes',detail:'Ler e criar pedidos, separar peças, pedir produção, registrar aprovação de arte, vendas das entregas e pagamentos realizados. O acesso segue sua conta; devoluções e estornos exigem um responsável. Sem transferência automática de dinheiro.'},
+    es:{title:'Gestionar pedidos de clientes',detail:'Leer y crear pedidos, reservar piezas, solicitar producción, registrar aprobación de arte, ventas de entregas y pagos realizados. El acceso sigue tu cuenta; reembolsos y reversos requieren un responsable. Sin transferencias automáticas de dinero.'},
+  },
   "xpot:journey": {
     en: {
       title: "Read and record the Tags production log",

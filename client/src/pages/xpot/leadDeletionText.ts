@@ -6,6 +6,7 @@ const KIND_KEY: Record<LeadDeleteBlocker | LeadDeleteAlongside, string> = {
   sales: "deleteSales",
   consignments: "deleteConsignments",
   pieces: "deletePieces",
+  orders: "deleteOrders",
   visits: "deleteVisits",
   tasks: "deleteTasks",
   deals: "deleteDeals",

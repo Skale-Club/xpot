@@ -9,13 +9,14 @@ export interface LeadDeletionCounts {
   consignments: number;
   /** Pieces (tags) set up for it as their customer. */
   pieces: number;
+  orders?: number;
   visits: number;
   /** Follow-ups on the company, its visits or its deals. */
   tasks: number;
   deals: number;
 }
 
-export const LEAD_DELETE_BLOCKERS = ["sales", "consignments", "pieces"] as const;
+export const LEAD_DELETE_BLOCKERS = ["sales", "consignments", "pieces", "orders"] as const;
 export type LeadDeleteBlocker = (typeof LEAD_DELETE_BLOCKERS)[number];
 
 export const LEAD_DELETE_ALONGSIDE = ["visits", "tasks", "deals"] as const;
@@ -32,7 +33,7 @@ export interface LeadDeletionVerdict {
 }
 
 export function leadDeletionVerdict(counts: LeadDeletionCounts): LeadDeletionVerdict {
-  const blockers = LEAD_DELETE_BLOCKERS.map((kind) => ({ kind, count: counts[kind] })).filter((b) => b.count > 0);
+  const blockers = LEAD_DELETE_BLOCKERS.map((kind) => ({ kind, count: counts[kind] ?? 0 })).filter((b) => b.count > 0);
   const alongside = LEAD_DELETE_ALONGSIDE.map((kind) => ({ kind, count: counts[kind] })).filter((a) => a.count > 0);
   return { blockers, alongside, canDelete: blockers.length === 0 };
 }
@@ -41,6 +42,7 @@ const NOUNS: Record<LeadDeleteBlocker | LeadDeleteAlongside, [string, string]> =
   sales: ["sale", "sales"],
   consignments: ["consignment", "consignments"],
   pieces: ["piece", "pieces"],
+  orders: ["customer order", "customer orders"],
   visits: ["visit", "visits"],
   tasks: ["task", "tasks"],
   deals: ["deal", "deals"],

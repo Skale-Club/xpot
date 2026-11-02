@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { bigserial, pgTable, text, serial, integer, timestamp, boolean, jsonb, pgEnum, uniqueIndex, index, primaryKey } from "drizzle-orm/pg-core";
+import { bigserial, pgTable, text, serial, integer, timestamp, boolean, jsonb, pgEnum, uniqueIndex, index, primaryKey, uuid } from "drizzle-orm/pg-core";
 import { z } from "zod";
 import { users } from "./auth.js";
 // Note: in the source project there was a FK to a `vcards` table (Skale Club's vCard feature).
@@ -330,6 +330,7 @@ export const salesOpportunitiesLocal = pgTable("sales_opportunities_local", {
 }));
 
 export const salesTasks = pgTable("sales_tasks", {
+  customerOrderId: uuid('customer_order_id'),
   id: serial("id").primaryKey(),
   organizationId: integer("organization_id").notNull().references(() => organizations.id, { onDelete: "restrict" }),
   leadId: integer("lead_id").references(() => salesLeads.id),

@@ -20,6 +20,7 @@ import { EYEBROW, GLASS_SUBTLE_CLASS } from "@/components/xpot/surface";
 import { formatDateTime } from "@/lib/format";
 import { useT } from "@/i18n";
 import { tasksMessages } from "@/i18n/messages/tasks";
+import { customerOrdersMessages } from '@/i18n/messages/customerOrders';
 import { EMPTY_TASK, TASK_PRIORITIES, TaskForm, invalidateTaskLists, taskBody, type TaskFormValues } from "./components/leads/TaskForm";
 
 type EnrichedTask = SalesTask & {
@@ -79,6 +80,7 @@ export function XpotTasks() {
   const { me } = useXpotQueries();
   const { toast } = useToast();
   const t = useT(tasksMessages);
+  const ordersT=useT(customerOrdersMessages);
   // ?status=completed&priority=high&q=invoice&team=1
   const filters = useUrlFilters({ q: "", status: "open", priority: "", team: "" });
   const search = filters.values.q.trim();
@@ -265,7 +267,7 @@ export function XpotTasks() {
           )}
           <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-center gap-2">
-              <h3 className={`font-semibold ${task.status === "completed" ? "text-white/35 line-through" : "text-white"}`}>{task.title}</h3>
+              <h3 className={`font-semibold ${task.status === "completed" ? "text-white/35 line-through" : "text-white"}`}>{task.customerOrderId?<Link href={`/tags/orders/${task.customerOrderId}`}>{ordersT('deliver')}</Link>:task.title}</h3>
               <Pill tone={task.priority === "urgent" ? "red" : task.priority === "high" ? "amber" : "slate"}>{priorityLabel(task.priority)}</Pill>
             </div>
             <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-white/40">

@@ -76,7 +76,7 @@ export function printPreviewPath(modelSlug: string, versionId: string): string {
  * carries its product type and face, never its colour, so the batch is what tells a white plate from a black one.
  */
 export interface PrintPreviewCatalog {
-  models: Array<{ slug: string; title: string; productType: string | null; face: string | null; theme: string | null; sha256: string }>;
+  models: Array<{ slug: string; title: string; productType: string | null; face: string | null; theme: string | null; sha256: string; private?:boolean }>;
   /** Batch code -> slug of the model it came from, for batches of models in `models`. */
   batches: Record<string, string>;
 }
@@ -303,6 +303,8 @@ export const SERIALIZED_MODEL_FIELDS = ["productType", "face", "theme", "salesPr
 const SERIALIZED_MODEL_MESSAGE = "A serialized model needs a product type, a face, a colour, a sales product and a batch prefix";
 
 export const printModelInputSchema = z.object({
+  /** A customer's dedicated design is private from its first write. Platform creation only. */
+  customerOrderLineId:z.string().uuid().optional(),
   slug: z.string().trim().toLowerCase().regex(PRINT_MODEL_SLUG_PATTERN, "Slug: lowercase words joined by dashes").max(80),
   kind: z.enum(PRINT_MODEL_KINDS),
   title: z.string().trim().min(1, "Give it a title").max(120),

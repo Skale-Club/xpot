@@ -10,3 +10,4 @@ export * from "./tags.js";
 export * from "./mcp.js";
 export * from "./prospecting.js";
 export * from "./observability.js";
+export * from "./customerOrders.js";

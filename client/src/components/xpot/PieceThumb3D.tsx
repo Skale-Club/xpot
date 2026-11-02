@@ -39,12 +39,14 @@ function usePrintPreviewCatalog(): { catalog: PrintPreviewCatalog | null; loadin
 /** The model a piece is: by slug, else by its batch, else by what it is when only one model could be it. */
 export function resolvePieceModel(catalog: PrintPreviewCatalog, key: PieceModelKey): CatalogModel | null {
   const bySlug = (slug: string | null | undefined) => (slug ? catalog.models.find((m) => m.slug === slug) ?? null : null);
-  const direct = bySlug(key.modelSlug) ?? bySlug(key.batchCode ? catalog.batches[key.batchCode] : null);
+  // An explicit identity without a preview must not borrow a different customer's artwork.
+  if(key.modelSlug)return bySlug(key.modelSlug);
+  const direct = bySlug(key.batchCode ? catalog.batches[key.batchCode] : null);
   if (direct) return direct;
   const face = key.face ?? null;
   const theme = key.theme?.trim().toLowerCase() || null;
   const matches = catalog.models.filter((m) =>
-    m.productType === key.productType && m.face === face && (!theme || m.theme?.toLowerCase() === theme));
+    !m.private && m.productType === key.productType && m.face === face && (!theme || m.theme?.toLowerCase() === theme));
   // White and black are different models: with no colour to tell them apart, guess nothing.
   return matches.length === 1 ? matches[0] : null;
 }

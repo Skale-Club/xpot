@@ -85,6 +85,7 @@ export const tagProvisioningDevices = pgTable("tag_provisioning_devices", {
 });
 
 export const tags = pgTable("tags", {
+  customerOrderLineId: uuid("customer_order_line_id"),
   id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
   organizationId: integer("organization_id").notNull().references(() => organizations.id, { onDelete: "restrict" }),
   publicCode: text("public_code").notNull(),
@@ -419,6 +420,7 @@ export const tagJourneyEntries = pgTable("tag_journey_entries", {
 // SQL: migrations/0059_print_production.sql. Allowed values: shared/printProduction.ts. Admin-only.
 
 export const printModels = pgTable("print_models", {
+  customerOrderLineId: uuid("customer_order_line_id"),
   id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
   slug: text("slug").notNull(),
   kind: text("kind").notNull(),
@@ -468,6 +470,7 @@ export const printModelVersions = pgTable("print_model_versions", {
 
 // What was asked: N pieces of a model, split into plates (print_jobs) of at most one bed each (migrations/0062).
 export const printRequests = pgTable("print_requests", {
+  customerOrderLineId: uuid("customer_order_line_id"),
   id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
   // Whose production it is (Tags › Production per organization, migrations/0065); the company's for Boston.
   organizationId: integer("organization_id").notNull().references(() => organizations.id, { onDelete: "restrict" }),

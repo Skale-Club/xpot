@@ -10,6 +10,9 @@ import { useLeadSalesSnapshot, type ConsignmentWithRefs } from "../../hooks/useS
 import { useLeadAccess, type LeadOwnership } from "../../leadAccess";
 import { useT } from "@/i18n";
 import { salesModuleMessages } from "@/i18n/messages/salesModule";
+import { customerOrdersMessages } from '@/i18n/messages/customerOrders';
+import { useXpotModules } from '@/components/ModuleSwitch';
+import { useLocation } from 'wouter';
 
 export function VisitSaleActions({ lead, visitId, saleOpen, onSaleOpenChange }: {
   lead: LeadOwnership & { id: number; name: string };
@@ -19,6 +22,8 @@ export function VisitSaleActions({ lead, visitId, saleOpen, onSaleOpenChange }: 
   onSaleOpenChange: (open: boolean) => void;
 }) {
   const t = useT(salesModuleMessages);
+  const ordersT=useT(customerOrdersMessages),[,navigate]=useLocation();
+  const tagsEnabled=useXpotModules().includes('tags');
   // A sale or stock is filed under the company's organization; outside it the server refuses.
   const canRecord = useLeadAccess(lead).records;
   const snapshot = useLeadSalesSnapshot(lead.id);
@@ -44,6 +49,7 @@ export function VisitSaleActions({ lead, visitId, saleOpen, onSaleOpenChange }: 
         />
       ))}
       <VisitAction icon={Package} tone="emerald" title={t("newSale")} disabled={!canRecord} onClick={() => onSaleOpenChange(true)} testId="visit-new-sale" />
+      {tagsEnabled&&<VisitAction icon={PackagePlus} tone="violet" title={ordersT('newOrder')} disabled={!canRecord} onClick={()=>navigate(`/tags/orders/new?leadId=${lead.id}&visitId=${visitId}&name=${encodeURIComponent(lead.name)}`)} testId="visit-new-order"/>}
       <VisitAction icon={PackagePlus} tone="emerald" title={t("leaveStock")} disabled={!canRecord} onClick={() => setDepositOpen(true)} testId="visit-leave-stock" />
 
       <SaleDialog open={saleOpen} onOpenChange={onSaleOpenChange} leadId={lead.id} leadName={lead.name} visitId={visitId} onDone={refresh} />
