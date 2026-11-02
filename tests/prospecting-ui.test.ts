@@ -147,8 +147,9 @@ describe("prospecting UI helpers", () => {
     ];
     expect(persistentProspectingJob(jobs, [], now)?.job.id).toBe(3);
     expect(persistentProspectingJob(jobs, [{ id: 9, jobId: 4, status: "published", routeDate: today }], now)?.job.id).toBe(3);
-    // Once the route exists the shell bar is gone: "Ready 100%" next to "3 of 8 stops" read as a finished day.
-    expect(persistentProspectingJob(jobs.filter((job) => job.id !== 3), [{ id: 9, jobId: 4, status: "published", routeDate: today }], now)).toBeNull();
+    // The shell header keeps its "Ready" card while the route is live.
+    expect(persistentProspectingJob(jobs.filter((job) => job.id !== 3), [{ id: 9, jobId: 4, status: "published", routeDate: today }], now))
+      .toMatchObject({ job: { id: 4 }, route: { id: 9 } });
     expect(persistentProspectingJob(jobs.filter((job) => job.id !== 3), [], now)?.job.id).toBe(4);
     expect(persistentProspectingJob([
       { id: 6, status: "completed", routePlanningStatus: "failed", createdAt: new Date("2026-10-14T15:30:00").toISOString() },

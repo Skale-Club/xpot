@@ -69,7 +69,7 @@ export function PieceThumbLoader({ px }: { px: number }) {
 // What is drawn, by file hash: in memory for this page and in localStorage for the next visit, so a list reloads
 // without fetching the models again. A new preview file is a new hash, so a replaced one is never stale.
 const ROOT = "xpot:piece3d:";
-const STORE = `${ROOT}v3:`;
+const STORE = `${ROOT}v4:`;
 const memory = new Map<string, string>();
 const pending = new Map<string, Promise<string>>();
 

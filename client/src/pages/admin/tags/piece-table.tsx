@@ -5,7 +5,7 @@ import { PieceChipPill, PieceStatusPill } from "@/components/piece/PieceStatusPi
 import { CompactDataTable, type CompactDataColumn } from "@/components/xpot/CompactDataTable";
 import { EmptyState } from "@/components/xpot/EmptyState";
 import { GLASS_CLASS } from "@/components/xpot/surface";
-import { TagPieceVisual, useTagModelName } from "@/components/xpot/TagProductThumbnail";
+import { TagModelChips, TagPieceVisual } from "@/components/xpot/TagProductThumbnail";
 import { ListPager, usePagedList } from "@/components/xpot/pagination";
 import { useT } from "@/i18n";
 import { formatDate } from "@/lib/format";
@@ -60,14 +60,14 @@ function Checkbox({ checked, disabled, label, onChange }: { checked: boolean; di
 }
 
 /** The piece: its picture, its code and what model it is (side by side in the table, stacked in a phone's card). */
-function PieceCell({ piece, modelName, stacked = false }: { piece: TagListItem; modelName: string; stacked?: boolean }) {
+function PieceCell({ piece, stacked = false }: { piece: TagListItem; stacked?: boolean }) {
   const tt = useT(tagsMessages);
   return (
     <span className="inline-flex min-w-0 max-w-full items-center gap-2.5" title={[piece.serialNumber ? `#${piece.serialNumber}` : null, piece.label].filter(Boolean).join(" · ") || undefined}>
       <TagPieceVisual productType={piece.productType} face={piece.face} batchCode={piece.batchCode} title={tt(`face_${piece.face ?? "none"}` as "face_none")} />
-      <span className={`flex min-w-0 ${stacked ? "flex-col" : "items-baseline gap-2.5"}`}>
+      <span className={`flex min-w-0 ${stacked ? "flex-col items-start gap-1" : "items-center gap-2.5"}`}>
         <span className="shrink-0 font-mono text-[15px] font-semibold tracking-[0.08em] text-white">{piece.publicCode}</span>
-        <span className="truncate text-xs text-white/45">{modelName}</span>
+        <TagModelChips productType={piece.productType} face={piece.face} batchCode={piece.batchCode} className="shrink-0" />
       </span>
     </span>
   );
@@ -100,7 +100,6 @@ export function PieceTable({
 }) {
   const tm = useT(manageTagsMessages);
   const tp = useT(manageTagsPiecesMessages);
-  const modelName = useTagModelName();
   const tps = useT(pieceScreenMessages);
   // A new list (another filter) starts from the first page again.
   const paged = usePagedList(pieces, { pageSize: pageSize ?? Math.max(pieces.length, 1), resetKey: `${pieces.length}:${pieces[0]?.id ?? ""}` });
@@ -204,7 +203,7 @@ export function PieceTable({
       key: "code",
       label: tm("colCode"),
       cellClassName: "max-w-[300px] !py-2",
-      render: (p) => <PieceCell piece={p} modelName={modelName(p)} />,
+      render: (p) => <PieceCell piece={p} />,
     },
     { key: "status", label: tm("colStatus"), render: (p) => (noCustomerText(p) ? null : <WherePill piece={p} />) },
     ...ORDER.filter(has).map((column) => cells[column]),
@@ -226,7 +225,7 @@ export function PieceTable({
                 </span>
               ) : null}
               <button type="button" onClick={() => onOpen(p.id)} className="min-w-0 flex-1 text-left" data-testid={`admin-piece-card-${p.publicCode}`}>
-                <PieceCell piece={p} modelName={modelName(p)} stacked />
+                <PieceCell piece={p} stacked />
                 <div className="mt-2 flex flex-wrap items-center gap-1.5">
                   {noCustomerText(p) ? null : <WherePill piece={p} />}
                   {/* A status that already says "Chip to write" / "Chip write failed" is not said twice on a card. */}

@@ -144,12 +144,11 @@ export function localDateKey(date = new Date()) {
 }
 
 /**
- * The search worth keeping in the global shell: only while the route is being
- * prepared. Running work always wins; a completed search stays visible while
- * the server builds its route (or if that failed, so it can be retried). Once
- * the route exists the bar is gone: it measured the search, and next to
- * "3 of 8 stops" it read as a finished day. Routes are same-day, so
- * yesterday's search never shows: it is history.
+ * The search worth keeping in the global shell. Running work always wins; a
+ * completed search stays visible while the server is building its route (or if
+ * that failed, so it can be retried). Once route planning is ready the card
+ * stays while the route is live, as "Ready 100%" in the shell header. Routes
+ * are same-day, so yesterday's search and route never show: they are history.
  */
 export function persistentProspectingJob<
   T extends PersistentProspectingJob,
@@ -168,7 +167,7 @@ export function persistentProspectingJob<
   const route = routes.find((candidate) => candidate.jobId === recentJob.id
     && candidate.routeDate === today
     && !["completed", "cancelled"].includes(candidate.status)) ?? null;
-  if (route) return null;
+  if (route) return { job: recentJob, route };
   return recentJob.routePlanningStatus !== "ready" ? { job: recentJob, route: null } : null;
 }
 

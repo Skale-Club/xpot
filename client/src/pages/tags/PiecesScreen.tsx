@@ -20,7 +20,8 @@ import { useT } from "@/i18n";
 import { commonMessages } from "@/i18n/messages/common";
 import { tagsMessages } from "@/i18n/messages/tags";
 import { manageTagsMessages } from "@/i18n/messages/manageTags";
-import { APP_BASE, errorText, MY_PIECES_LIMIT, myPiecesQuery, shortUrl, tagPath } from "./lib";
+import { DestinationLabel } from "@/components/piece/DestinationLabel";
+import { APP_BASE, errorText, MY_PIECES_LIMIT, myPiecesQuery, tagPath } from "./lib";
 import { countMorePieceFilters, morePiecesOpen } from "./piecesFilters";
 import { useFirstPieceLine } from "./FirstSteps";
 import { CARD, ChipMark, PieceStatusPills, ScanCounts, TopBar } from "./ui";
@@ -372,7 +373,7 @@ function PiecesTable({ items, selectedCode, onSelect, onCustomer }: {
                   )}
                   {tag.label && <div className="mt-0.5 truncate text-xs text-white/35">{tag.label}</div>}
                 </td>
-                <td className="truncate px-3 py-2.5 text-xs text-white/45">{tag.destinationUrl ? shortUrl(tag.destinationUrl) : "—"}</td>
+                <td className="truncate px-3 py-2.5 text-xs text-white/45">{tag.destinationUrl ? <DestinationLabel url={tag.destinationUrl} /> : "—"}</td>
                 <td className="px-3 py-2.5">
                   <div className="flex flex-wrap items-center gap-1">
                     <PieceStatusPills tag={tag} />

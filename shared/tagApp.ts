@@ -284,3 +284,75 @@ export function resellerTodo(pieces: ReadonlyArray<{ status: string; saleId: num
   const count = (status: PieceStatusFilter) => pieces.filter((piece) => matchesPieceFilters(piece, { status, sale: "all", chip: "all" })).length;
   return { finish: count("finish"), noCustomer: count("setup"), paused: count("off") };
 }
+
+// ─── Showing a social destination as its account ──────────────────────────────
+
+export const ACCOUNT_NETWORKS = ["instagram", "facebook", "tiktok", "youtube", "x", "linkedin", "whatsapp"] as const;
+export type AccountNetwork = (typeof ACCOUNT_NETWORKS)[number];
+
+const ACCOUNT_HOSTS: Record<AccountNetwork, readonly string[]> = {
+  instagram: ["instagram.com"],
+  facebook: ["facebook.com", "fb.com"],
+  tiktok: ["tiktok.com"],
+  youtube: ["youtube.com"],
+  x: ["x.com", "twitter.com"],
+  linkedin: ["linkedin.com"],
+  whatsapp: ["wa.me", "api.whatsapp.com"],
+};
+
+/** First path segments that are a page of the network, not an account. */
+const NOT_AN_ACCOUNT = new Set([
+  "p", "reel", "reels", "tv", "stories", "explore", "accounts", "direct", "s", "share", "sharer", "sharer.php", "login", "watch",
+  "groups", "events", "marketplace", "pages", "people", "photo", "photos", "story.php", "permalink.php", "dialog", "plugins", "hashtag",
+  "gaming", "home", "i", "intent", "search", "settings", "messages", "notifications", "feed", "jobs", "channel", "shorts", "playlist",
+  "results", "embed", "live", "t", "video", "message",
+]);
+
+const ACCOUNT_NAME: Record<Exclude<AccountNetwork, "whatsapp" | "youtube" | "linkedin" | "tiktok">, RegExp> = {
+  instagram: /^[A-Za-z0-9._]{1,30}$/,
+  facebook: /^[A-Za-z0-9.-]{3,80}$/,
+  x: /^[A-Za-z0-9_]{1,15}$/,
+};
+
+/**
+ * A link to a social account as the account itself: the network and "@celesconfections" (LinkedIn and YouTube channels
+ * by name, WhatsApp by number). Only what is plainly an account: a post, a reel, `profile.php?id=1`, a share link or any
+ * other address returns null, so the caller shows the address as it is rather than a wrong name. A display only: the
+ * link that is stored and opened is never changed.
+ */
+export function socialAccountOf(rawUrl: string | null | undefined): { network: AccountNetwork; label: string } | null {
+  let url: URL;
+  try {
+    url = new URL(normalizeUrlInput(rawUrl));
+  } catch {
+    return null;
+  }
+  if (url.protocol !== "https:" && url.protocol !== "http:") return null;
+  const host = url.hostname.toLowerCase();
+  const network = ACCOUNT_NETWORKS.find((n) => hostMatches(host, ACCOUNT_HOSTS[n]));
+  if (!network) return null;
+  const parts = url.pathname.split("/").filter(Boolean).map((part) => {
+    try { return decodeURIComponent(part); } catch { return part; }
+  });
+  const pick = (name: string | undefined, label: string): { network: AccountNetwork; label: string } | null => (name ? { network, label } : null);
+
+  if (network === "whatsapp") {
+    const digits = host === "wa.me" ? (parts.length === 1 ? parts[0] : "") : parts[0] === "send" ? url.searchParams.get("phone") ?? "" : "";
+    return /^\+?\d{6,15}$/.test(digits) ? { network, label: `+${digits.replace(/^\+/, "")}` } : null;
+  }
+  if (network === "linkedin") {
+    const kind = parts[0]?.toLowerCase();
+    const name = parts[1];
+    return parts.length === 2 && (kind === "in" || kind === "company") && /^[^\s/]{3,100}$/.test(name) ? pick(name, name) : null;
+  }
+  if (network === "youtube") {
+    if (parts.length === 1 && /^@[\w.-]{3,30}$/.test(parts[0])) return pick(parts[0], parts[0]);
+    const kind = parts[0]?.toLowerCase();
+    return parts.length === 2 && (kind === "c" || kind === "user") && /^[\w.-]{2,60}$/.test(parts[1]) ? pick(parts[1], parts[1]) : null;
+  }
+  if (parts.length !== 1) return null;
+  const name = parts[0].replace(/^@/, "");
+  if (NOT_AN_ACCOUNT.has(name.toLowerCase())) return null;
+  if (network === "tiktok") return parts[0].startsWith("@") && /^[A-Za-z0-9._]{2,24}$/.test(name) ? pick(name, `@${name}`) : null;
+  return ACCOUNT_NAME[network].test(name) && !name.endsWith(".php") ? pick(name, `@${name}`) : null;
+}
