@@ -292,7 +292,7 @@ export default function PiecesScreen({ selectedCode = null }: { selectedCode?: s
                       details={tag.label}
                       className="w-full"
                     />
-                    {tag.destinationUrl && <span className="mt-1 block truncate pl-12 text-xs text-white/35">{shortUrl(tag.destinationUrl)}</span>}
+                    {tag.destinationUrl && <span className="mt-1 block truncate pl-12 text-xs text-white/35"><DestinationLabel url={tag.destinationUrl} /></span>}
                     <span className="mt-2 flex flex-wrap items-center gap-1 pl-12">
                       <PieceStatusPills tag={tag} />
                       <ChipMark tag={tag} />
