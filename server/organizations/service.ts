@@ -165,6 +165,22 @@ export async function managedOrganizationIds(actor: OrganizationActor): Promise<
     .map((membership) => membership.organizationId);
 }
 
+/**
+ * The people on these organizations' teams: rep id → the first of the organizations they are active in. Team results
+ * and the visits history of a Rep Admin both start from it, so the numbers and the list behind them are one set.
+ */
+export async function teamMembers(organizationIds: readonly number[]): Promise<Map<number, number>> {
+  if (!organizationIds.length) return new Map();
+  const rows = await db
+    .select({ repId: organizationMemberships.repId, organizationId: organizationMemberships.organizationId })
+    .from(organizationMemberships)
+    .where(and(inArray(organizationMemberships.organizationId, [...organizationIds]), eq(organizationMemberships.isActive, true), isNull(organizationMemberships.blockedAt)))
+    .orderBy(asc(organizationMemberships.organizationId));
+  const members = new Map<number, number>();
+  for (const row of rows) if (!members.has(row.repId)) members.set(row.repId, row.organizationId);
+  return members;
+}
+
 export async function canManageOrganizationForActor(actor: OrganizationActor, organizationId: number): Promise<boolean> {
   if (managesEveryOrganization(actor)) return true;
   return canManageOrganization(actor, await membershipsForRep(actor.rep.id), organizationId);

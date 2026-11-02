@@ -70,28 +70,35 @@ beforeAll(async () => {
   await q(`INSERT INTO organization_memberships (organization_id, rep_id, role) VALUES ($1, $2, 'member'), ($1, $3, 'admin')`, [organizationId, ana, bia]);
   const leadId = (await one(`INSERT INTO sales_leads (organization_id, name, owner_rep_id, status) VALUES ($1, 'Corner Barber', $2, 'lead') RETURNING id`, [organizationId, ana])).id;
   await q(`INSERT INTO sales_visits (lead_id, rep_id, status, checked_in_at) VALUES ($1, $2, 'completed', NOW()), ($1, $2, 'sale_made', NOW()), ($1, $3, 'completed', NOW())`, [leadId, ana, bia]);
+  // Ana also visited a company of an organization Bia does not run: Bia's team history never shows it.
+  const elsewhere = (await one(`INSERT INTO organizations (name, slug) VALUES ('Other Team', 'other-team') RETURNING id`)).id;
+  const elsewhereLead = (await one(`INSERT INTO sales_leads (organization_id, name, owner_rep_id, status) VALUES ($1, 'Far Bakery', $2, 'lead') RETURNING id`, [elsewhere, ana])).id;
+  await q(`INSERT INTO sales_visits (lead_id, rep_id, status, checked_in_at) VALUES ($1, $2, 'completed', NOW())`, [elsewhereLead, ana]);
 });
 
 describe("GET /visits?repId=", () => {
   it("narrows the platform admin's list to one seller in management mode", async () => {
-    expect((await list("vf-boss")).reps).toEqual([ana, ana, bia]);
-    expect((await list("vf-boss", `?repId=${ana}`)).reps).toEqual([ana, ana]);
+    expect((await list("vf-boss")).reps).toEqual([ana, ana, ana, bia]);
+    expect((await list("vf-boss", `?repId=${ana}`)).reps).toEqual([ana, ana, ana]);
     expect((await list("vf-boss", `?repId=${bia}`)).reps).toEqual([bia]);
   });
 
   it("ignores a value that is not a person id", async () => {
-    expect((await list("vf-boss", "?repId=abc")).reps).toEqual([ana, ana, bia]);
-    expect((await list("vf-boss", "?repId=-3")).reps).toEqual([ana, ana, bia]);
+    expect((await list("vf-boss", "?repId=abc")).reps).toEqual([ana, ana, ana, bia]);
+    expect((await list("vf-boss", "?repId=-3")).reps).toEqual([ana, ana, ana, bia]);
   });
 
   it("is not honoured outside management mode, nor for a rep", async () => {
     // The app's management mode sends "manage"; the platform admin's list stays everyone's.
-    expect((await list("vf-boss", `?repId=${ana}`, { "X-Xpot-View": "manage" })).reps).toEqual([ana, ana]);
-    // A Rep Admin in management mode keeps their own visits; asking for a
-    // teammate (Organizations › a person) gets that teammate's visits at
-    // companies in the organization they run (list-scope.integration.test.ts
+    expect((await list("vf-boss", `?repId=${ana}`, { "X-Xpot-View": "manage" })).reps).toEqual([ana, ana, ana]);
+    // A Rep Admin in management mode who names nobody gets the whole team's history, the list Team results counts
+    // (Ana's visit to a company of another organization is not in it); asking for a teammate (Organizations › a
+    // person) gets that teammate's visits at companies in the organization they run (list-scope.integration.test.ts
     // covers one outside it).
-    expect((await list("vf-bia", "", { "X-Xpot-View": "manage" })).reps).toEqual([bia]);
+    expect((await list("vf-bia", "", { "X-Xpot-View": "manage" })).reps).toEqual([ana, ana, bia]);
+    // With management mode off the same person has only their own visits, "My work".
+    expect((await list("vf-bia", "", { "X-Xpot-View": "rep" })).reps).toEqual([bia]);
+    expect((await list("vf-bia")).reps).toEqual([bia]);
     expect((await list("vf-bia", `?repId=${ana}`, { "X-Xpot-View": "manage" })).reps).toEqual([ana, ana]);
     // Viewing as a rep, the platform admin sees their own visits (none) whatever the filter.
     expect((await list("vf-boss", `?repId=${ana}`, { "X-Xpot-View": "rep" })).reps).toEqual([]);

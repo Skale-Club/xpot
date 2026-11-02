@@ -8,8 +8,8 @@ import { Router } from "express";
 import { and, eq, gte, inArray, isNotNull, sql, type AnyColumn } from "drizzle-orm";
 import { db } from "../../db.js";
 import { isPlatformAdmin, requireXpotUser, type XpotActor } from "./middleware.js";
-import { managedOrganizationIds } from "../../organizations/service.js";
-import { organizationMemberships, salesOpportunitiesLocal, salesReps, salesSales, salesTasks, salesVisits } from "#shared/schema.js";
+import { managedOrganizationIds, teamMembers } from "../../organizations/service.js";
+import { salesOpportunitiesLocal, salesReps, salesSales, salesTasks, salesVisits } from "#shared/schema.js";
 import { VISIT_OUTCOME_STATUSES } from "#shared/visit-status.js";
 import {
   LOCATION_EXCEPTION_STATUSES,
@@ -32,10 +32,15 @@ const toIso = (value: unknown): string | null => {
  * What the field team did since `since`. `repIds` narrows it to these people. `organizationId` counts the work done on
  * that organization's companies instead, by whoever did it: the numbers follow the company visited or sold to, not the
  * team the person belongs to, so an owner of two organizations (or a rep serving another's companies) never gets the
- * other's totals, and the total matches the people's own pages.
+ * other's totals, and the total matches the people's own pages. `companyOrganizationIds` keeps a team's numbers to the
+ * work done on those organizations' companies, as the lists behind them are (a rep of two teams is counted by each for
+ * its own companies only), while the rows stay the team's people.
  */
-export async function teamActivity(since: Date, repIds?: readonly number[], organizationId?: number): Promise<TeamActivityResponse> {
-  const ofOrganization = (leadId: AnyColumn) => (organizationId === undefined ? undefined : sql`${leadId} IN (SELECT id FROM sales_leads WHERE organization_id = ${organizationId})`);
+export async function teamActivity(since: Date, repIds?: readonly number[], organizationId?: number, companyOrganizationIds?: readonly number[]): Promise<TeamActivityResponse> {
+  const companyOrganizations = organizationId !== undefined ? [organizationId] : companyOrganizationIds;
+  const ofOrganization = (leadId: AnyColumn) => (companyOrganizations === undefined
+    ? undefined
+    : sql`${leadId} IN (SELECT id FROM sales_leads WHERE organization_id IN (${sql.join((companyOrganizations.length ? [...companyOrganizations] : [-1]).map((id) => sql`${id}`), sql`, `)}))`);
   const [people, visits, sales, lastVisit, lastSale, inProgress, opportunities, tasks] = await Promise.all([
     db.select({
       id: salesReps.id,
@@ -74,7 +79,8 @@ export async function teamActivity(since: Date, repIds?: readonly number[], orga
       value: sql<number>`coalesce(sum(${salesOpportunitiesLocal.value}), 0)::float`,
     }).from(salesOpportunitiesLocal).where(and(eq(salesOpportunitiesLocal.status, "open"), ofOrganization(salesOpportunitiesLocal.leadId))).groupBy(salesOpportunitiesLocal.repId),
     db.select({ repId: salesTasks.repId, n: sql<number>`count(*)::int` })
-      .from(salesTasks).where(and(eq(salesTasks.status, "pending"), organizationId === undefined ? undefined : eq(salesTasks.organizationId, organizationId))).groupBy(salesTasks.repId),
+      // Open, as the Tasks list opens them: not started and under way.
+      .from(salesTasks).where(and(inArray(salesTasks.status, ["pending", "in_progress"]), companyOrganizations === undefined ? undefined : inArray(salesTasks.organizationId, companyOrganizations.length ? [...companyOrganizations] : [-1]))).groupBy(salesTasks.repId),
   ]);
 
   const byRep = <T extends { repId: number | null }>(rows: T[]) => new Map(rows.map((row) => [row.repId, row]));
@@ -118,7 +124,8 @@ export async function teamActivity(since: Date, repIds?: readonly number[], orga
   return {
     since: since.toISOString(),
     metrics: {
-      activeReps: people.filter((p) => counted.has(p.id) && p.role === "rep").length,
+      // Who visited in the period, whatever their role: the number the table below it adds up to.
+      activeReps: people.filter((p) => counted.has(p.id) && (visitsBy.get(p.id)?.visits ?? 0) > 0).length,
       visits: sum(visits, (r) => r.visits),
       finishedVisits: sum(visits, (r) => r.finished),
       locationExceptions: sum(visits, (r) => r.exceptions),
@@ -149,9 +156,10 @@ export function createTeamResultsRouter() {
     if (isPlatformAdmin(actor)) return res.json(await teamActivity(since));
     const managed = await managedOrganizationIds(actor);
     if (!managed?.length) return res.status(403).json({ code: "access_denied", message: "Access denied" });
-    const members = await db.selectDistinct({ repId: organizationMemberships.repId }).from(organizationMemberships)
-      .where(and(inArray(organizationMemberships.organizationId, managed), eq(organizationMemberships.isActive, true)));
-    res.json(await teamActivity(since, members.map((member) => member.repId)));
+    const members = await teamMembers(managed);
+    const result = await teamActivity(since, Array.from(members.keys()), undefined, managed);
+    // The organization each person is on, so a row opens them inside it (an owner of several picks it by the row).
+    res.json({ ...result, reps: result.reps.map((row) => ({ ...row, organizationId: members.get(row.repId) ?? null })) });
   });
   return router;
 }
