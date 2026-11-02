@@ -1,0 +1,154 @@
+
+> xpot@0.1.0 build
+> tsx scripts/build.ts
+
+→ Building server (esbuild) ...
+
+  dist\index.cjs      1.4mb
+  dist\index.cjs.map  2.9mb
+
+Done in 574ms
+→ Building migration runner (esbuild) ...
+
+  dist\migrate.cjs  5.1kb
+
+Done in 20ms
+→ Building private-files migration (esbuild) ...
+
+  dist\migrate-files.cjs  132.6kb
+
+Done in 138ms
+→ Building lead photo shrinker (esbuild) ...
+
+  dist\shrink-photos.cjs  134.6kb
+
+Done in 136ms
+→ Building client (vite) ...
+vite v7.3.7 building client environment for production...
+transforming...
+✓ 3566 modules transformed.
+rendering chunks...
+computing gzip size...
+../dist/public/index.html                                       4.45 kB │ gzip:   1.77 kB
+../dist/public/.vite/manifest.json                             41.11 kB │ gzip:   4.78 kB
+../dist/public/assets/maplibre-gl-worker-DhKPqT7d.js          506.24 kB
+../dist/public/assets/XpotProspecting-CEya5O3P.css             83.10 kB │ gzip:  10.53 kB
+../dist/public/assets/index-Dlz06Uyv.css                      141.53 kB │ gzip:  23.04 kB
+../dist/public/assets/chevron-left-CP2oJOap.js                  0.13 kB │ gzip:   0.14 kB
+../dist/public/assets/navigation-ClXBbqr5.js                    0.15 kB │ gzip:   0.15 kB
+../dist/public/assets/visit-status-wsg6DCw-.js                  0.15 kB │ gzip:   0.14 kB
+../dist/public/assets/plus-CbwYlkrz.js                          0.15 kB │ gzip:   0.15 kB
+../dist/public/assets/user-round-D6TMRIeB.js                    0.17 kB │ gzip:   0.17 kB
+../dist/public/assets/rotate-ccw-CQKrSVw6.js                    0.20 kB │ gzip:   0.18 kB
+../dist/public/assets/star-Dhb2JRL4.js                          0.21 kB │ gzip:   0.18 kB
+../dist/public/assets/ellipsis-vertical-BI89OCnJ.js             0.23 kB │ gzip:   0.17 kB
+../dist/public/assets/camera-CjmOgvPl.js                        0.25 kB │ gzip:   0.21 kB
+../dist/public/assets/external-link-M_bLGET3.js                 0.25 kB │ gzip:   0.20 kB
+../dist/public/assets/mic-CtxpCp5K.js                           0.27 kB │ gzip:   0.21 kB
+../dist/public/assets/pencil-BG7-FOPu.js                        0.27 kB │ gzip:   0.22 kB
+../dist/public/assets/house-CWR97JMp.js                         0.29 kB │ gzip:   0.22 kB
+../dist/public/assets/phoneInput-9dKjy8KH.js                    0.29 kB │ gzip:   0.20 kB
+../dist/public/assets/BarChart-B1u1Grh_.js                      0.32 kB │ gzip:   0.23 kB
+../dist/public/assets/scan-line-CdPyV-6h.js                     0.33 kB │ gzip:   0.21 kB
+../dist/public/assets/list-ordered-DluVuN-P.js                  0.33 kB │ gzip:   0.21 kB
+../dist/public/assets/ChartTick-BoEpUe5o.js                     0.33 kB │ gzip:   0.28 kB
+../dist/public/assets/trash-2-BWo8_ZQy.js                       0.35 kB │ gzip:   0.24 kB
+../dist/public/assets/calendar-clock-CH7d0Dwj.js                0.38 kB │ gzip:   0.26 kB
+../dist/public/assets/salesPath-Uff30zn7.js                     0.38 kB │ gzip:   0.27 kB
+../dist/public/assets/mouse-pointer-click-CA3E6Hb4.js           0.41 kB │ gzip:   0.28 kB
+../dist/public/assets/eye-off-Cr-usPXZ.js                       0.43 kB │ gzip:   0.27 kB
+../dist/public/assets/handshake-3WkjOCdd.js                     0.44 kB │ gzip:   0.28 kB
+../dist/public/assets/package-plus-D5vC0FDK.js                  0.45 kB │ gzip:   0.30 kB
+../dist/public/assets/format-DKi_jdMy.js                        0.48 kB │ gzip:   0.33 kB
+../dist/public/assets/calendar-days-B4ZoGDgb.js                 0.49 kB │ gzip:   0.26 kB
+../dist/public/assets/LeadStatePill-CSfs7MMV.js                 0.61 kB │ gzip:   0.37 kB
+../dist/public/assets/phoneCountry-BzXo3ezG.js                  0.62 kB │ gzip:   0.41 kB
+../dist/public/assets/files-CMq9xqnq.js                         0.73 kB │ gzip:   0.47 kB
+../dist/public/assets/useLeadLookup-B0bT89N8.js                 0.76 kB │ gzip:   0.54 kB
+../dist/public/assets/map-pJkW7fuW.js                           0.84 kB │ gzip:   0.45 kB
+../dist/public/assets/usePlaceSearch-CUMWQJuZ.js                0.87 kB │ gzip:   0.54 kB
+../dist/public/assets/visitRules-CGaWS_jo.js                    1.13 kB │ gzip:   0.58 kB
+../dist/public/assets/PageHeader-C6czAKIg.js                    1.80 kB │ gzip:   0.85 kB
+../dist/public/assets/thumbRender-Y0CuYmt_.js                   1.81 kB │ gzip:   1.05 kB
+../dist/public/assets/landingContent-CEvtf0Nx.js                1.84 kB │ gzip:   0.81 kB
+../dist/public/assets/CompactDataTable-CbVYA1B_.js              2.02 kB │ gzip:   1.07 kB
+../dist/public/assets/useLeads-CBsuhjsX.js                      2.17 kB │ gzip:   1.06 kB
+../dist/public/assets/seo-D9MQ-74p.js                           2.34 kB │ gzip:   0.93 kB
+../dist/public/assets/InlineField-BI0KCdqJ.js                   2.44 kB │ gzip:   1.20 kB
+../dist/public/assets/ListSkeleton-CpRgm5hG.js                  2.62 kB │ gzip:   1.08 kB
+../dist/public/assets/PaymentChoice-C9R4nVr-.js                 2.74 kB │ gzip:   1.19 kB
+../dist/public/assets/Login-DNAORymz.js                         2.77 kB │ gzip:   1.39 kB
+../dist/public/assets/pagination-C_6aDVpL.js                    3.09 kB │ gzip:   1.61 kB
+../dist/public/assets/VisitStatus-Bd-agVrZ.js                   3.19 kB │ gzip:   1.33 kB
+../dist/public/assets/LeadContacts-D_Vnw_Cr.js                  3.59 kB │ gzip:   1.47 kB
+../dist/public/assets/LanguagePicker-OhqYW_kC.js                3.77 kB │ gzip:   1.49 kB
+../dist/public/assets/CountryCodePicker-CkzCv3u9.js             4.04 kB │ gzip:   1.75 kB
+../dist/public/assets/settings-CrRIL87R.js                      4.50 kB │ gzip:   1.49 kB
+../dist/public/assets/StateSelect-DXdN97V6.js                   5.18 kB │ gzip:   2.08 kB
+../dist/public/assets/useSalesModule-BfLs9ZVr.js                5.25 kB │ gzip:   1.49 kB
+../dist/public/assets/prospectingMaps-yv2gnL-Z.js               6.03 kB │ gzip:   2.31 kB
+../dist/public/assets/OrganizationPerson-DES6UuQB.js            6.07 kB │ gzip:   2.42 kB
+../dist/public/assets/CustomersScreen-9UhgQmZu.js               6.10 kB │ gzip:   2.29 kB
+../dist/public/assets/TagScreen-B5aWiCPi.js                     6.89 kB │ gzip:   2.94 kB
+../dist/public/assets/DashboardKit-eIAKmnCx.js                  8.20 kB │ gzip:   2.74 kB
+../dist/public/assets/CompanyInlineEditor-DlfvM83k.js           8.48 kB │ gzip:   3.25 kB
+../dist/public/assets/AddPersonForm-CbYZ1EGi.js                 8.74 kB │ gzip:   3.56 kB
+../dist/public/assets/TaskForm-xGrM0Swb.js                      9.02 kB │ gzip:   3.26 kB
+../dist/public/assets/dashboard-BeoducDr.js                     9.54 kB │ gzip:   2.65 kB
+../dist/public/assets/MasterDetail-DxCPRkce.js                  9.81 kB │ gzip:   3.76 kB
+../dist/public/assets/myPlates-BA31robL.js                     10.45 kB │ gzip:   3.60 kB
+../dist/public/assets/XpotTasks-Cqj40Wrq.js                    10.59 kB │ gzip:   4.25 kB
+../dist/public/assets/partnerMaterials-BVaLMSKG.js             10.97 kB │ gzip:   4.00 kB
+../dist/public/assets/AreaChart-B6eUMH3b.js                    11.03 kB │ gzip:   4.08 kB
+../dist/public/assets/PiecesScreen-DGM0GKzy.js                 11.83 kB │ gzip:   4.46 kB
+../dist/public/assets/customerOrders-DjW_GZN5.js               12.90 kB │ gzip:   4.83 kB
+../dist/public/assets/teamActivity-CO7sbAOD.js                 13.82 kB │ gzip:   4.45 kB
+../dist/public/assets/placeTypes-BOOnv5Wb.js                   13.91 kB │ gzip:   3.82 kB
+../dist/public/assets/CreateLeadDialog-BIZVg8b8.js             14.50 kB │ gzip:   4.92 kB
+../dist/public/assets/filters-CDgcWIbT.js                      14.79 kB │ gzip:   4.79 kB
+../dist/public/assets/organizations-Cqec902T.js                15.52 kB │ gzip:   4.61 kB
+../dist/public/assets/MyApp-DL2C-WAb.js                        15.58 kB │ gzip:   5.52 kB
+../dist/public/assets/leads-CbRbnMUO.js                        15.97 kB │ gzip:   4.42 kB
+../dist/public/assets/ConsignmentDialogs-CprOK5Mo.js           16.10 kB │ gzip:   4.80 kB
+../dist/public/assets/XpotSettings-p1N0aNM3.js                 17.08 kB │ gzip:   5.68 kB
+../dist/public/assets/landing-pfnyXiCU.js                      19.33 kB │ gzip:   6.84 kB
+../dist/public/assets/production-shared-BwUfzVUV.js            19.65 kB │ gzip:   7.68 kB
+../dist/public/assets/cards-BT8aga3r.js                        21.33 kB │ gzip:   6.83 kB
+../dist/public/assets/production-preview-3d-Cy6YKZ_3.js        21.37 kB │ gzip:   5.49 kB
+../dist/public/assets/CountryFlag-BKFg-ZrB.js                  21.42 kB │ gzip:   6.95 kB
+../dist/public/assets/CustomerScreen-D6W40Pnp.js               22.26 kB │ gzip:   6.97 kB
+../dist/public/assets/browser-BIT0wHLj.js                      25.78 kB │ gzip:  10.14 kB
+../dist/public/assets/manage-CIjiDPqL.js                       28.56 kB │ gzip:   8.96 kB
+../dist/public/assets/CustomerOrders-DjpZ9Q_r.js               34.10 kB │ gzip:   9.66 kB
+../dist/public/assets/XpotDashboard-Bspv3LtK.js                35.59 kB │ gzip:  11.92 kB
+../dist/public/assets/OrganizationsPage-DOyf8T1l.js            36.01 kB │ gzip:  10.55 kB
+../dist/public/assets/XpotCheckIn-D2vpjFFE.js                  36.24 kB │ gzip:  11.74 kB
+../dist/public/assets/PlaceLeadSearch-DHgzAUDm.js              36.54 kB │ gzip:  11.36 kB
+../dist/public/assets/XpotLeads-DAq6djgj.js                    36.96 kB │ gzip:  11.83 kB
+../dist/public/assets/useShowProfit-DgF6o3nZ.js                37.21 kB │ gzip:  10.72 kB
+../dist/public/assets/LegalPage-017WOjAq.js                    37.55 kB │ gzip:  13.49 kB
+../dist/public/assets/vendor-query-BsKFHvnA.js                 40.26 kB │ gzip:  11.88 kB
+../dist/public/assets/XpotSales-BVBjy069.js                    42.47 kB │ gzip:  12.91 kB
+../dist/public/assets/TagsApp-C7qqJFAM.js                      43.80 kB │ gzip:  13.66 kB
+../dist/public/assets/vendor-ui-CsZPGtDC.js                    54.00 kB │ gzip:  16.97 kB
+../dist/public/assets/vendor-utils-CsrphmYC.js                 75.73 kB │ gzip:  19.42 kB
+../dist/public/assets/XpotProspecting-b63aeJ5I.js              84.40 kB │ gzip:  24.57 kB
+../dist/public/assets/XpotLandingPage-CLoSNqsO.js             145.89 kB │ gzip:  46.62 kB
+../dist/public/assets/vendor-react-F-Xq0qox.js                147.94 kB │ gzip:  48.40 kB
+../dist/public/assets/supabase-BA-P-8rr.js                    207.83 kB │ gzip:  54.09 kB
+../dist/public/assets/tagShowcase-D2_vBv1x.js                 302.33 kB │ gzip:  98.51 kB
+../dist/public/assets/generateCategoricalChart-CxlRFSGu.js    375.18 kB │ gzip: 103.84 kB
+../dist/public/assets/AdminApp-B2pI3ACB.js                    521.58 kB │ gzip: 148.51 kB
+../dist/public/assets/GLTFLoader-33v8ndoK.js                  562.99 kB │ gzip: 143.59 kB
+../dist/public/assets/index-Dw_-lUg9.js                       614.56 kB │ gzip: 194.55 kB
+../dist/public/assets/maplibre-gl-DoJDlSbr.js               1,076.26 kB │ gzip: 292.07 kB
+
+(!) Some chunks are larger than 500 kB after minification. Consider:
+- Using dynamic import() to code-split the application
+- Use build.rollupOptions.output.manualChunks to improve chunking: https://rollupjs.org/configuration-options/#output-manualchunks
+- Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.
+✓ built in 43.47s
+
+✓ Build complete: dist/index.cjs + dist/migrate.cjs + dist/migrate-files.cjs + dist/shrink-photos.cjs + dist/public/
+(node:36284) [DEP0190] DeprecationWarning: Passing args to a child process with shell option true can lead to security vulnerabilities, as the arguments are not escaped, only concatenated.
+(Use `node --trace-deprecation ...` to show where the warning was created)

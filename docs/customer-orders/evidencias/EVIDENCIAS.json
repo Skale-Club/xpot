@@ -1,0 +1,731 @@
+{
+  "date": "2026-11-02",
+  "timezone": "America/New_York",
+  "codeCommit": "27856c4cdb226d201470d05ac11b3d07af7a607d",
+  "r3CodeReviewedAt": "bc3b685",
+  "r3Executed": false,
+  "base": "http://localhost:2210",
+  "database": "lab_customer_orders_20261102",
+  "integrationDatabase": "lab_customer_orders_ci_20261102",
+  "physicalProductionPerformed": false,
+  "realMessagesSent": false,
+  "api": [
+    {
+      "id": "E01",
+      "phase": "simple",
+      "at": "2026-11-02T14:53:29.054Z",
+      "actorRepId": 6,
+      "method": "POST",
+      "path": "/api/xpot/leads",
+      "status": 201,
+      "errorCode": null,
+      "resultId": null,
+      "replayed": null,
+      "quantity": null,
+      "saleTotalCents": null,
+      "paidCents": null
+    },
+    {
+      "id": "E02",
+      "phase": "simple",
+      "at": "2026-11-02T14:53:29.116Z",
+      "actorRepId": 6,
+      "method": "POST",
+      "path": "/api/xpot/sales",
+      "status": 201,
+      "errorCode": null,
+      "resultId": 22,
+      "replayed": null,
+      "quantity": 10,
+      "saleTotalCents": 20000,
+      "paidCents": 6000
+    },
+    {
+      "id": "E03",
+      "phase": "simple",
+      "at": "2026-11-02T14:53:29.196Z",
+      "actorRepId": 6,
+      "method": "POST",
+      "path": "/api/xpot/tags/2914df33-c48d-46e0-bb39-1f4323d00fac/quick-activate",
+      "status": 200,
+      "errorCode": null,
+      "resultId": "2914df33-c48d-46e0-bb39-1f4323d00fac",
+      "replayed": null,
+      "quantity": null,
+      "saleTotalCents": null,
+      "paidCents": null
+    },
+    {
+      "id": "E04",
+      "phase": "simple",
+      "at": "2026-11-02T14:53:29.213Z",
+      "actorRepId": 6,
+      "method": "GET",
+      "path": "/api/xpot/tags/2914df33-c48d-46e0-bb39-1f4323d00fac/linkable-sales",
+      "status": 200,
+      "errorCode": null,
+      "resultId": null,
+      "replayed": null,
+      "quantity": null,
+      "saleTotalCents": null,
+      "paidCents": null
+    },
+    {
+      "id": "E05",
+      "phase": "simple",
+      "at": "2026-11-02T14:53:29.250Z",
+      "actorRepId": 6,
+      "method": "POST",
+      "path": "/api/xpot/tags/2914df33-c48d-46e0-bb39-1f4323d00fac/link-sale",
+      "status": 200,
+      "errorCode": null,
+      "resultId": "2914df33-c48d-46e0-bb39-1f4323d00fac",
+      "replayed": null,
+      "quantity": null,
+      "saleTotalCents": null,
+      "paidCents": null
+    },
+    {
+      "id": "E06",
+      "phase": "simple",
+      "at": "2026-11-02T14:53:29.270Z",
+      "actorRepId": 6,
+      "method": "POST",
+      "path": "/api/xpot/tags/4d620deb-5f01-43ec-8936-b11023c17dd5/quick-activate",
+      "status": 200,
+      "errorCode": null,
+      "resultId": "4d620deb-5f01-43ec-8936-b11023c17dd5",
+      "replayed": null,
+      "quantity": null,
+      "saleTotalCents": null,
+      "paidCents": null
+    },
+    {
+      "id": "E07",
+      "phase": "simple",
+      "at": "2026-11-02T14:53:29.278Z",
+      "actorRepId": 6,
+      "method": "GET",
+      "path": "/api/xpot/tags/4d620deb-5f01-43ec-8936-b11023c17dd5/linkable-sales",
+      "status": 200,
+      "errorCode": null,
+      "resultId": null,
+      "replayed": null,
+      "quantity": null,
+      "saleTotalCents": null,
+      "paidCents": null
+    },
+    {
+      "id": "E08",
+      "phase": "simple",
+      "at": "2026-11-02T14:53:29.297Z",
+      "actorRepId": 6,
+      "method": "POST",
+      "path": "/api/xpot/tags/4d620deb-5f01-43ec-8936-b11023c17dd5/link-sale",
+      "status": 200,
+      "errorCode": null,
+      "resultId": "4d620deb-5f01-43ec-8936-b11023c17dd5",
+      "replayed": null,
+      "quantity": null,
+      "saleTotalCents": null,
+      "paidCents": null
+    },
+    {
+      "id": "E09",
+      "phase": "simple",
+      "at": "2026-11-02T14:53:29.370Z",
+      "actorRepId": 6,
+      "method": "POST",
+      "path": "/api/xpot/tasks",
+      "status": 201,
+      "errorCode": null,
+      "resultId": 17,
+      "replayed": null,
+      "quantity": null,
+      "saleTotalCents": null,
+      "paidCents": null
+    },
+    {
+      "id": "E10",
+      "phase": "simple",
+      "at": "2026-11-02T14:53:29.407Z",
+      "actorRepId": 1,
+      "method": "POST",
+      "path": "/api/xpot/admin/print-jobs",
+      "status": 500,
+      "errorCode": null,
+      "resultId": null,
+      "replayed": null,
+      "quantity": 8,
+      "saleTotalCents": null,
+      "paidCents": null
+    },
+    {
+      "id": "E11",
+      "phase": "print",
+      "at": "2026-11-02T14:54:25.717Z",
+      "actorRepId": 1,
+      "method": "POST",
+      "path": "/api/xpot/admin/print-jobs",
+      "status": 201,
+      "errorCode": null,
+      "resultId": "e5a9a256-f31f-4dd2-bcd7-8781f186c826",
+      "replayed": null,
+      "quantity": 8,
+      "saleTotalCents": null,
+      "paidCents": null
+    },
+    {
+      "id": "E12",
+      "phase": "delivery",
+      "at": "2026-11-02T14:55:51.790Z",
+      "actorRepId": 6,
+      "method": "POST",
+      "path": "/api/xpot/sales/22/cancel",
+      "status": 200,
+      "errorCode": null,
+      "resultId": 22,
+      "replayed": null,
+      "quantity": null,
+      "saleTotalCents": 20000,
+      "paidCents": 6000
+    },
+    {
+      "id": "E13",
+      "phase": "delivery",
+      "at": "2026-11-02T14:55:51.894Z",
+      "actorRepId": 6,
+      "method": "POST",
+      "path": "/api/xpot/tag-sales",
+      "status": 201,
+      "errorCode": null,
+      "resultId": 23,
+      "replayed": false,
+      "quantity": 2,
+      "saleTotalCents": 4000,
+      "paidCents": 0
+    },
+    {
+      "id": "E14",
+      "phase": "delivery",
+      "at": "2026-11-02T14:55:51.930Z",
+      "actorRepId": 6,
+      "method": "POST",
+      "path": "/api/xpot/tag-sales",
+      "status": 201,
+      "errorCode": null,
+      "resultId": 23,
+      "replayed": true,
+      "quantity": 2,
+      "saleTotalCents": 4000,
+      "paidCents": 0
+    },
+    {
+      "id": "E15",
+      "phase": "delivery",
+      "at": "2026-11-02T14:55:51.942Z",
+      "actorRepId": 6,
+      "method": "POST",
+      "path": "/api/xpot/tag-sales",
+      "status": 409,
+      "errorCode": "tag_already_sold",
+      "resultId": null,
+      "replayed": null,
+      "quantity": 2,
+      "saleTotalCents": null,
+      "paidCents": null
+    },
+    {
+      "id": "E16",
+      "phase": "delivery",
+      "at": "2026-11-02T14:55:51.948Z",
+      "actorRepId": 6,
+      "method": "POST",
+      "path": "/api/xpot/tag-sales",
+      "status": 400,
+      "errorCode": "validation_error",
+      "resultId": null,
+      "replayed": null,
+      "quantity": 0,
+      "saleTotalCents": null,
+      "paidCents": null
+    },
+    {
+      "id": "E17",
+      "phase": "delivery",
+      "at": "2026-11-02T14:55:51.976Z",
+      "actorRepId": 6,
+      "method": "POST",
+      "path": "/api/xpot/sales",
+      "status": 201,
+      "errorCode": null,
+      "resultId": 24,
+      "replayed": null,
+      "quantity": 2,
+      "saleTotalCents": 4000,
+      "paidCents": 0
+    },
+    {
+      "id": "E18",
+      "phase": "delivery",
+      "at": "2026-11-02T14:55:52.003Z",
+      "actorRepId": 6,
+      "method": "POST",
+      "path": "/api/xpot/sales/24/cancel",
+      "status": 200,
+      "errorCode": null,
+      "resultId": 24,
+      "replayed": null,
+      "quantity": null,
+      "saleTotalCents": 4000,
+      "paidCents": 0
+    },
+    {
+      "id": "E19",
+      "phase": "custom",
+      "at": "2026-11-02T14:55:52.221Z",
+      "actorRepId": 6,
+      "method": "POST",
+      "path": "/api/xpot/leads",
+      "status": 201,
+      "errorCode": null,
+      "resultId": null,
+      "replayed": null,
+      "quantity": null,
+      "saleTotalCents": null,
+      "paidCents": null
+    },
+    {
+      "id": "E20",
+      "phase": "custom",
+      "at": "2026-11-02T14:55:52.229Z",
+      "actorRepId": 6,
+      "method": "POST",
+      "path": "/api/xpot/tag-sales",
+      "status": 400,
+      "errorCode": "validation_error",
+      "resultId": null,
+      "replayed": null,
+      "quantity": 0,
+      "saleTotalCents": null,
+      "paidCents": null
+    },
+    {
+      "id": "E21",
+      "phase": "custom",
+      "at": "2026-11-02T14:55:52.289Z",
+      "actorRepId": 6,
+      "method": "POST",
+      "path": "/api/xpot/tasks",
+      "status": 201,
+      "errorCode": null,
+      "resultId": 18,
+      "replayed": null,
+      "quantity": null,
+      "saleTotalCents": null,
+      "paidCents": null
+    },
+    {
+      "id": "E22",
+      "phase": "custom",
+      "at": "2026-11-02T14:55:52.331Z",
+      "actorRepId": 1,
+      "method": "POST",
+      "path": "/api/xpot/admin/print-models",
+      "status": 201,
+      "errorCode": null,
+      "resultId": "2c447e28-7087-47c6-bdcb-b05b6223ff92",
+      "replayed": null,
+      "quantity": null,
+      "saleTotalCents": null,
+      "paidCents": null
+    },
+    {
+      "id": "E23",
+      "phase": "custom",
+      "at": "2026-11-02T14:55:52.339Z",
+      "actorRepId": 1,
+      "method": "POST",
+      "path": "/api/xpot/admin/print-jobs",
+      "status": 409,
+      "errorCode": "print_model_design_needed",
+      "resultId": null,
+      "replayed": null,
+      "quantity": 1,
+      "saleTotalCents": null,
+      "paidCents": null
+    },
+    {
+      "id": "E24",
+      "phase": "custom",
+      "at": "2026-11-02T14:55:52.367Z",
+      "actorRepId": 6,
+      "method": "POST",
+      "path": "/api/xpot/sales",
+      "status": 201,
+      "errorCode": null,
+      "resultId": 25,
+      "replayed": null,
+      "quantity": 1,
+      "saleTotalCents": 7500,
+      "paidCents": 0
+    },
+    {
+      "id": "E25",
+      "phase": "custom",
+      "at": "2026-11-02T14:55:52.384Z",
+      "actorRepId": 6,
+      "method": "POST",
+      "path": "/api/xpot/opportunities",
+      "status": 201,
+      "errorCode": null,
+      "resultId": 8,
+      "replayed": null,
+      "quantity": null,
+      "saleTotalCents": null,
+      "paidCents": null
+    },
+    {
+      "id": "E26",
+      "phase": "custom",
+      "at": "2026-11-02T14:55:52.394Z",
+      "actorRepId": 6,
+      "method": "PATCH",
+      "path": "/api/xpot/opportunities/8",
+      "status": 200,
+      "errorCode": null,
+      "resultId": 8,
+      "replayed": null,
+      "quantity": null,
+      "saleTotalCents": null,
+      "paidCents": null
+    },
+    {
+      "id": "E27",
+      "phase": "reserved",
+      "at": "2026-11-02T14:57:20.512Z",
+      "actorRepId": 5,
+      "method": "POST",
+      "path": "/api/xpot/tags/68b8af59-b2f3-4015-bfe0-40dce50e348b/receive",
+      "status": 409,
+      "errorCode": "tag_not_pending",
+      "resultId": null,
+      "replayed": null,
+      "quantity": null,
+      "saleTotalCents": null,
+      "paidCents": null
+    },
+    {
+      "id": "E28",
+      "phase": "reserved",
+      "at": "2026-11-02T14:57:20.527Z",
+      "actorRepId": 5,
+      "method": "POST",
+      "path": "/api/xpot/tags/68b8af59-b2f3-4015-bfe0-40dce50e348b/return-to-house",
+      "status": 409,
+      "errorCode": "tag_stock_cannot_move",
+      "resultId": null,
+      "replayed": null,
+      "quantity": null,
+      "saleTotalCents": null,
+      "paidCents": null
+    },
+    {
+      "id": "E29",
+      "phase": "reserved",
+      "at": "2026-11-02T14:57:20.560Z",
+      "actorRepId": 5,
+      "method": "POST",
+      "path": "/api/xpot/tag-sales",
+      "status": 409,
+      "errorCode": "tag_not_available",
+      "resultId": null,
+      "replayed": null,
+      "quantity": 1,
+      "saleTotalCents": null,
+      "paidCents": null
+    },
+    {
+      "id": "E30",
+      "phase": "reserved",
+      "at": "2026-11-02T14:57:20.608Z",
+      "actorRepId": 5,
+      "method": "POST",
+      "path": "/api/xpot/tags/68b8af59-b2f3-4015-bfe0-40dce50e348b/quick-activate",
+      "status": 200,
+      "errorCode": null,
+      "resultId": "68b8af59-b2f3-4015-bfe0-40dce50e348b",
+      "replayed": null,
+      "quantity": null,
+      "saleTotalCents": null,
+      "paidCents": null
+    },
+    {
+      "id": "E31",
+      "phase": "reserved",
+      "at": "2026-11-02T14:57:20.616Z",
+      "actorRepId": 5,
+      "method": "GET",
+      "path": "/api/xpot/tags?mine=1&stockStatus=reserved",
+      "status": 200,
+      "errorCode": null,
+      "resultId": null,
+      "replayed": null,
+      "quantity": null,
+      "saleTotalCents": null,
+      "paidCents": null
+    }
+  ],
+  "snapshots": {
+    "saleBeforeDelivery": [
+      {
+        "id": 22,
+        "status": "completed",
+        "total_cents": 20000,
+        "paid_cents": 6000,
+        "quantity": 10,
+        "linked_pieces": 2
+      }
+    ],
+    "cancelledWithPayment": [
+      {
+        "id": 22,
+        "status": "cancelled",
+        "total_cents": 20000,
+        "paid_cents": 6000,
+        "payment_status": "partial"
+      }
+    ],
+    "duplicateFinancialRecords": [
+      {
+        "source": "sales",
+        "total_cents": 4000,
+        "sales": 1
+      },
+      {
+        "source": "tags",
+        "total_cents": 4000,
+        "sales": 1
+      }
+    ],
+    "custom": [
+      {
+        "lab_print_requests": 1,
+        "customer_sales": 1
+      }
+    ]
+  },
+  "memberTagSaleResponseCostFields": [
+    "unitCostCents"
+  ],
+  "screenshots": [
+    {
+      "file": "simple-restaurant-sale-desktop.png",
+      "device": "desktop",
+      "width": 1440,
+      "requested": "/sales/sales/22",
+      "actualUrl": "http://localhost:2210/sales/sales/22",
+      "pageErrors": [],
+      "externalOriginsBlocked": [
+        "https://fonts.googleapis.com"
+      ],
+      "openedByAgent": true,
+      "sha256": "0a9a91acbb0e98522461e6d8fcfdad6ccad03b96147bd7bf085cda10f5ed7782"
+    },
+    {
+      "file": "simple-restaurant-sale-phone.png",
+      "device": "phone",
+      "width": 390,
+      "requested": "/sales/sales/22",
+      "actualUrl": "http://localhost:2210/sales/sales/22",
+      "pageErrors": [],
+      "externalOriginsBlocked": [
+        "https://fonts.googleapis.com"
+      ],
+      "openedByAgent": true,
+      "sha256": "241f9bdc60c6510a684f280543812c91794efa7ebbc037942ae3818beaa289bc"
+    },
+    {
+      "file": "simple-restaurant-customer-desktop.png",
+      "device": "desktop",
+      "width": 1440,
+      "requested": "/tags/customers/42",
+      "actualUrl": "http://localhost:2210/leads/42",
+      "pageErrors": [],
+      "externalOriginsBlocked": [
+        "https://fonts.googleapis.com"
+      ],
+      "openedByAgent": true,
+      "sha256": "abc2766166e6af38af578e5cfd7a9dd06318a1507e4b6e2069c59f43efe659ba"
+    },
+    {
+      "file": "simple-restaurant-customer-phone.png",
+      "device": "phone",
+      "width": 390,
+      "requested": "/tags/customers/42",
+      "actualUrl": "http://localhost:2210/leads/42",
+      "pageErrors": [],
+      "externalOriginsBlocked": [
+        "https://fonts.googleapis.com"
+      ],
+      "openedByAgent": true,
+      "sha256": "9f59a39d2d384ada24ea60081d5790ea469bafcfdea2f55bbfb588b116fd53a1"
+    },
+    {
+      "file": "simple-restaurant-task-desktop.png",
+      "device": "desktop",
+      "width": 1440,
+      "requested": "/tasks",
+      "actualUrl": "http://localhost:2210/tasks",
+      "pageErrors": [],
+      "externalOriginsBlocked": [
+        "https://fonts.googleapis.com"
+      ],
+      "openedByAgent": true,
+      "sha256": "cc1578db67305db42333f9c85c7812347b945a0095be6c67d0875e20581b6e4c"
+    },
+    {
+      "file": "simple-restaurant-task-phone.png",
+      "device": "phone",
+      "width": 390,
+      "requested": "/tasks",
+      "actualUrl": "http://localhost:2210/tasks",
+      "pageErrors": [],
+      "externalOriginsBlocked": [
+        "https://fonts.googleapis.com"
+      ],
+      "openedByAgent": true,
+      "sha256": "f5bd87b378a5d2af19a31ecfc5ba1f2efe7abe0e1874a6bf58f756dbf64fb364"
+    },
+    {
+      "file": "simple-production-desktop.png",
+      "device": "desktop",
+      "width": 1440,
+      "requested": "/admin/tags/production/orders",
+      "actualUrl": "http://localhost:2210/admin/tags/production/orders",
+      "pageErrors": [],
+      "externalOriginsBlocked": [
+        "https://fonts.googleapis.com"
+      ],
+      "openedByAgent": true,
+      "sha256": "5ec2412ed3d4721eaa0c078d95699268ce96198c68028dc958b21eaf3dfec7b8"
+    },
+    {
+      "file": "simple-production-phone.png",
+      "device": "phone",
+      "width": 390,
+      "requested": "/admin/tags/production/orders",
+      "actualUrl": "http://localhost:2210/admin/tags/production/orders",
+      "pageErrors": [],
+      "externalOriginsBlocked": [
+        "https://fonts.googleapis.com"
+      ],
+      "openedByAgent": true,
+      "sha256": "3ebcaa2e53750f8399fca248670fec8b5df4b26d7ba98027381d7cc1250d7c9a"
+    },
+    {
+      "file": "final-delivered-sale-desktop.png",
+      "device": "desktop",
+      "width": 1440,
+      "requested": "/sales/sales/23",
+      "actualUrl": "http://localhost:2210/sales/sales/23",
+      "pageErrors": [],
+      "externalOriginsBlocked": [
+        "https://fonts.googleapis.com"
+      ],
+      "openedByAgent": true,
+      "sha256": "31751d12cf982a1c272af0dc71ec37a806f734c42f161166154fc7a5e6bbca85"
+    },
+    {
+      "file": "final-delivered-sale-phone.png",
+      "device": "phone",
+      "width": 390,
+      "requested": "/sales/sales/23",
+      "actualUrl": "http://localhost:2210/sales/sales/23",
+      "pageErrors": [],
+      "externalOriginsBlocked": [
+        "https://fonts.googleapis.com"
+      ],
+      "openedByAgent": true,
+      "sha256": "3cdc26af32e06f5b78f670e32b917702dced822d0ce3a4534ec26df8f5ed7bd5"
+    },
+    {
+      "file": "final-custom-customer-desktop.png",
+      "device": "desktop",
+      "width": 1440,
+      "requested": "/leads/43",
+      "actualUrl": "http://localhost:2210/leads/43",
+      "pageErrors": [],
+      "externalOriginsBlocked": [
+        "https://fonts.googleapis.com"
+      ],
+      "openedByAgent": true,
+      "sha256": "a35fb17d4fc8e6be43da73fe9514b84ab87f4ca2b38746f5f1ae8613103f4026"
+    },
+    {
+      "file": "final-custom-customer-phone.png",
+      "device": "phone",
+      "width": 390,
+      "requested": "/leads/43",
+      "actualUrl": "http://localhost:2210/leads/43",
+      "pageErrors": [],
+      "externalOriginsBlocked": [
+        "https://fonts.googleapis.com"
+      ],
+      "openedByAgent": true,
+      "sha256": "b6fdb319c7e1cf6d8785c5c990b95118ff2ef45b0603685eaa5a2bc2b6e1b7d2"
+    },
+    {
+      "file": "final-custom-model-desktop.png",
+      "device": "desktop",
+      "width": 1440,
+      "requested": "/admin/tags/production/models/lab-customer-logo-20261102",
+      "actualUrl": "http://localhost:2210/admin/tags/production/models/lab-customer-logo-20261102",
+      "pageErrors": [],
+      "externalOriginsBlocked": [
+        "https://fonts.googleapis.com"
+      ],
+      "openedByAgent": true,
+      "sha256": "29208e5cc1091dbb078f39d2a8da4f472a46a73876c58fbba027e1b935c335c9"
+    },
+    {
+      "file": "final-custom-model-phone.png",
+      "device": "phone",
+      "width": 390,
+      "requested": "/admin/tags/production/models/lab-customer-logo-20261102",
+      "actualUrl": "http://localhost:2210/admin/tags/production/models/lab-customer-logo-20261102",
+      "pageErrors": [],
+      "externalOriginsBlocked": [
+        "https://fonts.googleapis.com"
+      ],
+      "openedByAgent": true,
+      "sha256": "650bf0e2e19f4d2abf5d4c27bd50d270ece5ff173e01c6f962396f2c99a817d4"
+    },
+    {
+      "file": "final-custom-tasks-desktop.png",
+      "device": "desktop",
+      "width": 1440,
+      "requested": "/tasks",
+      "actualUrl": "http://localhost:2210/tasks",
+      "pageErrors": [],
+      "externalOriginsBlocked": [
+        "https://fonts.googleapis.com"
+      ],
+      "openedByAgent": true,
+      "sha256": "7efd6b54f4f02edebf39e19e83e204e9d5af5aafc6ca899265d6dec8843b4c0f"
+    },
+    {
+      "file": "final-custom-tasks-phone.png",
+      "device": "phone",
+      "width": 390,
+      "requested": "/tasks",
+      "actualUrl": "http://localhost:2210/tasks",
+      "pageErrors": [],
+      "externalOriginsBlocked": [
+        "https://fonts.googleapis.com"
+      ],
+      "openedByAgent": true,
+      "sha256": "7929167d3ba95f54a1eaf3384711cbd470f89a4bf97d99a15cb954c83564b29b"
+    }
+  ]
+}

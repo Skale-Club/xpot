@@ -1,0 +1,12 @@
+
+> xpot@0.1.0 test
+> vitest run --maxWorkers=4
+
+
+ RUN  v4.1.9 C:/Users/Vanildo/Dev/xpot/.lab/customer-orders/implementation
+
+
+ Test Files  178 passed | 26 skipped (204)
+      Tests  1748 passed | 26 skipped (1774)
+   Start at  12:02:02
+   Duration  134.92s (transform 14.60s, setup 0ms, import 289.45s, tests 128.24s, environment 36ms)

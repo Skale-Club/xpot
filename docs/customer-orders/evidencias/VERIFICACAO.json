@@ -1,0 +1,31 @@
+{
+  "at": "2026-11-02T15:20:53.251Z",
+  "lockfileRestored": true,
+  "vitest": "4.1.9",
+  "results": [
+    {
+      "name": "check",
+      "exitCode": 0,
+      "log": "final-check.log",
+      "tail": "\n> xpot@0.1.0 check\n> tsc\n\n"
+    },
+    {
+      "name": "unit",
+      "exitCode": 0,
+      "log": "final-unit.log",
+      "tail": "est.ts > consistency of the piece creation > prints again with fresh codes once a piece was received, retiring the codes never printed\n[production] request 34b78166-fd7e-43dd-9dfa-044fc9732cee for plate-large-menu-white v1: 4 pieces on 1 plate(s) [4] for organization 1 (user print-admin)\n\nstdout | tests/tags/production.integration.test.ts > consistency of the piece creation > prints again with fresh codes once a piece was received, retiring the codes never printed\n[tags] batch TPLATE-2026-002 created with 4 issued codes (user print-admin)\n\n·stdout | tests/tags/production.integration.test.ts > consistency of the piece creation > never replaces a part's file a plate took, even a failed one, and drops a file it replaces\n[production] bed x6 of base-large v1: file first.3mf (5 B, user print-admin)\n\nstdout | tests/tags/production.integration.test.ts > consistency of the piece creation > never replaces a part's file a plate took, even a failed one, and drops a file it replaces\n[production] bed x6 of base-large v1: file second.3mf (6 B, user print-admin)\n\nstdout | tests/tags/production.integration.test.ts > consistency of the piece creation > never replaces a part's file a plate took, even a failed one, and drops a file it replaces\n[production] request 7bbce69c-7245-43be-9638-5010047c8112 for base-large v1: 6 pieces on 1 plate(s) [6] for organization 1 (user print-admin)\n\n·\n\n Test Files  175 passed | 23 skipped (198)\n      Tests  1721 passed | 23 skipped (1744)\n   Start at  10:19:03\n   Duration  38.75s (transform 69.20s, setup 0ms, import 492.45s, tests 127.19s, environment 49ms)\n\n"
+    },
+    {
+      "name": "build",
+      "exitCode": 0,
+      "log": "final-build.log",
+      "tail": "cting-gp9dDsfM.js              84.40 kB │ gzip:  24.57 kB\n../dist/public/assets/XpotLandingPage-CLcOc7CK.js             145.89 kB │ gzip:  46.61 kB\n../dist/public/assets/vendor-react-F-Xq0qox.js                147.94 kB │ gzip:  48.40 kB\n../dist/public/assets/supabase-BA-P-8rr.js                    207.83 kB │ gzip:  54.09 kB\n../dist/public/assets/tagShowcase-Q4mnJ69i.js                 304.30 kB │ gzip:  98.83 kB\n../dist/public/assets/generateCategoricalChart-CxlRFSGu.js    375.18 kB │ gzip: 103.84 kB\n../dist/public/assets/AdminApp-CY1AX_3F.js                    520.87 kB │ gzip: 148.29 kB\n../dist/public/assets/GLTFLoader-33v8ndoK.js                  562.99 kB │ gzip: 143.59 kB\n../dist/public/assets/index-CGGVN09p.js                       613.41 kB │ gzip: 194.12 kB\n../dist/public/assets/maplibre-gl-DoJDlSbr.js               1,076.26 kB │ gzip: 292.07 kB\n\n(!) Some chunks are larger than 500 kB after minification. Consider:\n- Using dynamic import() to code-split the application\n- Use build.rollupOptions.output.manualChunks to improve chunking: https://rollupjs.org/configuration-options/#output-manualchunks\n- Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.\n✓ built in 15.37s\n\n✓ Build complete: dist/index.cjs + dist/migrate.cjs + dist/migrate-files.cjs + dist/shrink-photos.cjs + dist/public/\n(node:67048) [DEP0190] DeprecationWarning: Passing args to a child process with shell option true can lead to security vulnerabilities, as the arguments are not escaped, only concatenated.\n(Use `node --trace-deprecation ...` to show where the warning was created)\n"
+    },
+    {
+      "name": "integration",
+      "exitCode": 0,
+      "log": "final-integration.log",
+      "tail": "node --import tsx scripts/migrate.ts\nexit 0 Migrations: 0 applied, 80 already in place.\n\nCI integration files 16\nnode node_modules/vitest/vitest.mjs run --no-file-parallelism tests/tags/tags.integration.test.ts tests/tags/journey.integration.test.ts tests/mcp.integration.test.ts tests/resellerAccounts.integration.test.ts tests/phoneAuth.integration.test.ts tests/wholesale.integration.test.ts tests/mcp.oauth.integration.test.ts tests/tags/stockMetrics.integration.test.ts tests/tags/distribution.integration.test.ts tests/tags/pieceScreen.integration.test.ts tests/tags/resellerCustomers.integration.test.ts tests/tags/organizationKits.integration.test.ts tests/leadPieceAccess.integration.test.ts tests/tags/organizationFilter.integration.test.ts tests/tags/wholesale-fulfill.integration.test.ts tests/tags/takeBackOrigin.integration.test.ts\nexit 0 Migrations: 0 applied, 80 already in place.\n\n RUN  v4.1.9 C:/Users/Vanildo/Dev/xpot/.lab/customer-orders/runtime\n\n\n Test Files  16 passed (16)\n      Tests  16 passed (16)\n   Start at  10:20:04\n   Duration  48.90s (transform 1.45s, setup 0ms, import 5.53s, tests 37.81s, environment 1ms)\n\n\n"
+    }
+  ]
+}

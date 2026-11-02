@@ -1,0 +1,60 @@
+{
+  "date": "2026-11-02",
+  "baseCommit": "65a40f1",
+  "codeCommit": "7818b3cc49f39a072fa923fdbddfa4640f6f0e51",
+  "branch": "codex/customer-orders",
+  "checks": {
+    "types": {
+      "exitCode": 0
+    },
+    "unit": {
+      "exitCode": 0,
+      "passed": 1748,
+      "skipped": 26,
+      "filesPassed": 178,
+      "filesSkipped": 26
+    },
+    "focused": {
+      "exitCode": 0,
+      "passed": 39,
+      "filesPassed": 5
+    },
+    "postgresIntegration": {
+      "exitCode": 0,
+      "passed": 19,
+      "filesPassed": 19,
+      "migrationsFromEmpty": 81,
+      "database": "disposable PostgreSQL 18.6"
+    },
+    "build": {
+      "exitCode": 0
+    },
+    "python": {
+      "exitCode": 0,
+      "passed": 20
+    },
+    "nfcLogic": {
+      "exitCode": 0,
+      "passed": 19
+    }
+  },
+  "browser": {
+    "screenshots": 16,
+    "languages": [
+      "pt",
+      "en",
+      "es"
+    ],
+    "widths": [
+      390,
+      1440
+    ],
+    "javascriptErrors": 0,
+    "horizontalOverflow": 0,
+    "imagesOpenedAndInspected": true
+  },
+  "productionChanged": false,
+  "externalMessagesSent": false,
+  "physicalPrintingPerformed": false,
+  "deploymentPerformed": false
+}
