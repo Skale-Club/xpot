@@ -6,11 +6,9 @@ import type { Dictionary } from "../index";
 
 const en = {
   // Receive
-  receiveTitle: "Not in stock yet",
-  receiveHint: "Receive it when it goes into stock.",
-  receiveHintRep: "Receive it to set it up or sell it.",
-  receiveHouse: "Put in company stock",
-  receiveMe: "Keep with me",
+  receiveTitle: "Did this piece arrive?",
+  receiveHouse: "It's in company stock",
+  receiveMe: "It's with me",
   received_house: "Put in company stock",
   received_me: "Kept with you",
   receiveBlocked_batch_closed: "Its batch is closed. Reopen the batch to receive this piece.",
@@ -46,11 +44,9 @@ const en = {
 export const pieceCustodyMessages: Dictionary<typeof en> = {
   en,
   pt: {
-    receiveTitle: "Ainda fora do estoque",
-    receiveHint: "Receba quando ela entrar no estoque.",
-    receiveHintRep: "Receba para configurar ou vender.",
-    receiveHouse: "Colocar no estoque da empresa",
-    receiveMe: "Ficar comigo",
+    receiveTitle: "Esta peça já chegou?",
+    receiveHouse: "Está no estoque da empresa",
+    receiveMe: "Está comigo",
     received_house: "Colocada no estoque da empresa",
     received_me: "Ficou com você",
     receiveBlocked_batch_closed: "O lote está fechado. Reabra o lote para receber esta peça.",
@@ -80,11 +76,9 @@ export const pieceCustodyMessages: Dictionary<typeof en> = {
     eraseAppDone: "Já apaguei",
   },
   es: {
-    receiveTitle: "Aún fuera del stock",
-    receiveHint: "Recíbela cuando entre al stock.",
-    receiveHintRep: "Recíbela para configurarla o venderla.",
-    receiveHouse: "Poner en el stock de la empresa",
-    receiveMe: "Quedármela",
+    receiveTitle: "¿Ya llegó esta pieza?",
+    receiveHouse: "Está en el stock de la empresa",
+    receiveMe: "Está conmigo",
     received_house: "Puesta en el stock de la empresa",
     received_me: "Quedó contigo",
     receiveBlocked_batch_closed: "El lote está cerrado. Reábrelo para recibir esta pieza.",

@@ -241,8 +241,12 @@ export function CustomerDestinationSection({ commands }: {
     ? (isDestinationType(tag.destinationType) ? t(`dest_${tag.destinationType}`) : tag.destinationType)
     : t(`contentKind_${destKind}`);
 
+  // Nothing to show yet and the main button sets it up: only the editor stays, with no empty card above it.
+  const bare = !tag.leadId && !dest && mainAction === "configure";
+
   return (
-    <section className={`${CARD_ACCENT} p-4`} data-testid="destination-hero">
+    <section className={bare ? "contents" : `${CARD_ACCENT} p-4`} data-testid="destination-hero">
+      {bare ? null : (<>
       <div className="flex items-center justify-between gap-2">
         <p className={EYEBROW}>{t("setupTitle")}</p>
         {dest && !retired && (
@@ -358,6 +362,8 @@ export function CustomerDestinationSection({ commands }: {
       ) : null}
 
       {/* The editor: the customer first (when choosing one), then what the piece opens. */}
+      </>)}
+
       <BottomSheet open={editing} onClose={closeEditor} title={changingCustomer ? t("changeCustomer") : dest ? t("editDestination") : t("configurePiece")} banner={banner}>
         <div className="space-y-4" data-testid="destination-editor">
           {!needsLead && tag.leadName && (

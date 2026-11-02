@@ -10,6 +10,7 @@ import {
   pieceIsSold,
   pieceLocation,
   pieceSections,
+  pieceHasLocation,
   pieceSituation,
   pieceStatusChips,
   showsReceive,
@@ -206,6 +207,34 @@ describe("canCancelPieceSale", () => {
     expect(canCancelPieceSale({ ...seller, repId: 2 }, ownSale)).toBe(false);
     expect(canCancelPieceSale({ ...seller, repId: null }, ownSale)).toBe(false);
     expect(canCancelPieceSale(seller, undefined)).toBe(false);
+  });
+});
+
+describe("the header never contradicts the status", () => {
+  const admin = { surface: "admin", canManage: true, isAdmin: true, hasVisits: true, repId: 1, producesPrints: true } as const;
+  const rep = { surface: "field", canManage: false, isAdmin: false, hasVisits: true, repId: 2 } as const;
+  const piece = { status: "inventory", stockStatus: "pending", nfcStatus: "not_programmed", saleId: null, leadId: null, destinationUrl: null, destinationType: null, batchId: "b-1", printJobId: "j-1" };
+  const receivable = { receive: { targets: ["me"], blocker: null } } as never;
+
+  it("says waiting to print only to whoever produces, and only while the print is open", () => {
+    const open = pieceSituation({ ...piece, printJobStatus: "ready" }, admin);
+    expect([open.key, open.hint, open.action?.kind]).toEqual(["waitingPrint", "waitingPrint", "openPrint"]);
+    const done = pieceSituation({ ...piece, printJobStatus: "printed" }, admin);
+    expect([done.key, done.hint, done.action?.kind]).toEqual(["pending", undefined, "openPrint"]);
+    expect(pieceSituation({ ...piece, printJobStatus: "ready", custody: receivable }, rep).key).toBe("pending");
+  });
+
+  it("tells a reseller with nothing to do who to ask", () => {
+    const stuck = pieceSituation({ ...piece, printJobStatus: "ready" }, rep);
+    expect([stuck.action, stuck.hint]).toEqual([null, "askManager"]);
+  });
+
+  it.each([
+    ["pending", "inventory", false], ["sold", "active", false], ["damaged", "inventory", false], ["lost", "inventory", false],
+    ["retired", "retired", false], ["available", "retired", false],
+    ["available", "inventory", true], ["available", "active", true], ["reserved", "inventory", true], ["internal_use", "inventory", true],
+  ])("stock %s, status %s: location shown is %s", (stockStatus, status, shown) => {
+    expect(pieceHasLocation({ status, stockStatus })).toBe(shown);
   });
 });
 

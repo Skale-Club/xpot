@@ -95,6 +95,8 @@ export interface TagDetail extends TagListItem {
   history: TagHistoryEntry[];
   /** The print order of the piece's batch (tag_batches.print_job_id): set for a piece the house prints, null for a supplier's lot or no batch. */
   printJobId: string | null;
+  /** That print order's status (print_jobs.status); null with no print order. */
+  printJobStatus: string | null;
   /** What the viewer may do about who holds the piece (shared/tagCustody.ts); absent when not worked out. */
   custody?: PieceCustodyActions | null;
 }

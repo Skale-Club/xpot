@@ -87,12 +87,14 @@ export function PieceBody({ layout, desktopWriter }: { layout: "stack" | "column
       {tp(`action${action.kind[0].toUpperCase()}${action.kind.slice(1)}` as "actionGoLive")}
     </Button>
   ) : null;
+  const hint = situation.hint ? <p className="text-sm text-white/55" data-testid="piece-hint">{tp(situation.hint === "waitingPrint" ? "hintWaitingPrint" : "hintAskManager")}</p> : null;
 
   if (layout === "stack") {
     const customerOutside = !!tag.leadId || action?.kind === "configure";
     return (
       <div className="min-w-0 space-y-3" data-testid="piece-body">
         {main}
+        {hint}
         {customerOutside ? customer : null}
         <details
           open={detailsOpen}
@@ -121,6 +123,7 @@ export function PieceBody({ layout, desktopWriter }: { layout: "stack" | "column
   return (
     <div className="min-w-0 space-y-4" data-testid="piece-body">
       {main}
+      {hint}
       <div className="grid min-w-0 grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,380px)]">
         <div className="min-w-0 space-y-4">
           <PieceStatusChips tag={tag} />

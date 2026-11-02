@@ -1,3 +1,4 @@
+import { OPEN_PRINT_JOB_STATUSES } from "@shared/printProduction";
 import { planTransition, type TagAction } from "@shared/tags";
 import type { PieceCustodyActions } from "@shared/tagCustody";
 import type { TagDailyPoint, TagHistoryEntry, TagJourneyEntryItem, TagPieceSale, TagStockMovementItem } from "@shared/tagsApi";
@@ -38,7 +39,7 @@ export function pieceStatusChips(tag: { status: string; stockStatus: string; nfc
 
 /** What the header says in one pill: the answer to "is it ready?", not the three stored states. */
 export type PieceSituationKey =
-  | "damaged" | "lost" | "retired" | "sold" | "pending"
+  | "damaged" | "lost" | "retired" | "sold" | "pending" | "waitingPrint"
   | "live" | "paused" | "readyNoChip" | "readyOffline" | "inStock" | "other";
 
 /** The one thing to do next. `openPrint` carries its link; the rest run what the sections already do. */
@@ -53,9 +54,12 @@ export interface PieceSituation {
   key: PieceSituationKey;
   tone: PillTone;
   action: PieceMainAction | null;
+  /** One line under the status, when the next step is not obvious from it. */
+  hint?: "waitingPrint" | "askManager";
 }
 
 type SituationTag = {
+  printJobStatus?: string | null;
   status: string;
   stockStatus: string;
   nfcStatus: string;
@@ -103,10 +107,14 @@ export function pieceSituation(tag: SituationTag, viewer: PieceViewer): PieceSit
     const canReceive = !!receive && receive.blocker === null;
     // Whoever produces opens the print of a house-printed piece; a supplier's lot (no print) and
     // everyone who does not produce receive.
+    // Whoever produces opens the print; only one still open is "waiting to print". Anyone else is asked if it arrived.
     if (!showsReceive(tag, viewer) && tag.printJobId) {
-      return act("pending", "amber", { kind: "openPrint", href: `/admin/tags/production/jobs/${encodeURIComponent(tag.printJobId)}` });
+      const action: PieceMainAction = { kind: "openPrint", href: `/admin/tags/production/jobs/${encodeURIComponent(tag.printJobId)}` };
+      const waiting = (OPEN_PRINT_JOB_STATUSES as readonly string[]).includes(tag.printJobStatus ?? "");
+      return waiting ? { key: "waitingPrint", tone: "amber", action, hint: "waitingPrint" } : { key: "pending", tone: "amber", action };
     }
-    return act("pending", "amber", canReceive ? { kind: "receive" } : null);
+    if (canReceive) return act("pending", "amber", { kind: "receive" });
+    return { key: "pending", tone: "amber", action: null, hint: "askManager" };
   }
 
   if (status === "active") return act("live", "green", { kind: "viewPerformance" });
@@ -130,6 +138,14 @@ export function pieceIsSold(tag: { saleId: number | null }): boolean {
 export function kitShort(kitId: string | null | undefined, kitCode?: string | null): string | null {
   if (!kitId) return null;
   return kitCode || kitId.slice(0, 8);
+}
+
+/**
+ * Whether "where it is" means anything: a piece not in stock yet, sold, damaged, lost or deactivated is in nobody's
+ * stock, so the header does not say it is.
+ */
+export function pieceHasLocation(tag: { status: string; stockStatus: string }): boolean {
+  return tag.status !== "retired" && !["pending", "sold", "damaged", "lost", "retired"].includes(tag.stockStatus);
 }
 
 export type PieceLocation =
