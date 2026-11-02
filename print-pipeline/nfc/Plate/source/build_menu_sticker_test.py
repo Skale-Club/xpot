@@ -17,8 +17,9 @@ import tempfile
 
 import build_menu_batch as menu
 from build_menu_batch import tile, geom, fa, SOURCE, PIECE, REPO
-from shapely.geometry import box
+from shapely.geometry import Point, box
 from shapely.ops import unary_union
+import nfc_mounts
 
 TEST_CODE = 'TEST0002'
 TEST_DIR = PIECE/'test'/'physical'/'menu-large-black-sticker-near-face'
@@ -52,6 +53,22 @@ def tap_row_bottom(size):
 TAP_ROW_BOTTOM = tap_row_bottom('large')     # the Large Menu's, which the Venmo Plate shares
 
 
+def nfc_pocket(nfc_mount, theme, S, sticker_from_top):
+    """(outline, floor, roof) of a face with no G pocket, print z: the 10 x 20 sticker where the face puts it, the round
+    sticker or the round tag near the top edge (nfc_mounts). `theme` is the colour whose depth it takes."""
+    if nfc_mount == nfc_mounts.RECT_STICKER:
+        pz0, pz1, _ = pocket_z(theme)
+        w, h, cy = TAG_W/2 + CLEARANCE, TAG_H/2 + CLEARANCE, S - sticker_from_top
+        return tile._rounded_rect(-w, cy - h, w, cy + h, .8), pz0, pz1
+    if nfc_mount == nfc_mounts.ROUND_STICKER:
+        pz0, pz1, _ = nfc_mounts.print_z(theme)
+        return Point(0., S - nfc_mounts.FROM_TOP).buffer(nfc_mounts.POCKET_D/2, quad_segs=64), pz0, pz1
+    if nfc_mount == nfc_mounts.ROUND_TAG:
+        from_top = nfc_mounts.EDGE_GAP + nfc_mounts.TAG_D/2
+        return Point(0., S - from_top).buffer(nfc_mounts.TAG_D/2, quad_segs=64), nfc_mounts.TAG_PRINT_Z0, nfc_mounts.TAG_PRINT_Z1
+    raise ValueError(f'nfc_mount {nfc_mount!r}: one of {", ".join(nfc_mounts.NFC_MOUNTS)}')
+
+
 def pocket_z(theme):
     """(floor, roof, pause_top_z) in print z for a theme."""
     z0 = POCKET_Z0_BY_THEME[theme]
@@ -64,7 +81,7 @@ def stl_names(theme):
            ('White_Menu_Plate.stl', 'Black_Menu_Art.stl')
 
 
-def build_one(code, out, placement='under_tap', theme='black', size='large', qr_style='panel'):
+def build_one(code, out, placement='under_tap', theme='black', size='large', qr_style='panel', nfc_mount='sticker_10x20'):
     """placement 'title': centred on the Menu title (TEST0002, 2026-10-21);
     'under_tap': centred in the gap between the Tap here row and the title (user: "um pouco mais pra cima").
     theme 'black': white art and a white QR panel on a black body; 'white': black art and the QR's dark
@@ -77,14 +94,14 @@ def build_one(code, out, placement='under_tap', theme='black', size='large', qr_
     if no_panel:
         ink_comp = unary_union([ink_comp.difference(panel), dark]).simplify(.002, preserve_topology=True)
     nfc_top = title_centre if placement == 'title' else tap_row_bottom(size) + space/2
-    pz0, pz1, _ = pocket_z(theme)
     ink, panel_tile = tile.to_tile(ink_comp), tile.to_tile(panel)
     back_text, _ = fa.text_geom(code, 3.2, S/2, S/2 + 1.6)
     back = tile.to_tile_back(back_text.buffer(-.01, join_style='mitre').buffer(.01, join_style='mitre')
                              .simplify(.002, preserve_topology=True))
-    w, h, cy = TAG_W/2 + CLEARANCE, TAG_H/2 + CLEARANCE, S - nfc_top
-    assert h + 1.5 < nfc_top < S - h - 1.5
-    pocket = tile._rounded_rect(-w, cy - h, w, cy + h, .8)
+    pocket, pz0, pz1 = nfc_pocket(nfc_mount, theme, S, nfc_top)
+    x0, y0, x1, y1 = pocket.bounds
+    w, h = (x1 - x0)/2, (y1 - y0)/2
+    assert y1 < S - 1.5 and y0 > 1.5
     # model z runs from the back (0) to the face (TOP); print z = TOP - model z
     z0, z1 = tile.TOP - pz1, tile.TOP - pz0
     assert z1 < tile.TOP - ART_DEPTH, 'pocket must stay behind the face art'
@@ -118,7 +135,7 @@ def build_one(code, out, placement='under_tap', theme='black', size='large', qr_
                   pocket_mm=[2*w, 2*h, round(pz1 - pz0, 2)], pocket_print_z=[pz0, pz1],
                   pocket_section_mm2=hole_area, pocket_expected_mm2=pocket.area,
                   tag_face_distance_mm=pz0, air_over_tag_mm=round(pz1 - pz0 - TAG_T, 2),
-                  nfc_centre_from_top_mm=nfc_top, placement=placement, theme=theme, size=size, tile_mm=S,
+                  nfc_mount=nfc_mount, nfc_centre_from_top_mm=round(S - (y0 + y1)/2, 2), placement=placement, theme=theme, size=size, tile_mm=S,
                   qr_module_mm=round(qs/25, 3), message_gap_mm=round(space, 2))
     if not ok: raise RuntimeError(report)
     out.mkdir(parents=True, exist_ok=True)

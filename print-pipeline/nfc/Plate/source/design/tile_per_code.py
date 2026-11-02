@@ -33,6 +33,7 @@ STAND_DESIGN = os.path.join(os.path.dirname(PIECE), 'Stand', 'source', 'design')
 sys.path.insert(0, STAND_DESIGN)
 import face_art as fa  # noqa: E402
 import card_per_code_large_instagram as igc  # noqa: E402   (prism, to_trimesh, welded_bad_edges, mesh_section_polygons)
+import nfc_mounts  # noqa: E402
 
 T = 3.56
 TOP = float(np.float32(T))
@@ -170,7 +171,7 @@ def sticker_z(theme):
 def build(code, out_dir, theme='white', size='large', nfc_mount='embedded_round', qr='panel'):
     if theme not in ('white', 'black'):
         raise ValueError('theme must be white or black')
-    if nfc_mount not in ('embedded_round', 'sticker_10x20', 'rear_sticker_10x20', 'rear_sticker_10x20_covered'):
+    if nfc_mount not in ('embedded_round', 'sticker_10x20', nfc_mounts.ROUND_STICKER, 'rear_sticker_10x20', 'rear_sticker_10x20_covered'):
         raise ValueError('unsupported nfc_mount')
     configure_size(size)
     code = fa.normalize_code(code)
@@ -205,6 +206,12 @@ def build(code, out_dir, theme='white', size='large', nfc_mount='embedded_round'
     elif nfc_mount == 'sticker_10x20':
         nfc, sticker_from_top = sticker_pocket(art['tap_centre_y'])
         sticker_z0, sticker_z1, pause_top_z = sticker_z(theme)
+        nfc_z0, nfc_z1 = TOP - sticker_z1, TOP - sticker_z0     # model z: print z = TOP - model z
+        assert nfc_z1 < TOP - INLAY, 'sticker pocket must stay behind the face art'
+        expected_shells = 2
+    elif nfc_mount == nfc_mounts.ROUND_STICKER:
+        nfc = Point(0.0, S - nfc_mounts.FROM_TOP).buffer(nfc_mounts.POCKET_D / 2, quad_segs=64)
+        sticker_z0, sticker_z1, pause_top_z = nfc_mounts.print_z(theme)
         nfc_z0, nfc_z1 = TOP - sticker_z1, TOP - sticker_z0     # model z: print z = TOP - model z
         assert nfc_z1 < TOP - INLAY, 'sticker pocket must stay behind the face art'
         expected_shells = 2
@@ -258,6 +265,10 @@ def build(code, out_dir, theme='white', size='large', nfc_mount='embedded_round'
                    sticker_pocket_print_z=[sticker_z0, sticker_z1], pause_top_z=pause_top_z,
                    tag_face_distance_mm=sticker_z0, nfc_centre_from_top_mm=round(sticker_from_top, 2),
                    sticker_gap_to_top_edge_mm=round(sticker_from_top - STICKER_H / 2, 2))
+    if nfc_mount == nfc_mounts.ROUND_STICKER:
+        rep.update(size=size, tile_mm=S, sticker_pocket_mm=[nfc_mounts.POCKET_D, nfc_mounts.POCKET_D, nfc_mounts.POCKET_DEPTH],
+                   sticker_pocket_print_z=[sticker_z0, sticker_z1], pause_top_z=pause_top_z,
+                   tag_face_distance_mm=sticker_z0, nfc_centre_from_top_mm=nfc_mounts.FROM_TOP)
     if nfc_mount.startswith('rear_sticker_10x20'):
         rep['rear_tag_mm'] = [REAR_TAG_W, REAR_TAG_H, REAR_TAG_T]
         rep['rear_pocket_mm'] = [round(pocket_w, 2), round(pocket_h, 2), REAR_POCKET_DEPTH]

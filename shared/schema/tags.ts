@@ -457,6 +457,8 @@ export const printModelVersions = pgTable("print_model_versions", {
   recipe: jsonb("recipe").$type<Record<string, unknown>>().notNull().default({}),
   beds: jsonb("beds").$type<Array<Record<string, unknown>>>().notNull().default(sql`'[]'::jsonb`),
   consumes: jsonb("consumes").$type<Array<{ part: string; perPiece: number }>>().notNull().default(sql`'[]'::jsonb`),
+  // One variant per NFC type this version was built with (shared/printProduction.ts printNfcVariantSchema; migrations/0076).
+  nfcVariants: jsonb("nfc_variants").$type<Record<string, Record<string, unknown>>>().notNull().default(sql`'{}'::jsonb`),
   // The 3D preview (GLB of one sample piece): { fileRef, fileName, bytes, sha256, uploadedAt } (migrations/0064).
   preview: jsonb("preview").$type<Record<string, unknown> | null>(),
   changelog: text("changelog"),
@@ -483,6 +485,8 @@ export const printRequests = pgTable("print_requests", {
   requestedByUserId: text("requested_by_user_id"),
   // The printed plate whose damaged pieces this request prints again (migrations/0074); one live replacement at most.
   replacesJobId: uuid("replaces_job_id"),
+  // The NFC type chosen for this print (migrations/0076); null when the version has no variants.
+  nfcMount: text("nfc_mount"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 }, (table) => ({
   createdIdx: index("print_requests_created_idx").on(table.createdAt),
@@ -501,6 +505,7 @@ export const printJobs = pgTable("print_jobs", {
   plates: integer("plates").notNull().default(1),
   quantity: integer("quantity").notNull(),
   batchId: uuid("batch_id").references(() => tagBatches.id, { onDelete: "set null" }),
+  nfcMount: text("nfc_mount"),
   status: text("status").notNull().default("requested"),
   deviceId: uuid("device_id").references(() => tagProvisioningDevices.id, { onDelete: "set null" }),
   report: jsonb("report").$type<Record<string, unknown>>().notNull().default({}),

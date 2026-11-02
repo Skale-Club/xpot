@@ -611,6 +611,95 @@ describe("print requests", () => {
   });
 });
 
+describe("which NFC goes inside", () => {
+  const roundPause = { z: 1.8, text: "Press one round sticker into each pocket" };
+  const rectPause = { z: 1.8, text: "Press one 10 x 20 sticker into each pocket" };
+  const tagPause = { z: 2.76, text: "Insert one programmed round tag into each cavity" };
+  const nfcVariants = {
+    sticker_round_25: { pause: roundPause, consumes: [{ part: "nfc-sticker-round-25", perPiece: 1 }], material: { kind: "nfc_sticker", name: "NFC sticker", spec: "25.4 mm round" } },
+    sticker_10x20: { pause: rectPause, consumes: [{ part: "nfc-sticker-10x20", perPiece: 1 }] },
+    embedded_round: { pause: tagPause, consumes: [{ part: "nfc-tag-round-25", perPiece: 1 }] },
+  };
+
+  async function choiceModel(app: express.Express) {
+    for (const slug of ["nfc-sticker-round-25", "nfc-sticker-10x20", "nfc-tag-round-25"]) {
+      await request(app, "POST", "/api/xpot/admin/print-models", { slug, kind: "part", title: slug, version: { beds: [{ label: "bought", copies: 1 }] } });
+      await request(app, "POST", `/api/xpot/admin/print-models/${slug}/part-count`, { delta: 10, reason: "printed" });
+    }
+    const created = await request(app, "POST", "/api/xpot/admin/print-models", {
+      slug: "plate-large-menu-white", kind: "serialized", title: "Plate Large · Menu · White", productType: "large_plate", face: "menu", theme: "white",
+      salesProductId: await salesProductId(), batchPrefix: "TPLATE",
+      version: { builder: "plate.menu", params: { size: "large", theme: "white" }, recipe: { pause_top_z: 1.8, _pause: "old note" }, beds: [bedX4], consumes: [{ part: "nfc-sticker-round-25", perPiece: 1 }], nfcVariants },
+    });
+    expect(created.status).toBe(201);
+  }
+
+  it("refuses a print that does not say which, and a type the version does not have", async () => {
+    const app = admin();
+    await choiceModel(app);
+    const missing = await request(app, "POST", "/api/xpot/admin/print-jobs", { model: "plate-large-menu-white", quantity: 4 });
+    expect(missing.status).toBe(400);
+    expect(missing.body.code).toBe("print_nfc_required");
+    const generated = await request(app, "POST", "/api/xpot/admin/print-generate", { productType: "large_plate", theme: "white", face: "menu", quantity: 4 });
+    expect(generated.body.code).toBe("print_nfc_required");
+    await request(app, "POST", "/api/xpot/admin/print-models/plate-large-menu-white/versions", {
+      builder: "plate.menu", beds: [bedX4], changelog: "Only the round sticker", nfcVariants: { sticker_round_25: nfcVariants.sticker_round_25 },
+    });
+    const absent = await request(app, "POST", "/api/xpot/admin/print-jobs", { model: "plate-large-menu-white", quantity: 4, nfcMount: "embedded_round" });
+    expect(absent.status).toBe(409);
+    expect(absent.body.code).toBe("print_nfc_unavailable");
+    const invalid = await request(app, "POST", "/api/xpot/admin/print-jobs", { model: "plate-large-menu-white", quantity: 4, nfcMount: "sticker_round_99" });
+    expect(invalid.status).toBe(400);
+  });
+
+  it("a version with no choice keeps printing what it says, and refuses a type", async () => {
+    const app = admin();
+    await createSerializedModel(app);
+    const plain = await firstPlate(app, { model: "plate-large-menu-white", quantity: 4 });
+    expect(plain.nfcMount).toBeNull();
+    expect(plain.bed.pause).toEqual(bedX4.pause);
+    const refused = await request(app, "POST", "/api/xpot/admin/print-jobs", { model: "plate-large-menu-white", quantity: 4, nfcMount: "sticker_10x20" });
+    expect(refused.body.code).toBe("print_nfc_unavailable");
+  });
+
+  it("gives the bench the chosen type's file, and takes that sticker off the count", async () => {
+    const app = admin();
+    await choiceModel(app);
+    const created = await request(app, "POST", "/api/xpot/admin/print-generate", { productType: "large_plate", theme: "white", face: "menu", quantity: 4, nfcMount: "embedded_round" });
+    expect(created.status).toBe(201);
+    expect(created.body.nfcMount).toBe("embedded_round");
+    expect(created.body.plates[0].nfcMount).toBe("embedded_round");
+    const detail = (await request(app, "GET", `/api/xpot/admin/print-jobs/${created.body.plates[0].id}`)).body;
+    expect(detail.bed.pause).toEqual(tagPause);
+    expect(detail.params.nfc_mount).toBe("embedded_round");
+    expect(detail.consumes).toEqual([{ part: "nfc-tag-round-25", perPiece: 1 }]);
+
+    const ticket = await (await import("../../server/tags/production.js")).jobTicket(created.body.plates[0].id, null);
+    expect(ticket.version.params).toMatchObject({ size: "large", theme: "white", nfc_mount: "embedded_round" });
+    expect(ticket.version.recipe).toEqual({ pause_top_z: 2.76 });
+    expect(ticket.version.bed.pause).toEqual(tagPause);
+
+    const id = created.body.plates[0].id;
+    await request(app, "POST", `/api/xpot/admin/print-jobs/${id}/files?filename=plate.gcode.3mf`, bytes("gcode"));
+    await request(app, "POST", `/api/xpot/admin/print-jobs/${id}/transition`, { action: "complete" });
+    await request(app, "POST", `/api/xpot/admin/print-jobs/${id}/transition`, { action: "printed" });
+    await request(app, "POST", `/api/xpot/admin/print-jobs/${id}/assembled`);
+    expect((await request(app, "GET", "/api/xpot/admin/print-models/nfc-tag-round-25")).body.onHand).toBe(6);
+    expect((await request(app, "GET", "/api/xpot/admin/print-models/nfc-sticker-round-25")).body.onHand).toBe(10);
+  });
+
+  it("a plate printed again keeps its type", async () => {
+    const app = admin();
+    await choiceModel(app);
+    const order = await firstPlate(app, { model: "plate-large-menu-white", quantity: 4, nfcMount: "sticker_10x20" });
+    await request(app, "POST", `/api/xpot/admin/print-jobs/${order.id}/transition`, { action: "cancel" });
+    const again = await request(app, "POST", `/api/xpot/admin/print-jobs/${order.id}/redo`);
+    expect(again.status).toBe(201);
+    expect(again.body.nfcMount).toBe("sticker_10x20");
+    expect(again.body.bed.pause).toEqual(rectPause);
+  });
+});
+
 describe("feedback and assembly", () => {
   async function printedOrder(app: express.Express, consumes: Array<{ part: string; perPiece: number }> = []) {
     await request(app, "POST", "/api/xpot/admin/print-models", {

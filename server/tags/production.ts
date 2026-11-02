@@ -17,6 +17,11 @@ import {
 } from "#shared/schema.js";
 import {
   PRINT_BOUGHT_BED,
+  nfcMountsOf,
+  preferredNfcMount,
+  withNfcVariant,
+  type PrintNfcMount,
+  type PrintNfcVariants,
   PRINT_FILE_CONTENT_TYPES,
   PRINT_FILE_MAX_BYTES,
   PRINT_JOB_STALE_MS,
@@ -108,7 +113,7 @@ const inScope = (organizationId: number, scope: ProductionScope) => scope === nu
 interface VersionRow {
   id: string; model_id: string; version: number; status: string; builder: string | null;
   params: Record<string, unknown> | null; recipe: Record<string, unknown> | null; beds: PrintBed[] | null;
-  consumes: Array<{ part: string; perPiece: number }> | null; changelog: string | null; fixes_batch_id: string | null;
+  consumes: Array<{ part: string; perPiece: number }> | null; nfc_variants: PrintNfcVariants | null; changelog: string | null; fixes_batch_id: string | null;
   fixes_batch_code: string | null; source: string; created_at: Date | string; job_count: number;
   preview: StoredPreview | null;
 }
@@ -124,7 +129,7 @@ function previewInfo(stored: StoredPreview | null | undefined): PrintPreviewInfo
 }
 
 const VERSION_SELECT = sql`
-  SELECT v.id, v.model_id, v.version, v.status, v.builder, v.params, v.recipe, v.beds, v.consumes, v.preview, v.changelog,
+  SELECT v.id, v.model_id, v.version, v.status, v.builder, v.params, v.recipe, v.beds, v.consumes, v.nfc_variants, v.preview, v.changelog,
     v.fixes_batch_id, fb.batch_code AS fixes_batch_code, v.source, v.created_at,
     (SELECT count(*)::int FROM print_jobs j WHERE j.version_id = v.id) AS job_count
   FROM print_model_versions v
@@ -141,6 +146,7 @@ function versionItem(v: VersionRow): PrintModelVersionItem {
     recipe: v.recipe ?? {},
     beds: v.beds ?? [],
     consumes: v.consumes ?? [],
+    nfcVariants: v.nfc_variants ?? {},
     changelog: v.changelog,
     fixesBatchId: v.fixes_batch_id,
     fixesBatchCode: v.fixes_batch_code,
@@ -423,6 +429,7 @@ async function writeVersion(
     recipe: input.recipe,
     beds: input.beds as Array<Record<string, unknown>>,
     consumes: input.consumes,
+    nfcVariants: input.nfcVariants,
     changelog: input.changelog ?? null,
     fixesBatchId,
     source,
@@ -664,7 +671,7 @@ export async function currentPreview(modelRef: string, actor?: TagActor): Promis
 
 interface JobRow {
   id: string; model_id: string; model_slug: string; model_title: string; model_kind: string; version_id: string;
-  version_number: number; bed_label: string; plates: number; quantity: number; status: string; batch_id: string | null;
+  version_number: number; bed_label: string; plates: number; quantity: number; status: string; batch_id: string | null; nfc_mount: string | null;
   batch_code: string | null; piece_count: number | null; received_count: number | null; pending_count: number | null; damaged_count: number | null; device_name: string | null;
   notes: string | null; error_code: string | null; error_message: string | null; report: Record<string, unknown> | null; created_at: Date | string;
   built_at: Date | string | null; printed_at: Date | string | null; updated_at: Date | string; last_event_at: Date | string | null;
@@ -690,7 +697,7 @@ const REPRINTED_BY = sql`
 
 const JOB_SELECT = sql`
   SELECT j.id, j.model_id, m.slug AS model_slug, m.title AS model_title, m.kind AS model_kind, j.version_id,
-    v.version AS version_number, j.bed_label, j.plates, j.quantity, j.status, j.batch_id, b.batch_code,
+    v.version AS version_number, j.bed_label, j.plates, j.quantity, j.status, j.batch_id, j.nfc_mount, b.batch_code,
     CASE WHEN j.batch_id IS NULL THEN NULL ELSE (SELECT count(*)::int FROM tags t WHERE t.batch_id = j.batch_id) END AS piece_count,
     CASE WHEN j.batch_id IS NULL THEN NULL
       ELSE (SELECT count(*)::int FROM tags t WHERE t.batch_id = j.batch_id AND t.stock_status NOT IN ('pending', 'damaged')) END AS received_count,
@@ -723,6 +730,7 @@ function jobItem(j: JobRow, now = Date.now()): PrintJobItem {
   return {
     id: j.id,
     modelId: j.model_id,
+    nfcMount: j.nfc_mount as PrintNfcMount | null,
     modelSlug: j.model_slug,
     modelTitle: j.model_title,
     modelKind: j.model_kind as PrintModelKind,
@@ -777,7 +785,7 @@ export async function listJobs(filter: JobListFilter, modelRef: string | null, s
 
 interface RequestRow {
   id: string; model_id: string; model_slug: string; model_title: string; model_kind: string; version_number: number;
-  bed_label: string; quantity: number; notes: string | null; created_at: Date | string; open: boolean;
+  bed_label: string; quantity: number; nfc_mount: string | null; notes: string | null; created_at: Date | string; open: boolean;
   organization_id: number; organization_name: string;
 }
 
@@ -787,7 +795,7 @@ const OPEN_PLATE = sql`j.status IN ('requested', 'building', 'ready', 'printing'
 
 const REQUEST_SELECT = sql`
   SELECT r.id, r.model_id, m.slug AS model_slug, m.title AS model_title, m.kind AS model_kind, v.version AS version_number,
-    r.bed_label, r.quantity, r.notes, r.created_at,
+    r.bed_label, r.quantity, r.nfc_mount, r.notes, r.created_at,
     EXISTS (SELECT 1 FROM print_jobs j WHERE j.request_id = r.id AND ${OPEN_PLATE}) AS open,
     r.organization_id, o.name AS organization_name
   FROM print_requests r
@@ -808,6 +816,7 @@ async function withPlates(list: RequestRow[], executor: typeof db | Tx = db): Pr
     version: Number(r.version_number),
     bedLabel: r.bed_label,
     quantity: Number(r.quantity),
+    nfcMount: r.nfc_mount as PrintNfcMount | null,
     notes: r.notes,
     createdAt: iso(r.created_at)!,
     open: Boolean(r.open),
@@ -868,15 +877,16 @@ export async function getJob(id: string, scope: ProductionScope): Promise<PrintJ
   const job = await loadJob(id, scope);
   const [row] = await rows<JobRow>(sql`${JOB_SELECT} WHERE j.id = ${job.id}`);
   const [version] = await rows<VersionRow>(sql`${VERSION_SELECT} WHERE v.id = ${job.versionId}`);
-  const bed = version?.beds?.find((b) => b.label === job.bedLabel) ?? null;
+  const printed = version ? printedVersion(version, job.nfcMount) : null;
+  const bed = printed?.beds.find((b) => b.label === job.bedLabel) ?? null;
   const files = await db.select().from(printJobFiles).where(eq(printJobFiles.jobId, job.id)).orderBy(printJobFiles.createdAt);
   return {
     ...jobItem(row),
     bed,
-    consumes: version?.consumes ?? [],
+    consumes: printed?.consumes ?? [],
     builder: version?.builder ?? null,
-    params: version?.params ?? {},
-    recipe: version?.recipe ?? {},
+    params: printed?.params ?? {},
+    recipe: printed?.recipe ?? {},
     files: files.map(fileItem),
     pieces: job.batchId ? await jobPieces(job.batchId, bed) : [],
     preview: previewInfo(version?.preview),
@@ -885,6 +895,30 @@ export async function getJob(id: string, scope: ProductionScope): Promise<PrintJ
 
 function fileItem(f: typeof printJobFiles.$inferSelect): PrintJobFileItem {
   return { id: f.id, kind: f.kind as PrintFileKind, filename: f.filename, bytes: f.bytes, sha256: f.sha256, createdAt: f.createdAt.toISOString() };
+}
+
+/** A version's params, recipe, beds and parts as the plate's NFC type prints them (shared withNfcVariant). */
+function printedVersion(version: VersionRow, mount: string | null) {
+  return withNfcVariant(
+    { params: version.params ?? {}, recipe: version.recipe ?? {}, beds: version.beds ?? [], consumes: version.consumes ?? [] },
+    version.nfc_variants, mount,
+  );
+}
+
+/** The NFC type of a new print: asked when the version offers a choice, refused when it does not have that one. */
+function pickNfcMount(version: VersionRow, requested: PrintNfcMount | undefined, orderContext: boolean): PrintNfcMount | null {
+  const mounts = nfcMountsOf(version.nfc_variants);
+  // A customer order's own model may have one fixed file, and an order answers with the default when it does not say.
+  if (!mounts.length) {
+    if (requested && !orderContext) throw new TagError("This model has one fixed NFC type: its version offers no choice", 409, "print_nfc_unavailable", { mounts: mounts.join(", ") });
+    return null;
+  }
+  if (!requested) {
+    if (orderContext) return preferredNfcMount(mounts);
+    throw new TagError(`Say which NFC goes inside: ${mounts.join(", ")}`, 400, "print_nfc_required", { mounts: mounts.join(", ") });
+  }
+  if (!mounts.includes(requested)) throw new TagError(`This model has no ${requested} file: ${mounts.join(", ")}`, 409, "print_nfc_unavailable", { mounts: mounts.join(", ") });
+  return requested;
 }
 
 async function currentVersionOf(model: PrintModelRow): Promise<VersionRow> {
@@ -979,6 +1013,7 @@ interface PlateContext {
   requestId: string | null;
   plateNumber: number;
   plateCount: number;
+  nfcMount: string | null;
   notes: string | null;
   userId: string | null;
   source: JourneySource;
@@ -1057,6 +1092,7 @@ async function createSerializedPlate(model: PrintModelRow, version: Pick<Version
           plates: 1,
           quantity,
           batchId: batch.id,
+          nfcMount: ctx.nfcMount,
           status: "requested",
           notes: ctx.notes,
           requestedByUserId: ctx.userId,
@@ -1128,6 +1164,7 @@ export async function createJob(input: PrintJobCreateInput, userId: string | nul
     return getRequest(job.requestId!, scope);
   }
   const bed = pickBed(version, input.bed);
+  const nfcMount = pickNfcMount(version, input.nfcMount, Boolean(orderContext));
   if (model.kind === "serialized" && (!model.batchPrefix || !model.productType || !model.salesProductId)) {
     throw new TagError("This model needs a product, a sales product and a batch prefix before printing", 409, "print_model_incomplete");
   }
@@ -1162,10 +1199,11 @@ export async function createJob(input: PrintJobCreateInput, userId: string | nul
       organizationId: organization.id, modelId: model.id, versionId: version.id, bedLabel: bed.label, quantity, notes, source, requestedByUserId: userId,
       replacesJobId: replaces?.id ?? null,
       customerOrderLineId: orderLineId,
+      nfcMount,
     }).returning({ id: printRequests.id });
     for (let index = 0; index < plates.length; index++) {
       const ctx: PlateContext = {
-        organizationId: organization.id, requestId: request.id, plateNumber: index + 1, plateCount: plates.length, notes, userId, source,
+        organizationId: organization.id, requestId: request.id, plateNumber: index + 1, plateCount: plates.length, nfcMount, notes, userId, source,
         within: { tx, afterCommit },
       };
       if (model.kind === "part") await createPartPlate(model, version, bed, ctx);
@@ -1192,7 +1230,7 @@ export async function generatePieces(input: PrintGenerateInput, userId: string |
       "print_choice_unavailable");
   }
   return createJob({
-    model: choice.modelId, bed: choice.bedLabel, quantity: input.quantity, notes: input.notes ?? null, organization: input.organization,
+    model: choice.modelId, bed: choice.bedLabel, quantity: input.quantity, nfcMount: input.nfcMount, notes: input.notes ?? null, organization: input.organization,
   }, userId, source, scope);
 }
 
@@ -1206,7 +1244,10 @@ export async function reprintDamaged(id: string, userId: string | null, scope: P
   if (job.status !== "printed" || !job.batchId) throw new TagError("Only a printed plate with pieces can have its damaged pieces printed again", 409, "print_job_state");
   const [{ n }] = await rows<{ n: number }>(sql`SELECT count(*)::int AS n FROM tags WHERE batch_id = ${job.batchId} AND stock_status = 'damaged'`);
   if (!n) throw new TagError("No piece of this print is damaged", 409, "print_job_no_damaged");
-  return createJob({ model: job.modelId, bed: job.bedLabel, quantity: n, organization: job.organizationId }, userId, source, scope, job);
+  // The same NFC type as the plate it replaces, when the current version still makes it (else the default).
+  const [model] = await db.select().from(printModels).where(eq(printModels.id, job.modelId)).limit(1);
+  const nfcMount = nextNfcMount(await currentVersionOf(model), job.nfcMount);
+  return createJob({ model: job.modelId, bed: job.bedLabel, quantity: n, nfcMount, organization: job.organizationId }, userId, source, scope, job);
 }
 
 /**
@@ -1216,6 +1257,12 @@ export async function reprintDamaged(id: string, userId: string | null, scope: P
  * check also has its batch cancelled (the same codes would only fail again). A plate is printed again once: the attempt
  * is locked and refused when another attempt already took its place, so a double click makes one plate, not two.
  */
+/** What a plate printed again takes on the version it now uses: its own NFC type while that version makes it. */
+function nextNfcMount(version: VersionRow, previous: string | null): PrintNfcMount | undefined {
+  const mounts = nfcMountsOf(version.nfc_variants);
+  return mounts.includes(previous as PrintNfcMount) ? previous as PrintNfcMount : preferredNfcMount(mounts) ?? undefined;
+}
+
 export async function redoJob(id: string, userId: string | null, scope: ProductionScope, source: JourneySource = "admin"): Promise<PrintJobDetail> {
   const job = await loadJob(id, scope);
   if (job.status !== "failed" && job.status !== "cancelled") throw new TagError("Only a failed or cancelled order can be printed again", 409, "print_job_state");
@@ -1257,6 +1304,7 @@ export async function redoJob(id: string, userId: string | null, scope: Producti
     }
     const ctx: PlateContext = {
       organizationId: job.organizationId, requestId: job.requestId, plateNumber: job.plateNumber ?? 1, plateCount: Number(plateCount) || 1,
+      nfcMount: freshCodes ? nextNfcMount(version, job.nfcMount) ?? null : job.nfcMount,
       notes: job.notes, userId, source, within: { tx, afterCommit },
     };
     if (freshCodes) {
@@ -1276,6 +1324,7 @@ export async function redoJob(id: string, userId: string | null, scope: Producti
       plates: job.plates,
       quantity: job.quantity,
       batchId: job.batchId,
+      nfcMount: job.nfcMount,
       status: "requested",
       notes: job.notes,
       requestedByUserId: userId,
@@ -1574,7 +1623,8 @@ export async function jobTicket(id: string, scope: ProductionScope): Promise<Pri
   const job = await loadJob(id, scope);
   const [model] = await db.select().from(printModels).where(eq(printModels.id, job.modelId)).limit(1);
   const [version] = await rows<VersionRow>(sql`${VERSION_SELECT} WHERE v.id = ${job.versionId}`);
-  const bed = version.beds?.find((b) => b.label === job.bedLabel);
+  const printed = printedVersion(version, job.nfcMount);
+  const bed = printed.beds.find((b) => b.label === job.bedLabel);
   if (!bed) throw new TagError("The order's bed is missing from its version", 409);
   let batch: PrintJobTicket["batch"] = null;
   let tagRows: PrintJobTicket["tags"] = [];
@@ -1592,7 +1642,7 @@ export async function jobTicket(id: string, scope: ProductionScope): Promise<Pri
   return {
     job: { id: job.id, status: job.status as PrintJobStatus, plates: job.plates, quantity: job.quantity, notes: job.notes },
     model: { slug: model.slug, title: model.title, kind: model.kind as PrintModelKind, productType: model.productType, face: model.face, theme: model.theme },
-    version: { id: version.id, version: Number(version.version), builder: version.builder, params: version.params ?? {}, recipe: version.recipe ?? {}, bed },
+    version: { id: version.id, version: Number(version.version), builder: version.builder, params: printed.params, recipe: printed.recipe, bed },
     batch,
     tags: tagRows,
   };
@@ -1722,6 +1772,7 @@ export async function printNowPlates(device: BenchDevice): Promise<PrintNowPlate
       quantity: Number(j.quantity),
       batchCode: j.batch_code,
       modelTitle: j.model_title,
+      nfcMount: j.nfc_mount as PrintNfcMount | null,
       files: await Promise.all(own.map(async (f) => ({
         id: f.id, kind: f.kind as PrintFileKind, filename: f.filename, sha256: f.sha256, bytes: Number(f.bytes), url: await signedFileUrl(f.file_ref),
       }))),
@@ -1779,11 +1830,11 @@ export async function consumeForAssembly(batchId: string, userId: string | null)
   const [done] = await rows<{ n: number }>(sql`
     SELECT count(*)::int AS n FROM print_part_movements WHERE batch_id = ${batchId} AND reason = 'assembled'`);
   if (Number(done?.n ?? 0) > 0) return 0;
-  const [job] = await rows<{ id: string; consumes: Array<{ part: string; perPiece: number }> | null }>(sql`
-    SELECT j.id, v.consumes FROM print_jobs j JOIN print_model_versions v ON v.id = j.version_id
+  const [job] = await rows<{ id: string; consumes: Array<{ part: string; perPiece: number }> | null; nfc_mount: string | null; nfc_variants: PrintNfcVariants | null }>(sql`
+    SELECT j.id, v.consumes, j.nfc_mount, v.nfc_variants FROM print_jobs j JOIN print_model_versions v ON v.id = j.version_id
     WHERE j.batch_id = ${batchId} AND j.status NOT IN ('failed', 'cancelled')
     ORDER BY j.created_at DESC LIMIT 1`);
-  const consumes = job?.consumes ?? [];
+  const consumes = job?.nfc_variants?.[job.nfc_mount as PrintNfcMount]?.consumes ?? job?.consumes ?? [];
   if (!job || !consumes.length) return 0;
   const [{ pieces }] = await rows<{ pieces: number }>(sql`
     SELECT count(*)::int AS pieces FROM tags WHERE batch_id = ${batchId} AND stock_status NOT IN ('pending', 'damaged')`);

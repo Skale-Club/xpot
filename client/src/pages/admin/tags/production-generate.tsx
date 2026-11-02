@@ -1,7 +1,7 @@
 import { useEffect, useId, useRef, useState, type FormEvent, type ReactNode } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { Check, ChevronRight, Minus, Plus } from "lucide-react";
-import type { PrintGenerateFace, PrintGenerateOption, PrintModelItem, PrintRequestItem } from "@shared/printProduction";
+import { materialsForNfc, preferredNfcMount, type PrintGenerateFace, type PrintGenerateOption, type PrintModelItem, type PrintNfcMount, type PrintRequestItem } from "@shared/printProduction";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import { Field, Input, Select } from "@/components/xpot/Field";
@@ -12,19 +12,24 @@ import { useT } from "@/i18n";
 import { batchWorkspaceMessages } from "@/i18n/messages/batchWorkspace";
 import { commonMessages } from "@/i18n/messages/common";
 import { productionMessages } from "@/i18n/messages/production";
+import { printNfcMessages } from "@/i18n/messages/printNfc";
 import { productionBoardMessages } from "@/i18n/messages/productionBoard";
 import { errorMessage, invalidateAdminTags, sendJson } from "./api";
 import { useTagLabels } from "./labels";
 import { ProductionIdentity, ProductionPlatePreview } from "./production-identity";
 import { MaterialsNeeded } from "./production-materials";
+import { NfcMountChoice, useNfcMountName } from "./production-nfc";
 import { assemblyParts, filamentColours, printQuantity } from "./production-workflow";
 import { useProductionAccess } from "./production-shared";
 
-// "Generate pieces" on the Production page: the predefined questions of one product (colour → face → how many), only
+// "Generate pieces" on the Production page: the predefined questions of one product (colour → face → NFC → how many), only
 // with the colours and faces the catalog can generate. The server checks the choice again and makes the request:
 // each plate its own batch of new serials, pending in inventory until the plate is marked printed.
 
-const STEPS = ["stepColour", "stepFace", "stepQuantity", "stepReview"] as const;
+const STEPS = ["stepColour", "stepFace", "stepNfc", "stepQuantity", "stepReview"] as const;
+const NFC_STEP = 2;
+const QUANTITY_STEP = 3;
+const REVIEW_STEP = 4;
 
 export function GenerateDialog({ option, models, onClose, onGenerated }: {
   option: PrintGenerateOption;
@@ -36,6 +41,8 @@ export function GenerateDialog({ option, models, onClose, onGenerated }: {
   const t = useT(productionMessages);
   const tw = useT(batchWorkspaceMessages);
   const tc = useT(commonMessages);
+  const n = useT(printNfcMessages);
+  const nfcName = useNfcMountName();
   const labels = useTagLabels();
   const { toast } = useToast();
   // One colour (or one face) is not a question: it is chosen already, and the step still shows what it is.
@@ -45,6 +52,11 @@ export function GenerateDialog({ option, models, onClose, onGenerated }: {
   const face: PrintGenerateFace | undefined = colour?.faces.find((f) => f.face === faceKey);
   const model = face ? models.get(face.slug) : undefined;
   const [quantity, setQuantity] = useState("");
+  // The default is already marked; if this design does not have the type picked, it falls back to the default.
+  const [pickedMount, setPickedMount] = useState<PrintNfcMount | null>(null);
+  const mounts = face?.nfcMounts ?? [];
+  const nfcMount = pickedMount && mounts.includes(pickedMount) ? pickedMount : preferredNfcMount(mounts);
+  const materials = materialsForNfc(face?.materials, nfcMount ? face?.nfcVariants[nfcMount] : null);
   // Whose pieces: the company first for the owners, the branch itself for its Rep Admin (asked only when there is a choice).
   const { organizations } = useProductionAccess();
   const [organizationId, setOrganizationId] = useState("");
@@ -58,11 +70,12 @@ export function GenerateDialog({ option, models, onClose, onGenerated }: {
   const plan = printQuantity(quantity || String(copies), copies, true);
   const product = labels.product(option.productType);
   const themeName = (value: string) => (["white", "black", "mixed"].includes(value) ? b(`theme_${value}` as "theme_white") : value);
-  const stepOk = [!!colour, !!face, plan.valid, plan.valid && !!face][step];
+  const stepOk = [!!colour, !!face, !!face, plan.valid, plan.valid && !!face][step];
 
   const generate = useMutation({
     mutationFn: () => sendJson<PrintRequestItem>("POST", "/api/xpot/admin/print-generate", {
       productType: option.productType, theme: colour!.theme, face: face!.face, quantity: plan.count,
+      ...(nfcMount ? { nfcMount } : {}),
       ...(organization ? { organization: organization.id } : {}),
     }),
     onSuccess: (request) => {
@@ -77,7 +90,7 @@ export function GenerateDialog({ option, models, onClose, onGenerated }: {
   const submit = (event: FormEvent) => {
     event.preventDefault();
     if (busy || !stepOk) return;
-    if (step < 3) setStep(step + 1);
+    if (step < REVIEW_STEP) setStep(step + 1);
     else generate.mutate();
   };
   const pickColour = (value: string) => {
@@ -88,8 +101,10 @@ export function GenerateDialog({ option, models, onClose, onGenerated }: {
   };
   const pickFace = (value: string) => {
     setFaceKey(value);
-    setStep(2);
+    // A version with one fixed NFC has nothing to ask.
+    setStep(colour?.faces.find((f) => f.face === value)?.nfcMounts.length ? NFC_STEP : QUANTITY_STEP);
   };
+  const back = () => setStep(step === QUANTITY_STEP && !mounts.length ? 1 : step - 1);
 
   return (
     <Dialog open onOpenChange={(open) => { if (!open && !busy) onClose(); }}>
@@ -110,7 +125,7 @@ export function GenerateDialog({ option, models, onClose, onGenerated }: {
                   <span className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full border text-[11px] ${index <= step ? "border-violet-400/50 bg-violet-500/20" : "border-white/15"}`}>
                     {index < step ? <Check className="h-3 w-3" aria-hidden="true" /> : index + 1}
                   </span>
-                  <span className={`truncate ${step === index ? "" : "hidden sm:inline"}`}>{b(name)}</span>
+                  <span className={`truncate ${step === index ? "" : "hidden sm:inline"}`}>{name === "stepNfc" ? n("step") : b(name)}</span>
                 </button>
                 {index < STEPS.length - 1 ? <span className={`h-px min-w-2 flex-1 ${index < step ? "bg-violet-400/40" : "bg-white/10"}`} aria-hidden="true" /> : null}
               </li>
@@ -121,7 +136,7 @@ export function GenerateDialog({ option, models, onClose, onGenerated }: {
           <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 py-5 sm:px-6">
             <fieldset disabled={busy} aria-labelledby={headingId} className="min-w-0 space-y-4">
               <h2 id={headingId} ref={heading} tabIndex={-1} className="text-sm font-semibold text-white/85 outline-none">
-                {step === 0 ? b("colourQuestion") : step === 1 ? b("faceQuestion") : step === 2 ? b("quantityQuestion") : b("stepReview")}
+                {step === 0 ? b("colourQuestion") : step === 1 ? b("faceQuestion") : step === NFC_STEP ? n("question") : step === QUANTITY_STEP ? b("quantityQuestion") : b("stepReview")}
               </h2>
               {step === 0 ? (
                 <ChoiceGrid testId="production-generate-colours">
@@ -147,7 +162,10 @@ export function GenerateDialog({ option, models, onClose, onGenerated }: {
                   ))}
                 </ChoiceGrid>
               ) : null}
-              {step === 2 && face ? (
+              {step === NFC_STEP && face ? (
+                <NfcMountChoice mounts={mounts} value={nfcMount} onChange={setPickedMount} />
+              ) : null}
+              {step === QUANTITY_STEP && face ? (
                 <div className="space-y-4">
                   <Field label={t("fieldQuantity")} hint={b("quantityHint", { copies: face.copies, max: plan.max })}>
                     <div className="flex items-center gap-2">
@@ -185,13 +203,14 @@ export function GenerateDialog({ option, models, onClose, onGenerated }: {
                   {model ? <ProductionPlatePreview model={model} plates={plan.plates} /> : null}
                 </div>
               ) : null}
-              {step === 3 && face ? (
+              {step === REVIEW_STEP && face ? (
                 <div className="space-y-4">
                   {model ? <ProductionIdentity model={model} hero /> : null}
-                  <MaterialsNeeded materials={face.materials} filaments={filamentColours(model)} assembly={assemblyParts(model, models)} />
+                  <MaterialsNeeded materials={materials} filaments={filamentColours(model)} assembly={assemblyParts(model, models)} />
                   <dl className="grid grid-cols-1 gap-4 rounded-xl border border-white/10 bg-white/[0.02] p-4 text-sm sm:grid-cols-2">
                     {[
                       [b("what"), `${product} · ${labels.face(face.face)} · ${themeName(colour!.theme)}`],
+                      ...(nfcMount ? [[n("field"), nfcName(nfcMount)]] : []),
                       [b("pieces"), [t.plural("pieceCount", plan.pieces), t.plural("printJobCount", plan.plates.length)].join(" · ")],
                       ...(organizations.length > 1 && organization ? [[t("organization"), organization.name]] : []),
                     ].map(([label, value]) => (
@@ -207,17 +226,17 @@ export function GenerateDialog({ option, models, onClose, onGenerated }: {
             </fieldset>
           </div>
           <footer className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-t border-white/[0.08] bg-[#111727] px-5 py-4 sm:px-6">
-            <span className="max-w-[26rem] text-xs text-white/45">{step === 3 ? b("reviewNext") : tw("stepCount", { current: step + 1, total: STEPS.length })}</span>
+            <span className="max-w-[26rem] text-xs text-white/45">{step === REVIEW_STEP ? b("reviewNext") : tw("stepCount", { current: step + 1, total: STEPS.length })}</span>
             <div className="ml-auto flex gap-2">
-              <Button type="button" variant="ghost" onClick={step === 0 ? onClose : () => setStep(step - 1)} disabled={busy}>
+              <Button type="button" variant="ghost" onClick={step === 0 ? onClose : back} disabled={busy}>
                 {step === 0 ? tc("cancel") : tw("back")}
               </Button>
-              {step === 2 ? (
+              {step === NFC_STEP || step === QUANTITY_STEP ? (
                 <Button key="next" type="submit" variant="brand" accent="tags" disabled={!stepOk} data-testid="production-generate-next">
                   {tw("next")}
                   <ChevronRight className="h-4 w-4" aria-hidden="true" />
                 </Button>
-              ) : step === 3 ? (
+              ) : step === REVIEW_STEP ? (
                 <Button key="go" type="submit" variant="brand" accent="tags" disabled={!stepOk} loading={busy} data-testid="production-generate-confirm">
                   {b.plural("generateCount", plan.pieces)}
                 </Button>

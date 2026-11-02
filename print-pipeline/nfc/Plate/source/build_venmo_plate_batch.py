@@ -27,7 +27,7 @@ from shapely.geometry import box
 from shapely.ops import unary_union
 
 from build_menu_batch import tile, geom, fa, PIECE, REPO, SOURCE
-from build_menu_sticker_test import pocket_z, TAG_W, TAG_H, TAG_T, CLEARANCE, POCKET_W, POCKET_H, ART_DEPTH, \
+from build_menu_sticker_test import nfc_pocket, pocket_z, TAG_W, TAG_H, TAG_T, CLEARANCE, POCKET_W, POCKET_H, ART_DEPTH, \
     TAP_ROW_BOTTOM
 
 SAMPLE_CODE = 'A7K3P9X2'
@@ -84,17 +84,17 @@ def stl_names(theme):
     return f'{body}_Venmo_Plate.stl', f'{ink}_Venmo_Art.stl', 'Blue_Venmo_Logo.stl'
 
 
-def build_one(code, out, theme, qr_style='panel'):
+def build_one(code, out, theme, qr_style='panel', nfc_mount='sticker_10x20'):
     """qr_style 'inverted' (user, 2026-11-01, every black piece from now on): white modules straight on the black body,
     no panel. 'panel' stays for the batches printed with it (tests/rebuild.py)."""
+    tile.configure_size('large')       # a Small piece built earlier in this process leaves its size behind
     ink_c, logo_c, dark, panel, qr, nfc_top, space = artwork(code, theme, qr_style)
     ink, logo, panel_tile = tile.to_tile(ink_c), tile.to_tile(logo_c), tile.to_tile(panel)
     back_text, _ = fa.text_geom(code, 3.2, 51.5, 53.1)
     back = tile.to_tile_back(back_text.buffer(-.01, join_style='mitre').buffer(.01, join_style='mitre')
                              .simplify(.002, preserve_topology=True))
-    pz0, pz1, _ = pocket_z(DEPTH_THEME)
-    w, h, cy = POCKET_W / 2, POCKET_H / 2, SIZE - nfc_top
-    pocket = tile._rounded_rect(-w, cy - h, w, cy + h, .8)
+    pocket, pz0, pz1 = nfc_pocket(nfc_mount, DEPTH_THEME, SIZE, nfc_top)
+    x0, y0, x1, y1 = pocket.bounds
     z0, z1 = tile.TOP - pz1, tile.TOP - pz0                  # model z runs from the back (0) to the face (TOP)
     assert z1 < tile.TOP - ART_DEPTH
     plain = tile.body()
@@ -126,9 +126,9 @@ def build_one(code, out, theme, qr_style='panel'):
                   qr_decoded_mesh=decoded_mesh, bad_edges=bad, body_mm3=body_mesh.volume, expected_mm3=expected,
                   logo_mm=[round(logo_c.bounds[2] - logo_c.bounds[0], 2), round(logo_c.bounds[3] - logo_c.bounds[1], 2)],
                   logo_mm2=logo.area, message_gap_mm=space,
-                  pocket_mm=[POCKET_W, POCKET_H, round(pz1 - pz0, 2)], pocket_print_z=[pz0, pz1],
+                  pocket_mm=[round(x1 - x0, 2), round(y1 - y0, 2), round(pz1 - pz0, 2)], pocket_print_z=[pz0, pz1], nfc_mount=nfc_mount,
                   pocket_section_mm2=hole_area, pocket_expected_mm2=pocket.area, tag_face_distance_mm=pz0,
-                  nfc_centre_from_top_mm=nfc_top)
+                  nfc_centre_from_top_mm=round(SIZE - (y0 + y1) / 2, 2))
     if not ok: raise RuntimeError(report)
     out.mkdir(parents=True, exist_ok=True)
     for mesh, name in zip((body_mesh, ink_mesh, logo_mesh), stl_names(theme)):

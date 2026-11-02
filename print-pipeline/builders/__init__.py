@@ -25,6 +25,9 @@ for path in (STAND, PLATE_DESIGN, PLATE):
         sys.path.insert(0, str(path))
 
 
+import nfc_mounts  # noqa: E402
+
+
 class BuildError(Exception):
     """The version asks for something this builder cannot make (an unknown theme, a font with no design)."""
 
@@ -51,6 +54,14 @@ def _qr(params):
     return {'qr': qr} if qr else {}
 
 
+def _mount(params, default):
+    """The NFC type of this print: the version's, or the piece's historic one so printed batches rebuild."""
+    mount = params.get('nfc_mount', default)
+    if mount not in nfc_mounts.NFC_MOUNTS and not str(mount).startswith('rear_sticker_10x20'):
+        raise BuildError(f'nfc_mount {mount!r}: one of {", ".join(nfc_mounts.NFC_MOUNTS)}')
+    return mount
+
+
 def _pair(theme):
     """(body colour, art colour) of a two-colour piece."""
     return ('White', 'Black') if theme == 'white' else ('Black', 'White')
@@ -60,7 +71,7 @@ def plate_instagram(tag, index, params, out_dir):
     import tile_per_code
     theme = _theme(params, index)
     report = tile_per_code.build(tag['public_code'], str(out_dir), theme=theme, size=params.get('size', 'large'),
-                                 nfc_mount=params.get('nfc_mount', 'embedded_round'), **_qr(params))
+                                 nfc_mount=_mount(params, 'embedded_round'), **_qr(params))
     _check_url((report.get('qr') or {}).get('url') or report.get('qr_url'), tag)
     body, art = _pair(theme)
     return report, [(f'{body} - Plate', f'{body}_Instagram_Plate.stl', 1), (f'{art} - Art', f'{art}_Instagram_Art.stl', 2),
@@ -71,7 +82,7 @@ def plate_google(tag, index, params, out_dir):
     import tile_per_code_google
     theme = _theme(params, index)
     # Without nfc_mount (and on white) the call is the one every printed batch was built with (tests/rebuild.py).
-    mount = params.get('nfc_mount', 'embedded_round')
+    mount = _mount(params, 'embedded_round')
     extra = {} if mount == 'embedded_round' else {'nfc_mount': mount}
     if theme != 'white':
         extra['theme'] = theme
@@ -85,6 +96,8 @@ def plate_google(tag, index, params, out_dir):
 
 # Menu title fonts the Menu layout draws as-is (Metropolis's spaced capitals need their own layout first).
 MENU_FONTS_READY = ('Inria Serif Bold', 'Inria Serif Bold Italic')
+# The Plate also lays out Metropolis's spaced capitals (build_menu_batch.artwork); the Stand's card has no layout for them.
+PLATE_MENU_FONTS = MENU_FONTS_READY + ('Metropolis Medium, MENU spaced',)
 
 
 def plate_menu(tag, index, params, out_dir):
@@ -92,15 +105,15 @@ def plate_menu(tag, index, params, out_dir):
     import build_menu_sticker_test as sticker
     theme = _theme(params, index)
     font = params.get('font', 'Inria Serif Bold')
-    if font not in MENU_FONTS_READY:
-        raise BuildError(f'menu font {font!r} has no layout yet: one of {", ".join(MENU_FONTS_READY)}')
+    if font not in PLATE_MENU_FONTS:
+        raise BuildError(f'menu font {font!r} has no layout yet: one of {", ".join(PLATE_MENU_FONTS)}')
     size = params.get('size', 'large')
     if size not in build_menu_batch.MENU_SIZES:
         raise BuildError(f'menu size {size!r}: one of {", ".join(build_menu_batch.MENU_SIZES)}')
     build_menu_batch.FONT = font
-    # Both sizes take the 10 x 20 sticker pocket under Tap here.
+    # Without nfc_mount: the 10 x 20 sticker pocket under Tap here, as every printed batch.
     report = sticker.build_one(tag['public_code'], Path(out_dir), placement=params.get('placement', 'under_tap'),
-                               theme=theme, size=size, qr_style=_qr(params).get('qr', 'panel'))
+                               theme=theme, size=size, qr_style=_qr(params).get('qr', 'panel'), nfc_mount=_mount(params, nfc_mounts.RECT_STICKER))
     _check_url((report.get('qr') or {}).get('url'), tag)
     body, art = _pair(theme)
     return report, [(f'{body} - Menu Plate', f'{body}_Menu_Plate.stl', 1), (f'{art} - Menu Art', f'{art}_Menu_Art.stl', 2)]
@@ -109,7 +122,7 @@ def plate_menu(tag, index, params, out_dir):
 def plate_venmo(tag, index, params, out_dir):
     import build_venmo_plate_batch as venmo
     theme = _theme(params, index)
-    report = venmo.build_one(tag['public_code'], Path(out_dir), theme, _qr(params).get('qr', 'panel'))
+    report = venmo.build_one(tag['public_code'], Path(out_dir), theme, _qr(params).get('qr', 'panel'), _mount(params, nfc_mounts.RECT_STICKER))
     _check_url((report.get('qr') or {}).get('url'), tag)
     body_stl, ink_stl, logo_stl = venmo.stl_names(theme)
     body, ink = _pair(theme)
@@ -119,15 +132,31 @@ def plate_venmo(tag, index, params, out_dir):
                     ('Blue - Venmo Logo', logo_stl, 3)]
 
 
+def plate_pay(tag, index, params, out_dir):
+    import build_pay_plate as pay
+    theme = _theme(params, index)
+    brand = params.get('brand')
+    if brand not in pay.BRANDS:
+        raise BuildError(f'brand {brand!r}: one of {", ".join(pay.BRANDS)}')
+    report = pay.build_one(tag['public_code'], Path(out_dir), brand, theme, _mount(params, nfc_mounts.DEFAULT_MOUNT))
+    _check_url((report.get('qr') or {}).get('url'), tag)
+    body_stl, ink_stl, logo_stl = pay.stl_names(brand, theme)
+    body, ink = _pair(theme)
+    name = pay.BRANDS[brand]['name']
+    # slot 1 white, slot 2 black, slot 3 the brand's colour, whatever the plate's colour
+    body_slot, ink_slot = (1, 2) if theme == 'white' else (2, 1)
+    parts = [(f'{body} - {name} Plate', body_stl, body_slot), (f'{ink} - {name} Art', ink_stl, ink_slot)]
+    if (Path(out_dir) / logo_stl).exists():
+        parts.append((f'{name} - Logo', logo_stl, 3))
+    return report, parts
+
+
 def _stand(module_name, face, tag, index, params, out_dir, batch):
     theme = _theme(params, index)
-    mount = params.get('nfc_mount', 'embedded_round')
+    mount = _mount(params, 'embedded_round')
     size = params.get('size', 'large')
     if size not in ('large', 'small'):
         raise BuildError(f'size {size!r}: large or small')
-    # The Small cards and the Menu card are new (2026-10-31): every face, both colours, only with the 10 x 20 sticker.
-    if (size == 'small' or face == 'Menu') and mount != 'sticker_10x20':
-        raise BuildError(f'nfc_mount {mount!r}: the {size.title()} {face} Stand card only takes sticker_10x20')
     font = _menu_font(params, face)
     if size == 'small':
         import card_per_code_small
@@ -176,6 +205,7 @@ BUILDERS = {
     'plate.google': plate_google,
     'plate.menu': plate_menu,
     'plate.venmo': plate_venmo,
+    'plate.pay': plate_pay,
     'stand.google': stand_google,
     'stand.instagram': stand_instagram,
     'stand.menu': stand_menu,

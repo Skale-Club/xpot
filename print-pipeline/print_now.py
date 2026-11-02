@@ -32,11 +32,16 @@ def _safe(text: str) -> str:
     return re.sub(r'\s+', ' ', text).strip(' .')[:120] or 'plate'
 
 
+NFC_NAMES = {'sticker_round_25': 'NFC redondo', 'sticker_10x20': 'NFC 10x20', 'embedded_round': 'NFC pastilha'}
+
+
 def request_folder(plate: dict, tz=None) -> str:
     """One folder per request: when it was asked, what, how many."""
     created = datetime.fromisoformat(plate['requestCreatedAt'].replace('Z', '+00:00'))
     created = created.astimezone(tz) if tz else created.astimezone()
-    return _safe(f"{created:%Y-%m-%d %Hh%M} - {plate['modelTitle']} - {plate['requestQuantity']} un - {plate['requestId'][:8]}")
+    nfc = NFC_NAMES.get(plate.get('nfcMount'))
+    what = f"{plate['modelTitle']} - {nfc}" if nfc else plate['modelTitle']
+    return _safe(f"{created:%Y-%m-%d %Hh%M} - {what} - {plate['requestQuantity']} un - {plate['requestId'][:8]}")
 
 
 def plate_file(plate: dict, kind: str) -> str:

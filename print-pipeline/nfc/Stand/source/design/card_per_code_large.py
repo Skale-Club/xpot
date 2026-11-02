@@ -22,6 +22,7 @@ sys.path.insert(0, HERE)
 import face_art as fa  # noqa: E402
 import face_art_large as large  # noqa: E402
 import face_composition_large as fc  # noqa: E402
+import nfc_mounts  # noqa: E402
 
 large.configure()
 
@@ -40,6 +41,7 @@ ROUND_CENTRE, ROUND_D, ROUND_Z0, ROUND_Z1 = (0.0, 122.0), 25.6, 0.96, 1.92
 # PLA is translucent, so a white body takes the tag 1.16 behind the face; black is opaque and keeps 0.68.
 STICKER_W, STICKER_H, STICKER_DEPTH, STICKER_RADIUS = 23.0, 13.0, 0.48, 0.8
 STICKER_Z0_BY_THEME = {'white': 1.16, 'black': 0.68}
+ROUND_STICKER_CENTRE = (0.0, 137.0 - nfc_mounts.FROM_TOP)
 
 
 def sticker_pocket_z(theme):
@@ -83,7 +85,7 @@ def qr_and_serial(code, batch, serial):
 
 
 def build(code, batch, serial, out_dir, nfc_mount='embedded_round', theme='white'):
-    if nfc_mount not in ('embedded_round', 'sticker_10x20'):
+    if nfc_mount not in nfc_mounts.NFC_MOUNTS:
         raise ValueError('unsupported nfc_mount')
     large.configure()
     code = fa.normalize_code(code)
@@ -91,7 +93,7 @@ def build(code, batch, serial, out_dir, nfc_mount='embedded_round', theme='white
     s_dark, s_back, square, _ = qr_and_serial(fa.SAMPLE_CODE, '', '')
     n_dark, n_back, _, info = qr_and_serial(code, batch, serial)
     assert info['url'] == fa.QR_BASE + code
-    if nfc_mount == 'sticker_10x20':
+    if nfc_mount != 'embedded_round':
         # Two back glyphs can touch at one point (the G and R of YYD1GRAY): that edge gets 4 triangles and the
         # 3MF assembler refuses the card. Shrink the text 0.01 mm, which leaves 0.02 mm between them (opening it
         # back out would make them touch again). Only on the sticker card, so the round-tag cards still rebuild
@@ -111,13 +113,18 @@ def build(code, batch, serial, out_dir, nfc_mount='embedded_round', theme='white
     card = card - prism(n_back, -0.2, BACK_ENGRAVE)
 
     sticker = None
-    if nfc_mount == 'sticker_10x20':
+    if nfc_mount != 'embedded_round':
         cx, cy = ROUND_CENTRE
         round_fill = Point(cx, cy).buffer(ROUND_D / 2 + FILL_MARGIN, quad_segs=64)
         card = card + prism(round_fill, ROUND_Z0 - OVERLAP, ROUND_Z1 + OVERLAP)
-        pz0, pz1, pause = sticker_pocket_z(theme)
-        w, h, r = STICKER_W / 2, STICKER_H / 2, STICKER_RADIUS
-        pocket = box(cx - w + r, cy - h + r, cx + w - r, cy + h - r).buffer(r, quad_segs=24)
+        if nfc_mount == nfc_mounts.ROUND_STICKER:
+            # Crosses the G pocket's height, so it goes behind it (nfc_mounts), whatever the body colour.
+            pz0, pz1, pause = nfc_mounts.print_z(theme, behind_g=True)
+            pocket = Point(*ROUND_STICKER_CENTRE).buffer(nfc_mounts.POCKET_D / 2, quad_segs=64)
+        else:
+            pz0, pz1, pause = sticker_pocket_z(theme)
+            w, h, r = STICKER_W / 2, STICKER_H / 2, STICKER_RADIUS
+            pocket = box(cx - w + r, cy - h + r, cx + w - r, cy + h - r).buffer(r, quad_segs=24)
         card = card - prism(pocket, CARD_T - pz1, CARD_T - pz0)
         sticker = {'pocket': pocket, 'print_z': [pz0, pz1], 'pause_top_z': pause}
 
@@ -149,7 +156,8 @@ def build(code, batch, serial, out_dir, nfc_mount='embedded_round', theme='white
         'card_shells': len(card.decompose()),
     }
     if sticker:
-        rep.update(theme=theme, sticker_pocket_mm=[STICKER_W, STICKER_H, STICKER_DEPTH],
+        x0, y0, x1, y1 = sticker['pocket'].bounds
+        rep.update(theme=theme, sticker_pocket_mm=[round(x1 - x0, 2), round(y1 - y0, 2), STICKER_DEPTH],
                    sticker_pocket_print_z=sticker['print_z'], pause_top_z=sticker['pause_top_z'],
                    tag_face_distance_mm=sticker['print_z'][0])
         # a section through the pocket: one hole where the pocket is (a black card's section also crosses the
@@ -160,7 +168,8 @@ def build(code, batch, serial, out_dir, nfc_mount='embedded_round', theme='white
         rep['sticker_section_mm2'] = round(sum(p.area for p in here), 2)
         rep['sticker_expected_mm2'] = round(sticker['pocket'].area, 2)
         ok_pocket = len(here) == 1 and abs(rep['sticker_section_mm2'] - rep['sticker_expected_mm2']) < 0.5
-        round_left = card.slice((ROUND_Z0 + ROUND_Z1) / 2).to_polygons()
+        # below any pocket: the round sticker behind the G starts at this cavity's middle
+        round_left = card.slice(ROUND_Z0 + 0.24).to_polygons()
         rep['round_cavity_filled'] = len(round_left) == 1
     ok = (abs(card_tm.volume - want_card) / want_card < 0.005
           and abs(art_tm.volume - want_art) / want_art < 0.005

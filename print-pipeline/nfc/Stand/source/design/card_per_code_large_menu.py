@@ -108,9 +108,9 @@ def layout(code, theme='white', font='Inria Serif Bold', face=FACE_MENU, width=W
 
 def build(code, batch, serial, out_dir, nfc_mount='sticker_10x20', theme='white', font='Inria Serif Bold', qr='panel'):
     """Write the two STLs for one card. `batch` and `serial` are accepted for the ledger; the back carries the code
-    alone, as on the Instagram card. The Menu card is new (2026-10-31): it only comes with the sticker."""
-    if nfc_mount != 'sticker_10x20':
-        raise ValueError('the Menu Stand card only takes the 10 x 20 sticker')
+    alone, as on the Instagram card."""
+    if nfc_mount not in ig.nfc_mounts.NFC_MOUNTS:
+        raise ValueError('unsupported nfc_mount')
     large.configure()
     code = fa.normalize_code(code)
     art = layout(code, theme, font, qr=qr)
@@ -125,8 +125,9 @@ def build(code, batch, serial, out_dir, nfc_mount='sticker_10x20', theme='white'
     card = card - ig.prism(ink, TOP - INLAY, TOP + 0.2) - ig.prism(back, -0.2, BACK_ENGRAVE)
     card_tm = ig.to_trimesh(card)
     art_tm = ig.to_trimesh(ig.prism(ink, TOP - INLAY, TOP))
-    want = (plain_volume - ink.area * INLAY - back.area * BACK_ENGRAVE
-            - sticker['pocket'].area * google.STICKER_DEPTH)
+    want = plain_volume - ink.area * INLAY - back.area * BACK_ENGRAVE
+    if sticker:
+        want -= sticker['pocket'].area * google.STICKER_DEPTH
 
     q = {'size': FACE_MENU['qr']['size'], 'modules': FACE_MENU['qr']['modules'], 'y': FACE_MENU['qr']['y']}
     url = art['qr']['url']
@@ -148,15 +149,17 @@ def build(code, batch, serial, out_dir, nfc_mount='sticker_10x20', theme='white'
         'card_shells': len(card.decompose()), 'card_bounds': card_tm.bounds.round(3).tolist(),
         'bad_edges': ig.welded_bad_edges(card_tm) + ig.welded_bad_edges(art_tm),
         'qr_decoded_polygons': decoded, 'qr_decoded_mesh': decoded_mesh, 'nfc_mount': nfc_mount,
-        'sticker_pocket_mm': [google.STICKER_W, google.STICKER_H, google.STICKER_DEPTH],
-        'sticker_pocket_print_z': sticker['print_z'], 'pause_top_z': sticker['pause_top_z'],
-        'tag_face_distance_mm': sticker['print_z'][0],
     }
-    rep.update(ig.check_sticker(card, sticker['pocket'], sticker['print_z']))
+    if sticker:
+        x0, y0, x1, y1 = sticker['pocket'].bounds
+        rep.update(sticker_pocket_mm=[round(x1 - x0, 2), round(y1 - y0, 2), google.STICKER_DEPTH],
+                   sticker_pocket_print_z=sticker['print_z'], pause_top_z=sticker['pause_top_z'],
+                   tag_face_distance_mm=sticker['print_z'][0])
+        rep.update(ig.check_sticker(card, sticker['pocket'], sticker['print_z']))
     ok = (abs(card_tm.volume - want) / want < 0.005
           and abs(art_tm.volume - ink.area * INLAY) / (ink.area * INLAY) < 0.005
-          and card_tm.is_watertight and art_tm.is_watertight and rep['card_shells'] == 2 and plain_shells == 1
-          and rep['bad_edges'] == 0 and decoded == url and decoded_mesh == url and rep['sticker_ok']
+          and card_tm.is_watertight and art_tm.is_watertight and rep['card_shells'] == 2 and plain_shells == (1 if sticker else 2)
+          and rep['bad_edges'] == 0 and decoded == url and decoded_mesh == url and (not sticker or rep['sticker_ok'])
           and abs(card_tm.bounds[1][2] - TOP) < 1e-4 and abs(card_tm.bounds[0][2]) < 1e-4)
     rep['ok'] = bool(ok)
     if not ok:

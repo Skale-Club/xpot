@@ -263,6 +263,55 @@ export const printConsumeSchema = z.object({
   perPiece: z.number().int().positive().max(100),
 }).strict();
 
+/**
+ * The NFC types a piece can take, chosen when a print is asked for. Each is a different print file (the pocket, the
+ * pause, the part it uses), made by print-pipeline/nfc/Stand/source/design/nfc_mounts.py. The round sticker is the default.
+ */
+export const PRINT_NFC_MOUNTS = ["sticker_round_25", "sticker_10x20", "embedded_round"] as const;
+export type PrintNfcMount = (typeof PRINT_NFC_MOUNTS)[number];
+export const PRINT_DEFAULT_NFC_MOUNT: PrintNfcMount = "sticker_round_25";
+
+/** What one NFC type changes in a version: its pause and the parts one piece takes. A material replaces the listed sticker. */
+export const printNfcVariantSchema = z.object({
+  pause: z.object({ z: z.number().nonnegative().max(500), text: z.string().trim().min(1).max(600) }).strict(),
+  consumes: z.array(printConsumeSchema).max(10).default([]),
+  material: printMaterialSchema.optional(),
+}).strict();
+export type PrintNfcVariant = z.infer<typeof printNfcVariantSchema>;
+export type PrintNfcVariants = Partial<Record<PrintNfcMount, PrintNfcVariant>>;
+
+/** The types a version offers, in the order they are asked; none on a version made before the choice existed. */
+export function nfcMountsOf(variants: PrintNfcVariants | null | undefined): PrintNfcMount[] {
+  return PRINT_NFC_MOUNTS.filter((mount) => variants?.[mount]);
+}
+
+/** The answer already marked when the question shows: the default when this version has it. */
+export function preferredNfcMount(mounts: readonly PrintNfcMount[]): PrintNfcMount | null {
+  return mounts.includes(PRINT_DEFAULT_NFC_MOUNT) ? PRINT_DEFAULT_NFC_MOUNT : mounts[0] ?? null;
+}
+
+/** A version as one NFC type prints it: the builder's params, the recipe's pause, every bed's pause and the parts it takes. */
+export function withNfcVariant<V extends { params: Record<string, unknown>; recipe: Record<string, unknown>; beds: PrintBed[]; consumes: Array<{ part: string; perPiece: number }> }>(
+  version: V, variants: PrintNfcVariants | null | undefined, mount: string | null | undefined,
+): V {
+  const variant = mount ? variants?.[mount as PrintNfcMount] : undefined;
+  if (!variant) return version;
+  const { _pause: _note, ...recipe } = version.recipe;
+  return {
+    ...version,
+    params: { ...version.params, nfc_mount: mount },
+    recipe: { ...recipe, pause_top_z: variant.pause.z },
+    beds: version.beds.map((bed) => ({ ...bed, pause: variant.pause })),
+    consumes: variant.consumes,
+  };
+}
+
+/** "What you need" for one NFC type: its sticker instead of whichever the model lists. */
+export function materialsForNfc(materials: readonly PrintMaterial[] | null | undefined, variant: PrintNfcVariant | null | undefined): PrintMaterial[] {
+  const list = materials ?? [];
+  return variant?.material ? [variant.material, ...list.filter((material) => material.kind !== "nfc_sticker")] : [...list];
+}
+
 export const printVersionInputSchema = z.object({
   /** The builder id in print-pipeline/builders (plate.menu, stand.google, …); null for a part's fixed file. */
   builder: z.preprocess((v) => (typeof v === "string" ? v.trim() || null : v), z.string().regex(/^[a-z][a-z0-9_.-]{1,60}$/, "Builder: lowercase id like plate.menu").nullable().optional()),
@@ -276,6 +325,8 @@ export const printVersionInputSchema = z.object({
   recipe: z.record(z.unknown()).default({}),
   beds: z.array(printBedSchema).min(1, "A version needs at least one bed layout").max(20),
   consumes: z.array(printConsumeSchema).max(10).default([]),
+  /** One variant per NFC type this version was built and checked with; `consumes` and the beds' pause are the default's. */
+  nfcVariants: z.record(z.enum(PRINT_NFC_MOUNTS), printNfcVariantSchema).default({}),
   changelog: optionalText(4000),
   /** The batch whose problem this version fixes (uuid or batch code). */
   fixesBatch: optionalText(80),
@@ -357,6 +408,8 @@ export const printJobCreateSchema = z.object({
   quantity: z.number().int().positive().max(10_000).optional(),
   /** Whole beds instead of a count of pieces (`quantity` wins when both come). */
   plates: z.number().int().positive().max(PRINT_MAX_PLATES).optional(),
+  /** Which NFC goes inside: required when the model's current version offers a choice. */
+  nfcMount: z.enum(PRINT_NFC_MOUNTS).optional(),
   notes: optionalText(2000),
   /**
    * Link an existing batch instead of issuing codes (the orders behind batches made before this catalog existed).
@@ -439,6 +492,7 @@ export interface PrintModelVersionItem {
   recipe: Record<string, unknown>;
   beds: PrintBed[];
   consumes: Array<{ part: string; perPiece: number }>;
+  nfcVariants: PrintNfcVariants;
   changelog: string | null;
   fixesBatchId: string | null;
   fixesBatchCode: string | null;
@@ -506,6 +560,8 @@ export interface PrintJobItem {
   status: PrintJobStatus;
   batchId: string | null;
   batchCode: string | null;
+  /** The NFC type chosen; null on a plate of a version with no choice. */
+  nfcMount: PrintNfcMount | null;
   /** Serialized orders: pieces in stock (not pending, not damaged) out of the batch's pieces. */
   receivedCount: number | null;
   /** Serialized orders: pieces still pending (a plate printed before stock followed "printed" may still have some). */
@@ -554,6 +610,7 @@ export interface PrintRequestItem {
   bedLabel: string;
   /** Pieces asked for (a part's plates may round it up to whole beds). */
   quantity: number;
+  nfcMount: PrintNfcMount | null;
   notes: string | null;
   createdAt: string;
   /** Some plate still to build or print. */
@@ -615,6 +672,7 @@ export interface PrintNowPlate {
   quantity: number;
   batchCode: string | null;
   modelTitle: string;
+  nfcMount: PrintNfcMount | null;
   files: Array<{ id: string; kind: PrintFileKind; filename: string; sha256: string; bytes: number; url: string }>;
 }
 
@@ -694,6 +752,9 @@ export interface PrintGenerateFace {
   hasPreview: boolean;
   /** What the model needs to be bought ("What you need"). */
   materials: PrintMaterial[];
+  /** The NFC types to ask about, with what each one changes; empty on a version with no choice. */
+  nfcMounts: PrintNfcMount[];
+  nfcVariants: PrintNfcVariants;
 }
 
 export interface PrintGenerateOption {
@@ -745,6 +806,8 @@ export function printGenerateOptions(models: readonly PrintModelItem[]): PrintGe
                 bedLabel: bed.label,
                 hasPreview: !!model.currentVersion!.preview,
                 materials: model.materials ?? [],
+                nfcMounts: nfcMountsOf(model.currentVersion!.nfcVariants),
+                nfcVariants: model.currentVersion!.nfcVariants ?? {},
               };
             }),
         })),
@@ -757,6 +820,8 @@ export const printGenerateSchema = z.object({
   theme: z.string().trim().toLowerCase().pipe(z.string().min(1).max(40)),
   face: z.enum(TAG_FACES),
   quantity: z.number().int().positive().max(10_000),
+  /** Which NFC goes inside (as printJobCreateSchema's). */
+  nfcMount: z.enum(PRINT_NFC_MOUNTS).optional(),
   notes: optionalText(2000),
   /** Whose pieces (as printJobCreateSchema's `organization`): omitted, the company's or the branch's own. */
   organization: z.union([z.string().trim().min(1).max(80), z.number().int().positive()]).optional(),
