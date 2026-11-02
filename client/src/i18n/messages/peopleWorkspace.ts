@@ -26,7 +26,7 @@ const en = {
   // People › Organizations
   orgsLoadFailed: "Could not load their organizations.",
   noOrganizations: "Not in any organization yet.",
-  personalWorkspace: "Personal workspace",
+  personalWorkspace: "Personal space",
   orgSuspended: "Suspended",
   openOrganization: "Open {name}",
   addToOrganization: "Add to an organization",
@@ -60,16 +60,16 @@ const en = {
   choosePerson: "Choose a person",
   createInPeople: "Create a person in People",
   allPeopleJoined: "Everyone is already a member.",
-  showPersonal: "Show personal workspaces",
-  personalHidden_one: "{count} personal workspace hidden",
-  personalHidden_other: "{count} personal workspaces hidden",
-  onlyPersonal: "Only personal workspaces so far.",
+  showPersonal: "Show personal spaces",
+  personalHidden_one: "{count} personal space hidden",
+  personalHidden_other: "{count} personal spaces hidden",
+  onlyPersonal: "Only personal spaces so far.",
   membersCount_one: "{count} member",
   membersCount_other: "{count} members",
   orgActive: "Active",
   orgActiveHint: "An inactive organization keeps its members and records; it is only marked inactive.",
   orgPrintsOwnPieces: "Prints its own pieces",
-  orgPrintsOwnPiecesHint: "Its owners use Production for it: print requests, plates, batches and its own bench. Only the platform changes this.",
+  orgPrintsOwnPiecesHint: "Its owners use Production for it: print requests, plates, batches and its own print computer. Only the platform changes this.",
   openRow: "Open",
 
   // Visits › Manage › Overview
@@ -168,7 +168,7 @@ export const peopleWorkspaceMessages: Dictionary<typeof en> = {
     orgActive: "Ativa",
     orgActiveHint: "Uma organização inativa mantém os membros e os registros; só fica marcada como inativa.",
     orgPrintsOwnPieces: "Imprime as próprias peças",
-    orgPrintsOwnPiecesHint: "Os donos dela usam a Produção para ela: pedidos de impressão, placas, lotes e a própria bancada. Só a plataforma muda isto.",
+    orgPrintsOwnPiecesHint: "Os donos dela usam a Produção para ela: pedidos de impressão, placas, lotes e o próprio computador da impressora. Só a plataforma muda isto.",
     openRow: "Abrir",
 
     periodLabel: "Período",
@@ -262,7 +262,7 @@ export const peopleWorkspaceMessages: Dictionary<typeof en> = {
     orgActive: "Activa",
     orgActiveHint: "Una organización inactiva conserva sus miembros y registros; solo queda marcada como inactiva.",
     orgPrintsOwnPieces: "Imprime sus propias piezas",
-    orgPrintsOwnPiecesHint: "Sus dueños usan Producción para ella: pedidos de impresión, placas, lotes y su propia estación. Solo la plataforma cambia esto.",
+    orgPrintsOwnPiecesHint: "Sus dueños usan Producción para ella: pedidos de impresión, placas, lotes y su propio ordenador de la impresora. Solo la plataforma cambia esto.",
     openRow: "Abrir",
 
     periodLabel: "Período",
