@@ -6,14 +6,14 @@ import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/xpot/ConfirmDialog";
 import { ProductionWizard } from "./production-wizard";
 import { EmptyState } from "@/components/xpot/EmptyState";
-import { BOARD_GROUPS, boardGroups, plateActions, productionNeedsAction, qrFailedCodes, redoEffect, showPlateNumber, type BoardGroup, type PlateAction } from "./production-workflow";
+import { BOARD_GROUPS, boardGroups, buildState, collapsedPlates, plateActions, productionNeedsAction, qrFailedCodes, redoEffect, showPlateNumber, type BoardGroup, type PlateAction } from "./production-workflow";
 import { useToast } from "@/hooks/use-toast";
 import { useT } from "@/i18n";
 import { productionMessages } from "@/i18n/messages/production";
 import { errorMessage, formatDate, invalidateAdminTags, sendJson } from "./api";
 import { Loading, LoadError } from "./pieces-shared";
 import { Pill } from "@/components/xpot/StatusPill";
-import { DownloadFileButton, JobStatusPill, PRODUCTION_BASE, UploadFileButton, plateDownloads, usePlateMoves, usePrintModels, usePrintRequests, useProductionAccess, type JobFilter } from "./production-shared";
+import { DownloadFileButton, JobStatusPill, PRODUCTION_BASE, UploadFileButton, plateDownloads, useBuildSentence, usePlateMoves, usePrintComputers, usePrintModels, usePrintRequests, useProductionAccess, type JobFilter } from "./production-shared";
 import { ProductionIdentity } from "./production-identity";
 import { PrintedDialog } from "./production-printed-dialog";
 
@@ -70,8 +70,8 @@ function RequestHeader({ request, models, showOrganization, showIdentity, go }: 
       ) : <span />}
       <span className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-white/45">
         {showOrganization ? <Pill tone="slate">{request.organizationName}</Pill> : null}
-        <span>{[t.plural("pieceCount", request.quantity), jobs > 1 ? t.plural("printJobCount", jobs) : null].filter(Boolean).join(" · ")}</span>
-        <span>{formatDate(request.createdAt)}</span>
+        {jobs > 1 ? <span>{[t.plural("pieceCount", request.quantity), t.plural("printJobCount", jobs)].join(" · ")}</span> : null}
+        {new Date(request.createdAt).toDateString() === new Date().toDateString() ? null : <span>{formatDate(request.createdAt)}</span>}
       </span>
       {request.notes ? <p className="w-full truncate text-xs text-white/50">{t("noteLine", { note: request.notes })}</p> : null}
     </div>
@@ -116,7 +116,32 @@ const GROUP_TITLE: Record<BoardGroup, string> = {
   printing: "group_printing",
   ready: "group_ready",
   waiting: "group_waiting",
+  making: "group_making",
 };
+
+/** Nine alike prints of one request, said once ("9 prints · 4 pieces each · 0 files sent") behind one button; the rows open on demand. */
+function CollapsedPrints({ plates, waiting, children }: { plates: PrintJobItem[]; waiting: boolean; children: React.ReactNode }) {
+  const t = useT(productionMessages);
+  const [open, setOpen] = useState(false);
+  const summary = collapsedPlates(plates);
+  if (!summary) return <ul className="divide-y divide-white/[0.06]">{children}</ul>;
+  const line = [
+    t.plural("printJobCount", summary.count),
+    summary.each !== null ? t.plural("piecesEach", summary.each) : null,
+    waiting ? t.plural("filesSentCount", summary.filesSent) : null,
+  ].filter(Boolean).join(" · ");
+  return (
+    <div data-testid="production-collapsed">
+      <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 px-3 py-2.5">
+        <p className="text-sm text-white/70">{line}</p>
+        <Button type="button" variant="secondary" size="sm" aria-expanded={open} onClick={() => setOpen((value) => !value)} data-testid="production-collapsed-toggle">
+          {open ? t("hidePrints") : t(waiting ? "uploadFiles" : "showPrints")}
+        </Button>
+      </div>
+      {open ? <ul className="divide-y divide-white/[0.06] border-t border-white/[0.06]">{children}</ul> : null}
+    </div>
+  );
+}
 
 /**
  * What the operator prints now: the open and failed print jobs by what each needs, failed first. A group with nothing
@@ -149,9 +174,9 @@ export function ToPrintList({ go, emptyHint }: { go: Go; emptyHint: string }) {
               {group.requests.map(({ request, plates }) => (
                 <li key={`${request.id}-${key}`} className="rounded-2xl border border-white/[0.08] bg-white/[0.03]" data-testid="production-request">
                   <RequestHeader request={request} models={modelById} showOrganization={organizations.length > 1} showIdentity go={go} />
-                  <ul className="divide-y divide-white/[0.06]">
+                  <CollapsedPrints plates={plates} waiting={key === "waiting"}>
                     {plates.map((plate) => <PlateRow key={plate.id} plate={plate} go={go} showStatus={false} rows={rows} />)}
-                  </ul>
+                  </CollapsedPrints>
                 </li>
               ))}
             </ul>
@@ -168,8 +193,11 @@ function useRowActions() {
   const [printing, setPrinting] = useState<PrintJobItem | null>(null);
   const [redoing, setRedoing] = useState<PrintJobItem | null>(null);
   const moves = usePlateMoves();
+  const { loaded, computers } = usePrintComputers();
+  const sentence = useBuildSentence();
   return {
     moves,
+    build: (plate: PrintJobItem) => { const state = buildState(plate, loaded ? computers : null); return state ? { state, text: sentence(plate, state) } : null; },
     markPrinted: setPrinting,
     printAgain: setRedoing,
     dialogs: (
@@ -187,6 +215,7 @@ function PlateRow({ plate, go, showStatus, rows }: { plate: PrintJobItem; go: Go
   const file = sliced ?? project;
   const dead = plate.status === "cancelled";
   const actions = plateActions(plate);
+  const building = rows.build(plate);
   const open = () => go(`${PRODUCTION_BASE}/jobs/${plate.id}`);
   const renderAction = (action: PlateAction, index: number) => {
     const primary = index === 0;
@@ -225,10 +254,15 @@ function PlateRow({ plate, go, showStatus, rows }: { plate: PrintJobItem; go: Go
           {showPlateNumber(plate) ? <span className="whitespace-nowrap text-sm font-medium text-white">{t("plateOf", { number: plate.plateNumber, total: plate.plateCount })}</span> : null}
           {showStatus ? <JobStatusPill status={plate.status} /> : null}
           <span className="text-xs text-white/45">{t.plural("pieceCount", plate.quantity)}</span>
-          {plate.batchCode ? <span className="whitespace-nowrap font-mono text-xs text-white/45">{plate.batchCode}</span> : null}
+          {showStatus && plate.batchCode ? <span className="whitespace-nowrap font-mono text-xs text-white/45">{plate.batchCode}</span> : null}
           {plate.pieceCount !== null && plate.status === "printed" ? <span className="text-xs text-white/45">{t("received", { received: plate.receivedCount ?? 0, total: plate.pieceCount })}</span> : null}
-          {plate.stale ? <span className="inline-flex items-center gap-1 text-xs text-amber-200"><AlertTriangle className="h-3.5 w-3.5 shrink-0 text-amber-300" aria-hidden="true" />{t("stale")}</span> : null}
         </span>
+        {building ? (
+          <span className={`flex items-start gap-1 text-xs ${building.state === "making" ? "text-white/50" : "text-amber-200"}`} data-testid="production-build-state" data-state={building.state}>
+            {building.state === "making" ? null : <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-300" aria-hidden="true" />}
+            {building.text}
+          </span>
+        ) : null}
         {plate.status === "failed" ? <span className="line-clamp-2 block text-xs text-red-200/80" data-testid="production-plate-reason">{plate.errorMessage || t("failedNoReason")}</span> : null}
       </button>
       <span className="flex flex-wrap items-center gap-1.5">

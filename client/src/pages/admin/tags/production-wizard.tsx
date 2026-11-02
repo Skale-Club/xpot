@@ -135,8 +135,8 @@ export function ProductionWizard({ onClose, onCreated, onOrdered, onCloseAutoFoc
         <form onSubmit={submit} className="flex min-h-0 flex-1 flex-col" data-testid="admin-tags-new-batch-form">
           <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 py-5 sm:px-6" data-testid="production-wizard-body">
           <fieldset disabled={busy} aria-labelledby={stepHeadingId} className="min-w-0 space-y-6">
-            <h2 id={stepHeadingId} ref={stepHeading} tabIndex={-1} className="text-sm font-semibold text-white/85 outline-none">{printing ? stepNames[step] : step === 0 ? tw("batchIdentity") : step === 1 ? tw("codeSetup") : tw("stepReview")}</h2>
-            {step === 0 && !initialModel && !existingBatch && (otherWays || !printing) ? <Field label={u("source")}><Select value={form.codes} onChange={(e) => set({ codes: e.target.value as typeof form.codes })} options={[{ value: "print", label: u("sourcePrint") }, { value: "issued", label: u("sourceSupplier") }, { value: "scanned", label: u("sourceReceive") }]} data-testid="production-source" /></Field> : null}
+            <h2 id={stepHeadingId} ref={stepHeading} tabIndex={-1} className="text-sm font-semibold text-white/85 outline-none">{printing ? stepNames[step] : step === 0 ? tw("stepProduct") : step === 1 ? tw("codeSetup") : tw("stepReview")}</h2>
+            {step === 0 && !initialModel && !existingBatch && (otherWays || !printing) ? <Field label={u("source")}><Select value={form.codes} onChange={(e) => set({ codes: e.target.value as typeof form.codes })} options={[...(external ? [] : [{ value: "print", label: u("sourcePrint") }]), { value: "issued", label: u("sourceSupplier") }, { value: "scanned", label: u("sourceReceive") }]} data-testid="production-source" /></Field> : null}
             {step === 0 && printing ? <div className="space-y-4">
               {modelsQuery.isLoading && !initialModel ? <p role="status" className="text-sm text-white/50">{u("loadingModels")}</p> : modelsQuery.error && !modelsQuery.data && !initialModel ? <p role="alert" className="text-sm text-red-300">{u("modelsError")} <button type="button" className="underline" onClick={() => void modelsQuery.refetch()}>{tw("retryCatalog")}</button></p> : <>
                 <fieldset className="space-y-2"><legend className="mb-2 text-xs font-semibold text-white/60">{u("printModel")}</legend>
@@ -153,12 +153,12 @@ export function ProductionWizard({ onClose, onCreated, onOrdered, onCloseAutoFoc
             </div> : null}
             {step === 0 && printing && !initialModel && !existingBatch && !otherWays && access.isAdmin ? <button type="button" onClick={() => setOtherWays(true)} className="text-xs text-white/50 underline underline-offset-2 hover:text-white" data-testid="production-other-ways">{u("otherWays")}</button> : null}
             {step === 0 && !printing ? <div className="space-y-4">
-              <Field label={t("fieldNameRequired")}><Input value={form.name} onChange={(e) => set({ name: e.target.value })} required maxLength={120} placeholder={t("namePlaceholder")} autoFocus /></Field>
+              <Field label={t("fieldNameRequired")}><Input value={form.name} onChange={(e) => set({ name: e.target.value })} required maxLength={120} placeholder={u("supplierNamePlaceholder")} autoFocus /></Field>
               <div className="grid gap-3 sm:grid-cols-2">
-                <Field label={tw("physicalModel")}><Select value={form.productType} onChange={(e) => set({ productType: e.target.value })} options={labels.productOptions} /></Field>
-                <Field label={t("fieldPrintedOnPieces")} hint={tw("faceHint")}><Select value={form.face} onChange={(e) => set({ face: e.target.value })} placeholder={form.productType === "google_review_sign" ? t("faceFromProduct") : t("faceNotSet")} options={labels.faceOptions} /></Field>
+                <Field label={u("whatIsIt")}><Select value={form.productType} onChange={(e) => set({ productType: e.target.value })} options={labels.productOptions} /></Field>
+                <Field label={u("whatPrinted")} hint={tw("faceHint")}><Select value={form.face} onChange={(e) => set({ face: e.target.value })} placeholder={form.productType === "google_review_sign" ? t("faceFromProduct") : t("faceNotSet")} options={labels.faceOptions} /></Field>
               </div>
-              <Field label={tw("salesProductRequired")} hint={tw("salesProductHint")}>
+              <Field label={u("soldAsPrice")} hint={tw("salesProductHint")}>
                 <Select value={form.salesProductId} onChange={(e) => set({ salesProductId: e.target.value })} required disabled={catalogLoading || !!catalogError} placeholder={catalogLoading ? tw("loadingCatalog") : t("chooseCatalogProduct")} options={catalogOptions(catalog)} />
               </Field>
               {catalogError ? <p role="alert" className="text-xs text-red-300">{tw("catalogError")} <button type="button" className="underline underline-offset-2" onClick={() => void reloadCatalog()}>{tw("retryCatalog")}</button></p> : !catalogLoading && catalog.length === 0 ? <p role="status" className="text-xs text-amber-300">{tw("catalogEmpty")}</p> : null}

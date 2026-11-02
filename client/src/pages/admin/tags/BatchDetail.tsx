@@ -1,6 +1,6 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { Check, Download, Factory, FileText, Layers, LockKeyhole, PackagePlus, Pencil, Printer, RotateCcw, ScanLine } from "lucide-react";
+import { Check, Download, Factory, FileText, Layers, LockKeyhole, PackageCheck, PackagePlus, Pencil, Printer, RotateCcw, ScanLine } from "lucide-react";
 import { useUrlFilters } from "@/hooks/use-url-filters";
 import type { TagListItem } from "@shared/tagsApi";
 import { resolveTagFace } from "@shared/tagFace";
@@ -146,6 +146,7 @@ const TAB_KEYS = {
   receive: "tabReceive",
 } as const satisfies Record<BatchTab, string>;
 
+// The step's own name is the button: "Supplier has the files" says what is being marked, "Mark as done" did not.
 const STEP_ACTION_TITLE = { art_built: "Print file ready", printed: "Printed" } as const;
 
 /** The stage stepper: done steps checked; Print file ready and Printed get "Mark as done", which writes the journey. */
@@ -192,7 +193,7 @@ function StageStepper({ batch }: { batch: BatchDetailData }) {
           </span>
           {step.state === "current" && canMarkStep(step, batch.stage) ? (
             <Button type="button" variant="secondary" size="sm" loading={mark.isPending && mark.variables?.stage === step.stage} disabled={mark.isPending} onClick={() => mark.mutate(step)} data-testid={`batch-mark-${step.stage}`}>
-              {t("markDone")}
+              {labels.batchStage(step.stage)}
             </Button>
           ) : null}
         </li>
@@ -250,6 +251,15 @@ export function BatchDetail({ id, go }: { id: string; go: (path: string) => void
   const labels = useTagLabels();
   const nameOf = useModelName();
   const { toast } = useToast();
+  // A house print puts its pieces in stock from here too when the print page left some pending (an old print).
+  const stockOwn = useMutation({
+    mutationFn: (jobId: string) => sendJson("POST", `/api/xpot/admin/print-jobs/${jobId}/stock`),
+    onSuccess: async () => {
+      await invalidateAdminTags();
+      toast({ title: tp("piecesStocked") });
+    },
+    onError: (err) => toast({ title: tp("couldNotUpdateOrder"), description: errorMessage(err), variant: "destructive" }),
+  });
   // A printing branch's Rep Admin checks its own batches here (summary, files, QR check); handing out, closing and
   // editing a batch stay the admin's.
   const { isAdmin } = useProductionAccess();
@@ -399,15 +409,18 @@ export function BatchDetail({ id, go }: { id: string; go: (path: string) => void
       {tab === "summary" && (
         <div className="space-y-4" role="tabpanel" aria-labelledby="batch-tab-summary">
           {fromPrint ? (
-            <SectionCard accent="tags" icon={Printer} title={tf("printJobCard")}>
-              <div className="flex flex-wrap items-center justify-between gap-3" data-testid="batch-print-order-link">
-                <div className="min-w-0 space-y-1.5">
-                  <BatchProgressPill batch={batch} />
-                  {batch.printJobStatus === "failed" ? <p className="text-sm text-red-200/80">{batch.printJobError || tp("failedNoReason")}</p> : null}
+            batch.printJobStatus === "failed" || (batch.printJobStatus === "printed" && batch.pendingCount > 0) ? (
+              <SectionCard accent="tags" icon={Printer} title={tp(batch.printJobStatus === "failed" ? "cardTitle_failed" : "cardTitle_printedPending")}>
+                <div className="flex flex-wrap items-center justify-between gap-3" data-testid="batch-print-order-link">
+                  <p className={`min-w-0 text-sm ${batch.printJobStatus === "failed" ? "text-red-200/80" : "text-white/70"}`}>
+                    {batch.printJobStatus === "failed" ? batch.printJobError || tp("failedNoReason") : tp.plural("printedPending", batch.pendingCount)}
+                  </p>
+                  {batch.printJobStatus === "failed"
+                    ? <Button type="button" variant="secondary" onClick={() => go(`/production/jobs/${batch.printJobId}`)}>{u("backToOrder")}</Button>
+                    : <Button type="button" variant="brand" accent="tags" loading={stockOwn.isPending} onClick={() => stockOwn.mutate(batch.printJobId!)} data-testid="batch-put-in-stock"><PackageCheck className="h-4 w-4" />{tp.plural("putInStock", batch.pendingCount)}</Button>}
                 </div>
-                <Button type="button" variant="secondary" onClick={() => go(`/production/jobs/${batch.printJobId}`)}>{tf("openPrintJob")}</Button>
-              </div>
-            </SectionCard>
+              </SectionCard>
+            ) : null
           ) : (
             <SectionCard accent="tags" icon={Factory} title={tf("productionStage")}>
               <StageStepper batch={batch} />
@@ -443,7 +456,7 @@ export function BatchDetail({ id, go }: { id: string; go: (path: string) => void
             <p className="mt-2 leading-relaxed">{tf("chipRule")}</p>
           </details>
         </SectionCard>
-        {canPrepare ? <SectionCard accent="tags" icon={Printer} title={u("printHere")}><p className="mb-3 text-sm text-white/55">{u("reuseCodesHint")}</p><Button variant="secondary" onClick={() => setPreparing(true)} data-testid="batch-prepare-print">{u("printHere")}</Button></SectionCard> : null}
+        {canPrepare ? <SectionCard accent="tags" icon={Printer} title={u("printHere")}><p className="mb-3 text-sm text-white/55">{u("reuseCodesHint")}</p><Button variant="secondary" onClick={() => setPreparing(true)} data-testid="batch-prepare-print">{u("printItHere")}</Button></SectionCard> : null}
         </div>
       )}
 

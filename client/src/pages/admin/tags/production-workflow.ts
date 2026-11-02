@@ -93,6 +93,11 @@ export function printedOutcome(job: Pick<PrintJobItem, "batchId" | "pendingCount
   return job.damagedCount ? "damaged" : "inStock";
 }
 
+/** How many damaged pieces a printed plate can still ask for again: none once that was done (the server refuses a second time too). */
+export function damagedToReprint(job: Pick<PrintJobItem, "status" | "batchId" | "pendingCount" | "damagedCount" | "reprintedBy">): number {
+  return job.status === "printed" && printedOutcome(job) === "damaged" && !job.reprintedBy ? job.damagedCount ?? 0 : 0;
+}
+
 /** Assembling takes the parts off the count, so it waits until every piece is in stock. */
 export function canAssembleJob(job: Pick<PrintJobItem, "status" | "batchId" | "pendingCount">, consumes: number, assembledAt: string | null): boolean {
   return job.status === "printed" && Boolean(job.batchId) && consumes > 0 && !assembledAt && !pendingPieces(job);
@@ -100,15 +105,20 @@ export function canAssembleJob(job: Pick<PrintJobItem, "status" | "batchId" | "p
 
 // ─── The board: what to print now ─────────────────────────────────────────────────────────────────────────────
 
-/** The groups of "To print", in the order the operator needs them: what is broken, what is on the printer, what can go on it, what waits. */
-export const BOARD_GROUPS = ["attention", "printing", "ready", "waiting"] as const;
+/**
+ * The groups of "To print", in the order the operator needs them: what is broken, what is on the printer, what can go on
+ * it, what waits for a file from the operator (it has an Upload button), and what the print computer is making (nothing
+ * to do). One state, one group, one name on every screen: a plate being built is never "waiting for the file".
+ */
+export const BOARD_GROUPS = ["attention", "printing", "ready", "waiting", "making"] as const;
 export type BoardGroup = (typeof BOARD_GROUPS)[number];
 
 export function boardGroupOf(status: string): BoardGroup | null {
   if (status === "failed") return "attention";
   if (status === "printing") return "printing";
   if (status === "ready") return "ready";
-  return status === "requested" || status === "building" ? "waiting" : null;
+  if (status === "requested") return "waiting";
+  return status === "building" ? "making" : null;
 }
 
 /** The last attempt of each plate, in plate order: a failed plate printed again leaves only its new attempt. */
@@ -180,6 +190,36 @@ export function printComputers(
       lastSeenAt: device.lastSeenAt,
       on: device.lastSeenAt !== null && now - new Date(device.lastSeenAt).getTime() <= PRINT_COMPUTER_ON_MS,
     }));
+}
+
+/**
+ * What a plate being built is really doing, from the job and its computer together, so the board, the list and the page
+ * tell the same story: the computer is making it (nothing to do), the computer that took it is off (it waits for it), or
+ * the computer is on but the file has not moved for a while (`job.stale`, 30 minutes). A computer that is off wins over
+ * the job's own silence, and a computer that was unpaired counts as off. `computers` null: not loaded yet, so the job's
+ * own news is all there is. Null for a plate that is not being built.
+ */
+export type BuildState = "making" | "computerOff" | "quiet";
+
+export function buildState(job: Pick<PrintJobItem, "status" | "stale" | "deviceName">, computers: readonly PrintComputer[] | null): BuildState | null {
+  if (job.status !== "building") return null;
+  if (computers && job.deviceName) {
+    const computer = computers.find((c) => c.name === job.deviceName);
+    if (!computer || !computer.on) return "computerOff";
+  }
+  return job.stale ? "quiet" : "making";
+}
+
+/** Whether some plate depends on a print computer (waiting for its file or being built): the line that says "files will wait" is true only then. */
+export function needsPrintComputer(requests: readonly PrintRequestItem[]): boolean {
+  return boardGroups(requests).some((g) => g.group === "waiting" || g.group === "making");
+}
+
+/** Prints of one request that share a group, said once ("9 prints · 4 pieces each") instead of nine alike rows: from three up. */
+export function collapsedPlates(plates: readonly Pick<PrintJobItem, "quantity" | "downloads">[]): { count: number; each: number | null; filesSent: number } | null {
+  if (plates.length < 3) return null;
+  const sizes = new Set(plates.map((p) => p.quantity));
+  return { count: plates.length, each: sizes.size === 1 ? plates[0].quantity : null, filesSent: plates.filter((p) => p.downloads.length > 0).length };
 }
 
 /** "Plate 1 of 1" says nothing: only name the plate when the request has several. */

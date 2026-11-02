@@ -15,7 +15,7 @@ import { productionMessages } from "@/i18n/messages/production";
 import { productionBoardMessages } from "@/i18n/messages/productionBoard";
 import { serverErrorText } from "@/lib/apiErrors";
 import { AdminHttpError, ADMIN_TAGS_KEY, STALE_MS, errorMessage, getJson, invalidateAdminTags, sendJson, withQuery } from "./api";
-import { printComputers } from "./production-workflow";
+import { printComputers, type BuildState } from "./production-workflow";
 
 // Tags › Production (docs/PRINT_EXECUTION_PLAN.md): the queries, pills and the upload shared by the catalog, the
 // model page, the queue of requests and the plate page. Every query key starts with ADMIN_TAGS_KEY, so
@@ -60,6 +60,15 @@ export function usePrintRequests(filter: JobFilter, model?: string, organization
 }
 
 /** The paired computers that make print files, and whether each is on (heard from in the last few minutes). */
+/** The sentence for a plate being built (see buildState): who is on it and whether there is anything to do, the same on the board, the list and the page. */
+export function useBuildSentence() {
+  const t = useT(productionMessages);
+  return (job: Pick<PrintJobItem, "deviceName">, state: BuildState): string => {
+    const device = job.deviceName ?? t("buildDeviceGeneric");
+    return t(`build_${state}` as never, { device: state === "computerOff" ? device : device.charAt(0).toUpperCase() + device.slice(1) });
+  };
+}
+
 export function usePrintComputers() {
   const { data: devices } = useQuery<ProvisionerDeviceItem[]>({
     queryKey: [ADMIN_TAGS_KEY, "provisioners"],
