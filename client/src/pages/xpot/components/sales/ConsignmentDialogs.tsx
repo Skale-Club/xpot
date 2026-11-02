@@ -18,8 +18,9 @@ import {
   type PaymentStatus,
 } from "../../hooks/useSalesModule";
 import {
-  Field, Money, MoneyInput, PrimaryButton, QtyInput, Select, SheetDialog, inputCls, inputStyle,
+  CountInput, Field, Money, MoneyInput, PrimaryButton, QtyInput, Select, SheetDialog, inputCls, inputStyle,
 } from "./ui";
+import { settleCountState } from "./settleCount";
 import { useT } from "@/i18n";
 import { commonMessages } from "@/i18n/messages/common";
 import { salesModuleMessages } from "@/i18n/messages/salesModule";
@@ -175,7 +176,8 @@ export function SettleDialog({
   const productsQuery = useProducts({ enabled: open });
 
   const onHand = row?.consignment.quantityOnHand ?? 0;
-  const [counted, setCounted] = useState(0);
+  // Starts empty: an untouched dialog must not bill everything on record as sold.
+  const [counted, setCounted] = useState<number | null>(null);
   const [restock, setRestock] = useState(0);
   const [paymentStatus, setPaymentStatus] = useState<PaymentStatus>("paid");
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod | "">("cash");
@@ -183,7 +185,7 @@ export function SettleDialog({
   const [notes, setNotes] = useState("");
 
   useEffect(() => {
-    if (open) { setCounted(0); setRestock(0); setPaymentStatus("paid"); setPaidCents(0); setNotes(""); }
+    if (open) { setCounted(null); setRestock(0); setPaymentStatus("paid"); setPaidCents(0); setNotes(""); }
   }, [open, row?.consignment.id]);
 
   const unitCostCents = useMemo(() => {
@@ -194,7 +196,7 @@ export function SettleDialog({
   // The same function the server settles with — the preview cannot drift.
   const result = useMemo(() => computeSettlement({
     onHand,
-    countedRemaining: counted,
+    countedRemaining: counted ?? onHand,
     unitPriceCents: row?.consignment.unitPriceCents ?? 0,
     unitCostCents,
     restockQuantity: restock,
@@ -202,8 +204,10 @@ export function SettleDialog({
 
   if (!row) return null;
   const currency = row.consignment.currency;
+  const countState = settleCountState(onHand, counted);
 
   async function submit() {
+    if (counted === null) return;
     await settle.mutateAsync({
       consignmentId: row!.consignment.id,
       countedRemaining: counted,
@@ -234,11 +238,13 @@ export function SettleDialog({
           </div>
         </div>
 
-        <Field label={t("stillOnShelf")} hint={t("hintCountThem")}>
-          <QtyInput value={counted} onChange={setCounted} min={0} autoFocus />
+        <Field label={t("stillOnShelf")}>
+          <CountInput value={counted} onChange={setCounted} autoFocus />
         </Field>
 
-        {result.overCount ? (
+        {countState === "empty" ? (
+          <p className="rounded-xl border border-white/[0.09] bg-white/[0.04] px-3 py-2.5 text-xs text-white/55" data-testid="settle-count-first">{t("countFirst")}</p>
+        ) : countState === "over" ? (
           <div className="flex items-start gap-2 rounded-xl px-3 py-2.5 text-xs text-red-300 border border-red-400/25 bg-red-500/[0.08]">
             <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
             <span>{t("overCount", { count: onHand })}</span>
@@ -271,7 +277,7 @@ export function SettleDialog({
           </p>
         )}
 
-        {result.soldQuantity > 0 && (
+        {countState === "ready" && result.soldQuantity > 0 && (
           <>
             <div className="grid grid-cols-2 gap-2">
               <Field label={t("payment")}>
@@ -296,12 +302,14 @@ export function SettleDialog({
             className={inputCls} style={inputStyle} />
         </Field>
 
-        <PrimaryButton tone="emerald" onClick={submit} disabled={result.overCount} loading={settle.isPending}>
-          <Handshake className="h-4 w-4" />
-          {result.soldQuantity > 0
-            ? t("settleAmount", { amount: formatCents(result.amountCents, currency) })
-            : t("settleNothingSold")}
-        </PrimaryButton>
+        {countState === "ready" ? (
+          <PrimaryButton tone="emerald" onClick={submit} loading={settle.isPending}>
+            <Handshake className="h-4 w-4" />
+            {result.soldQuantity > 0
+              ? t("settleAmount", { amount: formatCents(result.amountCents, currency) })
+              : t("settleNothingSold")}
+          </PrimaryButton>
+        ) : null}
       </div>
     </SheetDialog>
   );

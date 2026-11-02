@@ -85,3 +85,29 @@ export function visitLocationException(visit: {
   if (visit.validationStatus === "gps_unavailable") return "no_location";
   return null;
 }
+
+/**
+ * The result a check-out starts with. What the rep or a voice note already
+ * chose stays; the untouched default ("Talked") becomes "Sale made" when a sale
+ * was recorded during the visit, so just sliding to check out does not file a
+ * visit that sold as one that did not.
+ */
+export function defaultCheckoutStatus(current: string, hasSale: boolean): string {
+  return current === "completed" && hasSale ? "sale_made" : current;
+}
+
+/** A visit that is checked in and not out: its result is chosen at check-out, not before. */
+export function isOpenVisit(visit: { status: string; checkedOutAt?: string | Date | null }): boolean {
+  return visit.status === "in_progress" && !visit.checkedOutAt;
+}
+
+/**
+ * How a company's state reads next to its filter: "In talks" is the one name for a lead and for a prospect already
+ * visited, so a company never shows "Prospect" while it is listed as worked.
+ */
+export function companyStateLabel(status: string, worked: boolean): "prospect" | "inTalks" | "customer" | "inactive" {
+  const stage = companyStage(status);
+  if (stage === "customer" || stage === "inactive") return stage;
+  if (stage === "lead") return "inTalks";
+  return worked ? "inTalks" : "prospect";
+}

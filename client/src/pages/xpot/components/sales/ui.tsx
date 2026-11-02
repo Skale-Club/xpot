@@ -13,6 +13,7 @@ import { EYEBROW, GLASS_SUBTLE_CLASS } from "@/components/xpot/surface";
 import { cn } from "@/lib/utils";
 import { useT } from "@/i18n";
 import { visitsUiMessages } from "@/i18n/messages/visitsUi";
+import { parseSettleCount } from "./settleCount";
 import { centsToInput, currencySymbol, formatCents, inputToCents } from "../../utils";
 
 export { GLASS } from "@/components/xpot/surface";
@@ -136,6 +137,32 @@ export function QtyInput({
         className={cn(inputCls, "px-1 text-center font-semibold tabular-nums")}
       />
       <Button type="button" variant="secondary" size="icon" aria-label={t("increase")} disabled={disabled || (max != null && value >= max)} onClick={() => onChange(clamp(value + 1))}>
+        <Plus aria-hidden="true" />
+      </Button>
+    </div>
+  );
+}
+
+/** A count that starts empty (null) and is only a number once the rep types or taps one. */
+export function CountInput({
+  value, onChange, autoFocus,
+}: { value: number | null; onChange: (n: number | null) => void; autoFocus?: boolean }) {
+  const t = useT(visitsUiMessages);
+  return (
+    <div className="flex items-center gap-1">
+      <Button type="button" variant="secondary" size="icon" aria-label={t("decrease")} disabled={value === null || value <= 0} onClick={() => onChange(Math.max(0, (value ?? 0) - 1))}>
+        <Minus aria-hidden="true" />
+      </Button>
+      <input
+        value={value ?? ""}
+        autoFocus={autoFocus}
+        inputMode="numeric"
+        placeholder="?"
+        onChange={(e) => onChange(parseSettleCount(e.target.value.replace(/[^0-9]/g, "")))}
+        className={cn(inputCls, "px-1 text-center font-semibold tabular-nums")}
+        data-testid="settle-count-input"
+      />
+      <Button type="button" variant="secondary" size="icon" aria-label={t("increase")} onClick={() => onChange((value ?? 0) + 1)}>
         <Plus aria-hidden="true" />
       </Button>
     </div>

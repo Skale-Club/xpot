@@ -48,7 +48,7 @@ describe("one panel per profile", () => {
     expect(labelsOf(groups)).toEqual(["", "Pieces", "Field"]);
     expect(itemHrefs(groups, "")).toEqual(["/admin", "/organizations/7?tab=team"]);
     expect(itemHrefs(groups, "Pieces")).toEqual(["/admin/tags/pieces", "/admin/tags/kits", "/organizations/7?tab=purchases", "/admin/tags/overview"]);
-    expect(itemHrefs(groups, "Field")).toEqual(["/admin/work/leads", "/admin/work/tasks", "/admin/work/sales"]);
+    expect(itemHrefs(groups, "Field")).toEqual(["/admin/work/leads", "/admin/work/tasks", "/admin/work/sales", "/admin/overview"]);
     const all = hrefs(groups);
     for (const href of ["/admin/tags/production", "/admin/tags/provisioners", "/admin/tags/journey", "/admin/tags/shop", "/admin/reps", "/admin/products", "/admin/settings", "/admin/integrations", "/admin/branding", "/admin/health", "/organizations/7?tab=settings"]) expect(all).not.toContain(href);
     expect(groups.some((g) => g.adminOnly)).toBe(false);
@@ -100,7 +100,7 @@ describe("one panel per profile", () => {
   it("follows the modules: no Visits items without Visits, no Tags items without Tags", () => {
     const owner = (modules: readonly ("visits" | "tags")[]) => groupsOf("owner", modules).flatMap((g) => g.items.map((i) => i.href));
     expect(owner(["tags"])).toEqual(["/admin", "/organizations/7?tab=team", "/admin/tags/pieces", "/admin/tags/kits", "/organizations/7?tab=purchases", "/admin/tags/overview"]);
-    expect(owner(["visits"])).toEqual(["/admin", "/organizations/7?tab=team", "/admin/work/leads", "/admin/work/tasks", "/admin/work/sales"]);
+    expect(owner(["visits"])).toEqual(["/admin", "/organizations/7?tab=team", "/admin/work/leads", "/admin/work/tasks", "/admin/work/sales", "/admin/overview"]);
     expect(labelsOf(groupsOf("partner", ["visits"]))).not.toContain("Make");
   });
 

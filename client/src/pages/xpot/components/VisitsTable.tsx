@@ -78,12 +78,6 @@ export function VisitsTable({
       cellClassName: "hidden whitespace-nowrap text-white/55 2xl:table-cell",
       render: (visit) => (visit.durationSeconds ? formatDuration(visit.durationSeconds) : <span className="text-white/20">—</span>),
     },
-    {
-      key: "notes",
-      label: <span className="sr-only">{t("colNotes")}</span>,
-      cellClassName: "whitespace-nowrap",
-      render: (visit) => <VisitNoteMarks visit={visit} />,
-    },
   ];
 
   return (

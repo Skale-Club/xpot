@@ -10,6 +10,7 @@ import { createSyncRouter } from "./sync.js";
 import { createPlaceSearchRouter } from "./place-search.js";
 import { createMapRouter } from "./map.js";
 import { createAdminRouter } from "./admin.js";
+import { createTeamResultsRouter } from "./teamActivity.js";
 import { createAdminIntegrationsRouter } from "./admin-integrations.js";
 import { createBrandingPublicRouter, createBrandingAdminRouter } from "./branding.js";
 import { createLandingContentAdminRouter, createLandingContentPublicRouter } from "./landing-content.js";
@@ -45,6 +46,7 @@ export function registerXpotRoutes(app: Express) {
   app.use("/api/xpot", createPlaceSearchRouter());
   app.use("/api/xpot", createMapRouter());
   app.use("/api/xpot", createProspectingRouter());
+  app.use("/api/xpot", createTeamResultsRouter());
   app.use("/api/xpot", createAdminRouter());
   app.use("/api/xpot", createAdminIntegrationsRouter());
   app.use("/api/xpot", createSystemHealthRouter());

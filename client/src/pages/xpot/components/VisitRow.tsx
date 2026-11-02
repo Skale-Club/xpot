@@ -4,16 +4,17 @@ import { ConfirmDialog } from "@/components/xpot/ConfirmDialog";
 import { BackLink } from "@/components/xpot/PageHeader";
 import { EYEBROW, GLASS_CLASS, GLASS_SUBTLE_CLASS } from "@/components/xpot/surface";
 import { formatDate, formatTime } from "@/lib/format";
-import { VisitNoteMarks } from "./VisitsTable";
 import { LocationExceptionBadge, LocationExceptionNotice, StatusBadge, StatusPicker } from "./VisitStatus";
 import type { VisitLocationFields, VisitStatus } from "./VisitStatus";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { VoiceRecorder } from "./VoiceRecorder";
 import { InlineField } from "./InlineField";
-import { formatCents, formatDuration, formatVisitWhen } from "../utils";
+import { displayPhone, formatCents, formatDuration, formatVisitWhen, phoneHref } from "../utils";
 import type { SalesLead, SalesVisitNote } from "../types";
-import { Building2, CalendarClock, Clock3, DollarSign, ExternalLink, Mic, Sparkles, Trash2 } from "lucide-react";
+import { Building2, CalendarClock, ChevronRight, CircleCheck, Clock3, DollarSign, ExternalLink, Mic, Phone, Sparkles, Trash2 } from "lucide-react";
+import { VisitTextNote } from "./VisitTextNote";
+import { isOpenVisit } from "../visitRules";
 import { LeadCardBody } from "./LeadCardBody";
 import { useT } from "@/i18n";
 import { commonMessages } from "@/i18n/messages/common";
@@ -34,31 +35,66 @@ export type VisitLike = {
   checkedOutAt?: string | Date | null;
   durationSeconds?: number | null;
   note?: SalesVisitNote | null;
-  visitSales?: { transactions: number; pieces: number; totalCents: number };
+  visitSales?: { transactions: number; pieces: number; items?: number; totalCents: number };
 } & VisitLocationFields;
 
+/**
+ * A finished visit shows its result and offers to change it; the six buttons that used to sit open here saved with a
+ * tap, and the save is sent on to the CRM. A visit still open has no result yet: it is finished at check-out.
+ */
 function VisitOutcomeEditor({ visit }: { visit: VisitLike }) {
   const { toast } = useToast();
   const t = useT(visitsMessages);
-  const [status, setStatus] = useState(visit.status);
+  const [, navigate] = useLocation();
+  const [editing, setEditing] = useState(false);
+  const [choice, setChoice] = useState(visit.status);
+  const [saving, setSaving] = useState(false);
 
-  useEffect(() => setStatus(visit.status), [visit.status]);
+  useEffect(() => { setChoice(visit.status); setEditing(false); }, [visit.status]);
 
-  async function handleStatusChange(newStatus: VisitStatus) {
-    setStatus(newStatus);
+  async function save() {
+    setSaving(true);
     try {
-      await apiRequest("PATCH", `/api/xpot/visits/${visit.id}`, { status: newStatus });
+      await apiRequest("PATCH", `/api/xpot/visits/${visit.id}`, { status: choice });
       toast({ title: t("statusUpdated"), variant: "success" });
+      setEditing(false);
       queryClient.invalidateQueries({ queryKey: ["/api/xpot/visits"] });
       queryClient.invalidateQueries({ queryKey: ["/api/xpot/dashboard"] });
     } catch (err: any) {
-      setStatus(visit.status);
       toast({ title: t("statusUpdateFailed"), description: err.message, variant: "destructive" });
+    } finally {
+      setSaving(false);
     }
   }
 
-  if (status === "planned") return null;
-  return <StatusPicker value={status} onChange={handleStatusChange} layout="wide" />;
+  if (visit.status === "planned") return null;
+  if (isOpenVisit(visit)) {
+    return (
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <p className="text-sm text-white/60">{t("visitStillOpen")}</p>
+        <Button type="button" variant="brand" onClick={() => navigate("/route/check-in")} data-testid="visit-finish">
+          <CircleCheck aria-hidden="true" />{t("finishThisVisit")}
+        </Button>
+      </div>
+    );
+  }
+  if (!editing) {
+    return (
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <StatusBadge status={visit.status} />
+        <Button type="button" variant="ghost" size="sm" onClick={() => setEditing(true)} className="text-blue-300" data-testid="visit-change-result">{t("changeResult")}</Button>
+      </div>
+    );
+  }
+  return (
+    <div className="space-y-3">
+      <StatusPicker value={choice} onChange={setChoice} layout="wide" />
+      <div className="flex justify-end gap-2">
+        <Button type="button" variant="ghost" size="sm" onClick={() => { setChoice(visit.status); setEditing(false); }}>{t("cancelChange")}</Button>
+        <Button type="button" variant="brand" size="sm" onClick={() => void save()} loading={saving} disabled={choice === visit.status}>{t("saveResult")}</Button>
+      </div>
+    </div>
+  );
 }
 function DetailSection({ title, icon, children }: { title: string; icon: ReactNode; children: ReactNode }) {
   return (
@@ -93,6 +129,8 @@ export function VisitSummaryPage({ visit, onBack, onDelete }: { visit: VisitLike
   const tl = useT(leadsMessages);
   const lead = visit.lead as (SalesLead & { locations?: { addressLine1?: string | null; city?: string | null; state?: string | null }[]; photos?: string[] | null }) | undefined;
   const photo = lead?.photos?.[0];
+  const hasSale = (visit.visitSales?.transactions ?? 0) > 0;
+  const open = isOpenVisit(visit);
   const visitAt = visit.checkedInAt ?? visit.scheduledAt;
   const visitDate = visitAt
     ? formatDate(visitAt, { weekday: "long", year: "numeric", month: "long", day: "numeric" })
@@ -154,7 +192,6 @@ export function VisitSummaryPage({ visit, onBack, onDelete }: { visit: VisitLike
             </span>
           )}
           <div className="min-w-0 flex-1">
-            <p className={`mb-1 ${EYEBROW}`}>{t("visitSummary")}</p>
             <div className="flex min-w-0 flex-wrap items-center gap-2">
               <div className="min-w-0 max-w-xl flex-1 basis-48">
                 <InlineField label="" large value={lead?.name || tl("leadNumber", { id: visit.leadId })} onSave={handleLeadNameSave} />
@@ -162,6 +199,11 @@ export function VisitSummaryPage({ visit, onBack, onDelete }: { visit: VisitLike
               <StatusBadge status={visit.status} />
             </div>
             <p className="mt-1 text-xs text-white/40 first-letter:uppercase">{visitDate}</p>
+            {lead?.phone ? (
+              <a href={phoneHref(lead.phone)} className="mt-1 inline-flex min-h-8 items-center gap-1.5 text-xs text-white/60 hover:text-white/85">
+                <Phone className="h-3 w-3 shrink-0" aria-hidden="true" />{displayPhone(lead.phone)}
+              </a>
+            ) : null}
           </div>
         </div>
         <div className="flex gap-2">
@@ -173,11 +215,14 @@ export function VisitSummaryPage({ visit, onBack, onDelete }: { visit: VisitLike
         </div>
       </header>
 
-      <div className={`grid overflow-hidden rounded-2xl sm:grid-cols-2 xl:grid-cols-4 ${GLASS_SUBTLE_CLASS}`}>
+      {/* The sales tile only when something was sold: "$0.00 · 0 sales" on every visit said nothing. */}
+      <div className={`grid overflow-hidden rounded-2xl sm:grid-cols-2 ${hasSale ? "xl:grid-cols-4" : "xl:grid-cols-3"} ${GLASS_SUBTLE_CLASS}`}>
         <VisitMetric className="border-b sm:border-r xl:border-b-0" icon={<CalendarClock className="h-3.5 w-3.5" />} label={t("checkIn")} value={formatTime(visit.checkedInAt ?? visit.scheduledAt)} />
         <VisitMetric className="border-b xl:border-b-0 xl:border-r" icon={<CalendarClock className="h-3.5 w-3.5" />} label={t("checkOut")} value={formatTime(visit.checkedOutAt)} />
-        <VisitMetric className="border-b sm:border-b-0 sm:border-r" icon={<Clock3 className="h-3.5 w-3.5" />} label={t("duration")} value={formatDuration(visit.durationSeconds)} />
-        <VisitMetric icon={<DollarSign className="h-3.5 w-3.5" />} label={t("visitSales")} value={formatCents(visit.visitSales?.totalCents ?? 0)} detail={t("visitSalesCount", { sales: visit.visitSales?.transactions ?? 0, pieces: visit.visitSales?.pieces ?? 0 })} />
+        <VisitMetric className={hasSale ? "border-b sm:border-b-0 sm:border-r" : ""} icon={<Clock3 className="h-3.5 w-3.5" />} label={t("duration")} value={formatDuration(visit.durationSeconds)} />
+        {hasSale ? (
+          <VisitMetric icon={<DollarSign className="h-3.5 w-3.5" />} label={t("visitSales")} value={formatCents(visit.visitSales?.totalCents ?? 0)} detail={`${t.plural("visitSalesN", visit.visitSales?.transactions ?? 0)} · ${t.plural("visitItemsN", visit.visitSales?.items ?? 0)}`} />
+        ) : null}
       </div>
 
       <LocationExceptionNotice visit={visit} />
@@ -188,7 +233,7 @@ export function VisitSummaryPage({ visit, onBack, onDelete }: { visit: VisitLike
         </section>
       ) : null}
 
-      <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1.25fr)_minmax(400px,0.75fr)] lg:gap-6">
+      <div className="grid items-start gap-6">
         <main className={`min-w-0 rounded-2xl px-4 py-6 sm:px-7 ${GLASS_SUBTLE_CLASS}`}>
           {(visit.note?.summary || visit.note?.outcome || visit.note?.nextStep) ? (
             <DetailSection title={t("visitSummary")} icon={<Sparkles className="h-3.5 w-3.5 text-blue-300" aria-hidden="true" />}>
@@ -202,41 +247,43 @@ export function VisitSummaryPage({ visit, onBack, onDelete }: { visit: VisitLike
             </DetailSection>
           ) : null}
 
-          <DetailSection title={t("voiceNote")} icon={<Mic className="h-3.5 w-3.5 text-blue-300" aria-hidden="true" />}>
-            {!visit.note?.audioUrl ? (
-              <div className="mb-5">
-                <h3 className="text-base font-semibold text-white/85">{t("recordVisit")}</h3>
-                <p className="mt-1 max-w-xl text-sm leading-6 text-white/40">{t("recordVisitHint")}</p>
+          {visit.note?.audioUrl ? (
+            <DetailSection title={t("voiceNote")} icon={<Mic className="h-3.5 w-3.5 text-blue-300" aria-hidden="true" />}>
+              <div className={`rounded-2xl p-4 sm:p-5 ${GLASS_CLASS}`}>
+                <VoiceRecorder
+                  onUpload={handleSummaryAudioUpload}
+                  existingAudio={fileSrc(visit.note?.audioUrl)}
+                  existingDuration={visit.note?.audioDurationSeconds}
+                  existingTranscription={visit.note?.audioTranscription}
+                />
               </div>
-            ) : null}
-            <div className={`rounded-2xl p-4 sm:p-5 ${GLASS_CLASS}`}>
-              <VoiceRecorder
-                onUpload={handleSummaryAudioUpload}
-                existingAudio={fileSrc(visit.note?.audioUrl)}
-                existingDuration={visit.note?.audioDurationSeconds}
-                existingTranscription={visit.note?.audioTranscription}
-              />
-            </div>
-          </DetailSection>
+            </DetailSection>
+          ) : (
+            // Nothing recorded: an old visit does not ask for a recording, it only offers one.
+            <details className="group border-b border-white/[0.07] py-4 first:pt-0" data-testid="visit-add-voice-note">
+              <summary className={`flex min-h-10 cursor-pointer list-none items-center gap-2 ${EYEBROW} [&::-webkit-details-marker]:hidden`}>
+                <Mic className="h-3.5 w-3.5 text-blue-300" aria-hidden="true" />{t("addVoiceNote")}
+              </summary>
+              <div className="mt-3 space-y-4">
+                <div className={`rounded-2xl p-4 sm:p-5 ${GLASS_CLASS}`}>
+                  <VoiceRecorder onUpload={handleSummaryAudioUpload} />
+                </div>
+                <VisitTextNote visitId={visit.id} saved={visit.note?.summary} />
+              </div>
+            </details>
+          )}
 
           <VisitActionsPanel visitId={visit.id} surface="plain" />
         </main>
 
-        <aside className={`min-w-0 overflow-hidden rounded-2xl ${GLASS_SUBTLE_CLASS}`}>
-          <div className="border-b border-white/[0.07] px-4 py-4 sm:px-5">
-            <h2 className={`flex items-center gap-2 ${EYEBROW}`}><Building2 className="h-3.5 w-3.5" aria-hidden="true" />{t("companyDetails")}</h2>
-          </div>
-          <div className="px-4 py-5 sm:px-5">
-            {visit.lead ? <CompanyInlineEditor lead={visit.lead} /> : null}
-          </div>
-        </aside>
       </div>
 
-      <div className="flex justify-end border-t border-white/[0.06] pt-4">
+      {/* A visit still open is cancelled from the check-in screen, not deleted from here. */}
+      {open ? null : <div className="flex justify-end border-t border-white/[0.06] pt-4">
         <Button type="button" variant="ghost" size="sm" onClick={onDelete} className="text-red-300/70 hover:bg-red-500/[0.08] hover:text-red-300">
           <Trash2 aria-hidden="true" /> {t("deleteVisit")}
         </Button>
-      </div>
+      </div>}
 
     </div>
   );
@@ -296,23 +343,17 @@ export function VisitRow({ visit, onOpen }: { visit: VisitLike; onOpen?: () => v
       onClick={openVisit}
       className={`w-full rounded-2xl p-4 text-left transition-colors hover:bg-white/[0.06] ${GLASS_CLASS}`}
     >
-      <LeadCardBody
-        lead={{
-          name: visit.lead?.name || tl("leadNumber", { id: visit.leadId }),
-          phone: visit.lead?.phone,
-          website: visit.lead?.website,
-          industry: visit.lead?.industry,
-          ghlContactId: (visit.lead as any)?.ghlContactId,
-          photos: (visit.lead as any)?.photos,
-          locations: visit.lead?.locations,
-        }}
-        subtitle={
-          <div className="text-[11px] tabular-nums text-white/40">
-            {when ? `${when.date} · ${when.time}` : "—"}
+      {/* The company's name is what is looked for, so it gets the room; the rest is the day, the hour and the town. */}
+      <div className="flex items-start gap-3">
+        <div className="min-w-0 flex-1">
+          <div className="line-clamp-2 text-sm font-bold text-white">{visit.lead?.name || tl("leadNumber", { id: visit.leadId })}</div>
+          <div className="mt-0.5 truncate text-[11px] tabular-nums text-white/45">
+            {[when ? `${when.date} · ${when.time}` : "—", visit.lead?.locations?.[0]?.city].filter(Boolean).join(" · ")}
           </div>
-        }
-        right={<div className="flex flex-col items-end gap-1"><StatusBadge status={visit.status} /><LocationExceptionBadge visit={visit} /><VisitNoteMarks visit={visit} /></div>}
-      />
+          <div className="mt-1.5 flex flex-wrap items-center gap-1.5"><StatusBadge status={visit.status} /><LocationExceptionBadge visit={visit} /></div>
+        </div>
+        <ChevronRight className="mt-1 h-4 w-4 shrink-0 text-white/25" aria-hidden="true" />
+      </div>
     </button>
   );
 }

@@ -4,9 +4,12 @@
 // Visits, finished visits, location exceptions and sales are counted in the
 // period; visits in progress, open opportunities and pending tasks are "now".
 
+import { Router } from "express";
 import { and, eq, gte, inArray, isNotNull, sql, type AnyColumn } from "drizzle-orm";
 import { db } from "../../db.js";
-import { salesOpportunitiesLocal, salesReps, salesSales, salesTasks, salesVisits } from "#shared/schema.js";
+import { isPlatformAdmin, requireXpotUser, type XpotActor } from "./middleware.js";
+import { managedOrganizationIds } from "../../organizations/service.js";
+import { organizationMemberships, salesOpportunitiesLocal, salesReps, salesSales, salesTasks, salesVisits } from "#shared/schema.js";
 import { VISIT_OUTCOME_STATUSES } from "#shared/visit-status.js";
 import {
   LOCATION_EXCEPTION_STATUSES,
@@ -16,7 +19,8 @@ import {
   type TeamActivityRow,
 } from "#shared/teamActivity.js";
 
-export { teamActivitySince } from "#shared/teamActivity.js";
+import { teamActivitySince } from "#shared/teamActivity.js";
+export { teamActivitySince };
 
 const toIso = (value: unknown): string | null => {
   if (value == null) return null;
@@ -129,4 +133,25 @@ export async function teamActivity(since: Date, repIds?: readonly number[], orga
     },
     reps: rows,
   };
+}
+
+/**
+ * GET /team-results?since=<ISO>|days=N: the same numbers as the platform's Team results, for whoever runs a team.
+ * The platform sees everyone; an owner or a partner sees the people of the organizations they run, and nobody
+ * else gets in. (The platform's own copy stays at /admin/team-activity.)
+ */
+export function createTeamResultsRouter() {
+  const router = Router();
+  router.get("/team-results", requireXpotUser, async (req, res) => {
+    const actor = (req as any).xpotActor as XpotActor;
+    const since = teamActivitySince(req.query);
+    if (!since) return res.status(400).json({ message: "Choose a period of up to 400 days." });
+    if (isPlatformAdmin(actor)) return res.json(await teamActivity(since));
+    const managed = await managedOrganizationIds(actor);
+    if (!managed?.length) return res.status(403).json({ code: "access_denied", message: "Access denied" });
+    const members = await db.selectDistinct({ repId: organizationMemberships.repId }).from(organizationMemberships)
+      .where(and(inArray(organizationMemberships.organizationId, managed), eq(organizationMemberships.isActive, true)));
+    res.json(await teamActivity(since, members.map((member) => member.repId)));
+  });
+  return router;
 }

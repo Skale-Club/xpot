@@ -22,6 +22,7 @@ import { salesMessages } from "@/i18n/messages/sales";
 import { salesModuleMessages } from "@/i18n/messages/salesModule";
 import { apiErrorMessages } from "@/i18n/messages/apiErrors";
 import { useLeadAccess, type LeadOwnership } from "../../leadAccess";
+import { useShowProfit } from "../../hooks/useShowProfit";
 
 export function LeadSalesPanel({
   leadId, leadName, lead, visitId, compact,
@@ -37,6 +38,7 @@ export function LeadSalesPanel({
   const t = useT(salesModuleMessages);
   const ts = useT(salesMessages);
   const te = useT(apiErrorMessages);
+  const showProfit = useShowProfit();
   // A sale or stock is filed under the company's organization; outside it the server refuses.
   const canRecord = useLeadAccess(lead).records;
   const snapshot = useLeadSalesSnapshot(leadId);
@@ -70,13 +72,15 @@ export function LeadSalesPanel({
             {data?.lastSaleAt ? ` · ${t("lastSale", { date: formatShortDate(data.lastSaleAt) })}` : ""}
           </div>
         </div>
-        <div className={`min-w-0 flex-1 rounded-2xl px-3.5 py-3 ${GLASS_CLASS}`}>
-          <div className={EYEBROW}>{t("youKept")}</div>
-          <div className="mt-0.5 truncate text-xl font-bold tabular-nums text-white">
-            {formatCents(data?.lifetimeProfitCents ?? 0)}
+        {showProfit ? (
+          <div className={`min-w-0 flex-1 rounded-2xl px-3.5 py-3 ${GLASS_CLASS}`}>
+            <div className={EYEBROW}>{t("youKept")}</div>
+            <div className="mt-0.5 truncate text-xl font-bold tabular-nums text-white">
+              {formatCents(data?.lifetimeProfitCents ?? 0)}
+            </div>
+            <div className="text-[11px] text-white/40">{t("afterProductionCost")}</div>
           </div>
-          <div className="text-[11px] text-white/40">{t("afterProductionCost")}</div>
-        </div>
+        ) : null}
       </div>
       )}
 

@@ -159,7 +159,6 @@ export function AdminProducts() {
                 <div className="min-w-0 flex-1">
                   <div className="flex flex-wrap items-center gap-2">
                     <span className="truncate text-sm font-medium text-white">{p.name}</span>
-                    {p.sku ? <span className="font-mono text-[10px] text-white/30">{p.sku}</span> : null}
                     <Pill tone="slate">{p.kind === "digital" ? t("kind_digital") : t("kind_physical")}</Pill>
                     {p.consignable ? <Pill tone="slate">{t("consignable")}</Pill> : null}
                     {!p.isActive ? <Pill tone="muted">{t("archived")}</Pill> : null}
@@ -178,16 +177,16 @@ export function AdminProducts() {
                 </div>
                 <div className="flex shrink-0 gap-1">
                   {p.kind === "physical" && (
-                    <Button variant="ghost" size="icon" onClick={() => setTiersFor(p)} title={t("volumePricing")} aria-label={t("volumePricing")}>
-                      <Layers />
+                    <Button variant="ghost" size="icon" onClick={() => setTiersFor(p)} title={t("volumePricing")} aria-label={t("volumePricing")} className="lg:w-auto lg:px-3">
+                      <Layers /><span className="hidden lg:inline">{t("volumePricing")}</span>
                     </Button>
                   )}
-                  <Button variant="ghost" size="icon" onClick={() => setEditing(p)} title={t("edit")} aria-label={t("edit")}>
-                    <Pencil />
+                  <Button variant="ghost" size="icon" onClick={() => setEditing(p)} title={t("edit")} aria-label={t("edit")} className="lg:w-auto lg:px-3">
+                    <Pencil /><span className="hidden lg:inline">{t("edit")}</span>
                   </Button>
                   {p.isActive ? (
-                    <Button variant="ghost" size="icon" onClick={() => setArchiving(p)} disabled={remove.isPending} title={t("archive")} aria-label={t("archive")}>
-                      <Archive />
+                    <Button variant="ghost" size="icon" onClick={() => setArchiving(p)} disabled={remove.isPending} title={t("archive")} aria-label={t("archive")} className="lg:w-auto lg:px-3">
+                      <Archive /><span className="hidden lg:inline">{t("archive")}</span>
                     </Button>
                   ) : (
                     // Unarchiving is setting it active again (PATCH isActive), so reps can sell it.
@@ -285,19 +284,24 @@ function ProductDialog({
           {/* Green: this block is money (what they pay, what it costs, what we keep). */}
           <div className="space-y-3 rounded-2xl border border-emerald-400/20 bg-emerald-500/[0.06] p-3.5">
             <div className="grid grid-cols-2 gap-2">
-              <Field label={t("priceB2B")} hint={t("theyPay")}>
+              <Field label={t("priceB2B")}>
                 <CentsInput valueCents={form.basePriceCents ?? 0} onChangeCents={(c) => set("basePriceCents", c)} />
               </Field>
-              <Field label={t("costToMake")}>
-                <CentsInput valueCents={form.costCents ?? 0} onChangeCents={(c) => set("costCents", c || null)} />
-              </Field>
+              {/* A service or a site costs nothing to make: no cost box, and the margin below is the whole price. */}
+              {form.kind === "digital" ? null : (
+                <Field label={t("costToMake")}>
+                  <CentsInput valueCents={form.costCents ?? 0} onChangeCents={(c) => set("costCents", c || null)} />
+                </Field>
+              )}
             </div>
-            <div className="flex items-center justify-between border-t border-white/10 pt-2.5">
-              <span className="text-xs text-white/50">{t("youKeepPer", { unit: form.unitLabel || t("defaultUnit") })}</span>
-              <span className={`text-lg font-bold tabular-nums ${margin >= 0 ? "text-emerald-300" : "text-red-300"}`}>
-                {formatMoney(margin, form.currency ?? "USD", t.locale)}
-              </span>
-            </div>
+            {form.kind === "digital" ? null : (
+              <div className="flex items-center justify-between border-t border-white/10 pt-2.5">
+                <span className="text-xs text-white/50">{t("youKeepPer", { unit: form.unitLabel || t("defaultUnit") })}</span>
+                <span className={`text-lg font-bold tabular-nums ${margin >= 0 ? "text-emerald-300" : "text-red-300"}`}>
+                  {formatMoney(margin, form.currency ?? "USD", t.locale)}
+                </span>
+              </div>
+            )}
           </div>
 
           <Field label={t("suggestedResale")} hint={t("suggestedResaleHint")}>

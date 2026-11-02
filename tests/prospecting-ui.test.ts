@@ -10,7 +10,11 @@ import {
   routeUsage,
   reorderIdsAroundTarget,
   routeDisplayName,
-  routeStopProgress,
+  routeVisitProgress,
+  routeStopFocus,
+  routeHeading,
+  parseTypedCity,
+  isStopVisited,
   stopMarkerTone,
   STOP_MARKER_TONES,
   ROUTE_STATUS_ICON,
@@ -143,8 +147,12 @@ describe("prospecting UI helpers", () => {
     ];
     expect(persistentProspectingJob(jobs, [], now)?.job.id).toBe(3);
     expect(persistentProspectingJob(jobs, [{ id: 9, jobId: 4, status: "published", routeDate: today }], now)?.job.id).toBe(3);
-    expect(persistentProspectingJob(jobs.filter((job) => job.id !== 3), [{ id: 9, jobId: 4, status: "published", routeDate: today }], now))
-      .toMatchObject({ job: { id: 4 }, route: { id: 9 } });
+    // Once the route exists the shell bar is gone: "Ready 100%" next to "3 of 8 stops" read as a finished day.
+    expect(persistentProspectingJob(jobs.filter((job) => job.id !== 3), [{ id: 9, jobId: 4, status: "published", routeDate: today }], now)).toBeNull();
+    expect(persistentProspectingJob(jobs.filter((job) => job.id !== 3), [], now)?.job.id).toBe(4);
+    expect(persistentProspectingJob([
+      { id: 6, status: "completed", routePlanningStatus: "failed", createdAt: new Date("2026-10-14T15:30:00").toISOString() },
+    ], [], now)?.job.id).toBe(6);
     expect(persistentProspectingJob([
       { id: 5, status: "completed", routePlanningStatus: "ready", createdAt: new Date("2026-10-14T15:30:00").toISOString() },
     ], [], now)).toBeNull();
@@ -232,12 +240,58 @@ describe("todayRouteOf", () => {
   });
 });
 
-describe("routeStopProgress", () => {
-  it("counts completed and skipped stops as done", () => {
-    expect(routeStopProgress([
-      { status: "completed" }, { status: "skipped" }, { status: "planned" }, { status: "checked_in" },
-    ])).toEqual({ done: 2, total: 4, percent: 50 });
-    expect(routeStopProgress([])).toEqual({ done: 0, total: 0, percent: 0 });
+describe("routeVisitProgress", () => {
+  const stops = [
+    { status: "completed" }, { status: "completed" }, { status: "checked_in" }, { status: "planned" },
+    { status: "planned" }, { status: "planned" }, { status: "skipped" }, { status: "planned" },
+  ];
+
+  it("counts only finished check-ins as visited, and the skipped ones apart", () => {
+    expect(routeVisitProgress(stops)).toEqual({ visited: 2, skipped: 1, total: 8, percent: 25 });
+    expect(routeVisitProgress([])).toEqual({ visited: 0, skipped: 0, total: 0, percent: 0 });
+  });
+
+  it("does not count the open visit or a skipped stop as visited", () => {
+    expect(isStopVisited("completed")).toBe(true);
+    expect(["checked_in", "skipped", "en_route", "planned", "rescheduled"].some(isStopVisited)).toBe(false);
+    expect(routeVisitProgress([{ status: "skipped" }, { status: "skipped" }])).toMatchObject({ visited: 0, skipped: 2, percent: 0 });
+  });
+
+  it("names the stop open now and the one to go to next", () => {
+    const withIds = stops.map((stop, index) => ({ ...stop, id: index + 1 }));
+    expect(routeStopFocus(withIds)).toMatchObject({ now: { id: 3 }, next: { id: 4 } });
+    expect(routeStopFocus(withIds.map((stop) => (stop.status === "checked_in" ? { ...stop, status: "completed" } : stop)))).toMatchObject({ now: null, next: { id: 4 } });
+    expect(routeStopFocus(withIds.slice(0, 2))).toEqual({ now: null, next: null });
+  });
+});
+
+describe("routeHeading", () => {
+  const reference = new Date("2026-10-13T12:00:00");
+
+  it("titles a route by its name and puts the search area below", () => {
+    expect(routeHeading({ name: "Downtown loop", routeDate: "2026-10-12" }, "Greater Boston, MA", "en-US", reference))
+      .toEqual({ title: "Downtown loop", subtitle: "Greater Boston, MA" });
+  });
+
+  it("leaves the area out when it repeats the title or is unknown", () => {
+    expect(routeHeading({ name: "Cambridge, MA", routeDate: "2026-10-12" }, "cambridge, ma", "en-US", reference).subtitle).toBeNull();
+    expect(routeHeading({ name: "Prospecting — 2026-10-12", routeDate: "2026-10-12" }, null, "en-US", reference))
+      .toEqual({ title: "Monday, October 12", subtitle: null });
+  });
+});
+
+describe("parseTypedCity", () => {
+  it("accepts City, ST typed by hand and tidies it", () => {
+    expect(parseTypedCity("Boston, MA")).toBe("Boston, MA");
+    expect(parseTypedCity("  boston ,ma ")).toBe("Boston, MA");
+    expect(parseTypedCity("San Francisco, CA, USA")).toBe("San Francisco, CA");
+  });
+
+  it("refuses text that does not name a city and a state", () => {
+    expect(parseTypedCity("Boston")).toBeNull();
+    expect(parseTypedCity("Boston, Massachusetts")).toBeNull();
+    expect(parseTypedCity(", MA")).toBeNull();
+    expect(parseTypedCity("")).toBeNull();
   });
 });
 

@@ -140,3 +140,20 @@ test("a second check-in while a visit is open is refused", async () => {
   expect(second.status).toBe(409);
   expect(await visitCount()).toBe(1);
 });
+
+// A result is the outcome of a finished visit. Setting one on a visit still open used to save it with
+// no check-out time and no duration, and the CRM never heard of it.
+test("a result cannot be set on a visit that is still open, only after check-out", async () => {
+  const started = await request("POST", "/api/xpot/visits/check-in", { leadId, ...AT_SHOP });
+  const visitId = started.body.visit.id;
+
+  const early = await request("PATCH", `/api/xpot/visits/${visitId}`, { status: "sale_made" });
+  expect(early.status).toBe(409);
+  expect(early.body.code).toBe("visit_not_finished");
+  expect(await one(`SELECT status, checked_out_at FROM sales_visits WHERE id = $1`, [visitId])).toMatchObject({ status: "in_progress", checked_out_at: null });
+
+  expect((await request("POST", `/api/xpot/visits/${visitId}/check-out`, { status: "completed" })).status).toBe(200);
+  const late = await request("PATCH", `/api/xpot/visits/${visitId}`, { status: "sale_made" });
+  expect(late.status).toBe(200);
+  expect(await one(`SELECT status FROM sales_visits WHERE id = $1`, [visitId])).toMatchObject({ status: "sale_made" });
+});

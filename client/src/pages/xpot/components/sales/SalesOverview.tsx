@@ -4,11 +4,10 @@ import type { LucideIcon } from "lucide-react";
 import {
   AlertTriangle,
   ArrowRight,
-  BarChart3,
   Boxes,
   CalendarClock,
+  ChevronRight,
   CircleDollarSign,
-  ReceiptText,
   ShoppingBag,
   TrendingUp,
 } from "lucide-react";
@@ -20,7 +19,8 @@ import { ListSkeleton } from "@/components/xpot/ListSkeleton";
 import { PeriodSelector } from "@/components/xpot/DashboardKit";
 import { useUrlFilters } from "@/hooks/use-url-filters";
 import { EmptyState, ErrorState } from "@/components/xpot/EmptyState";
-import { InlineAlert } from "@/components/xpot/InlineAlert";
+import { Button } from "@/components/ui/button";
+import { useShowProfit } from "../../hooks/useShowProfit";
 import { useT } from "@/i18n";
 import { salesModuleMessages } from "@/i18n/messages/salesModule";
 
@@ -72,8 +72,10 @@ function FinancialMetric({ label, value, accent }: { label: string; value: strin
   );
 }
 
-export function SalesOverview({ onGoToConsignments }: { onGoToConsignments?: () => void }) {
+export function SalesOverview({ onGoToConsignments, onNewSale }: { onGoToConsignments?: () => void; onNewSale?: () => void }) {
   const t = useT(salesModuleMessages);
+  // A rep sells and collects; what the products cost and what is left over is the owner's number.
+  const showProfit = useShowProfit();
   const filters = useUrlFilters({ range: "30" });
   const days = RANGES.find((r) => String(r) === filters.values.range) ?? 30;
   const query = useSalesSummary(days);
@@ -91,15 +93,42 @@ export function SalesOverview({ onGoToConsignments }: { onGoToConsignments?: () 
     profit: d.profitCents / 100,
     revenue: d.revenueCents / 100,
   }));
-  const topProduct = s.byProduct[0];
   const maxProductRevenue = Math.max(1, ...s.byProduct.map((p) => p.revenueCents));
   const margin = s.revenue.periodCents > 0 ? Math.round((s.profit.periodCents / s.revenue.periodCents) * 100) : 0;
+  // On the 1st the month is one day old: "this month" next to a bigger "last 30 days" figure reads as an error.
+  const monthIsNew = new Date().getDate() < 2;
+  const monthLabel = monthIsNew
+    ? t("sinceToday", { date: formatShortDate(new Date()) })
+    : showProfit ? t("keptThisMonth") : t("soldThisMonth");
+  const monthCents = showProfit ? s.profit.monthToDateCents : s.revenue.monthToDateCents;
+  const nothingYet = s.sales.periodCount === 0 && s.consignment.activeCount === 0 && s.byProduct.length === 0;
+
+  const periodPicker = (
+    <PeriodSelector
+      value={days}
+      onChange={(next) => filters.set({ range: String(next) })}
+      options={RANGES.map((r) => ({ value: r, label: t("rangeDays", { days: r }) }))}
+      ariaLabel={t("periodLabel")}
+    />
+  );
+
+  // Nothing sold and nothing out: one message and the way to start, not a wall of zeros.
+  if (nothingYet) {
+    return (
+      <div className="space-y-4" data-testid="sales-overview-empty">
+        <div className="flex justify-end">{periodPicker}</div>
+        <EmptyState icon={ShoppingBag} title={t("noSalesPeriod")} hint={t("noSalesPeriodHint")}>
+          {onNewSale ? <Button type="button" variant="brand" onClick={onNewSale}>{t("newSale")}</Button> : null}
+        </EmptyState>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-4 lg:space-y-5">
       <section className="grid min-w-0 grid-cols-1 gap-3 lg:grid-cols-12 lg:gap-4">
         <div
-          className="relative isolate min-w-0 overflow-hidden rounded-2xl border border-emerald-300/[0.16] p-5 shadow-[0_24px_70px_rgba(0,0,0,0.24)] sm:p-6 lg:col-span-7 lg:min-h-[248px] lg:p-7"
+          className="relative isolate min-w-0 overflow-hidden rounded-2xl border border-emerald-300/[0.16] p-5 shadow-[0_24px_70px_rgba(0,0,0,0.24)] sm:p-6 lg:col-span-7 lg:p-7"
           style={{ background: "linear-gradient(140deg, rgba(11,54,49,0.84) 0%, rgba(11,35,38,0.96) 45%, rgba(9,20,32,0.98) 100%)" }}
         >
           <div className="pointer-events-none absolute -right-20 -top-24 h-72 w-72 rounded-full border-[42px] border-emerald-300/[0.055]" />
@@ -110,85 +139,52 @@ export function SalesOverview({ onGoToConsignments }: { onGoToConsignments?: () 
             <div>
               <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.2em] text-emerald-200/60">
                 <TrendingUp className="h-3.5 w-3.5" />
-                {t("keptPeriod", { days })}
+                {showProfit ? t("keptPeriod", { days }) : t("soldPeriod", { days })}
               </div>
-              <div className="mt-4 text-[38px] font-bold leading-none tracking-[-0.055em] tabular-nums text-white sm:text-5xl lg:text-[58px]">
-                {formatCents(s.profit.periodCents)}
+              <div className="mt-4 text-[38px] font-bold leading-none tracking-[-0.055em] tabular-nums text-white sm:text-5xl lg:text-[58px]" data-testid="sales-overview-main">
+                {formatCents(showProfit ? s.profit.periodCents : s.revenue.periodCents)}
               </div>
               <div className="mt-2.5 flex flex-wrap items-center gap-2 text-xs text-emerald-50/45">
-                <span>{t("billedAmount", { amount: formatCents(s.revenue.periodCents) })}</span>
-                <span className="h-1 w-1 rounded-full bg-emerald-200/30" />
-                <span>{t("profitMargin", { percent: margin })}</span>
+                <span>{t.plural("salesCount", s.sales.periodCount)} · {t.plural("units", s.sales.unitsSold)}</span>
+                {showProfit ? (
+                  <>
+                    <span className="h-1 w-1 rounded-full bg-emerald-200/30" />
+                    <span>{t("billedAmount", { amount: formatCents(s.revenue.periodCents) })}</span>
+                    <span className="h-1 w-1 rounded-full bg-emerald-200/30" />
+                    <span>{t("profitMargin", { percent: margin })}</span>
+                  </>
+                ) : null}
               </div>
             </div>
-            <PeriodSelector
-              value={days}
-              onChange={(next) => filters.set({ range: String(next) })}
-              options={RANGES.map((r) => ({ value: r, label: t("rangeDays", { days: r }) }))}
-              ariaLabel={t("periodLabel")}
-            />
-          </div>
-
-          <div className="relative mt-7 grid grid-cols-2 gap-px overflow-hidden rounded-2xl border border-white/[0.07] bg-white/[0.07] sm:max-w-xl">
-            <div className="bg-[#0b2425]/80 px-4 py-3">
-              <div className="text-[9px] font-bold uppercase tracking-[0.17em] text-white/30">{t("salesPeriod", { days })}</div>
-              <div className="mt-1 text-lg font-bold tabular-nums text-white">{s.sales.periodCount}</div>
-              <div className="text-[10px] text-white/35">{t.plural("units", s.sales.unitsSold)}</div>
-            </div>
-            <div className="bg-[#0b2425]/80 px-4 py-3">
-              <div className="text-[9px] font-bold uppercase tracking-[0.17em] text-white/30">{t("keptThisMonth")}</div>
-              <div className="mt-1 text-lg font-bold tabular-nums text-white">{formatCents(s.profit.monthToDateCents)}</div>
-              <div className="text-[10px] text-white/35">{t("billedAmount", { amount: formatCents(s.revenue.monthToDateCents) })}</div>
-            </div>
+            {periodPicker}
           </div>
         </div>
 
-        <div className="grid grid-cols-2 gap-3 lg:col-span-5 lg:grid-cols-2 lg:gap-4">
-          <SignalCard icon={CircleDollarSign} label={t("today")} value={formatCents(s.revenue.todayCents)} detail={t("keptAmount", { amount: formatCents(s.profit.todayCents) })} tone="emerald" />
-          <SignalCard icon={ShoppingBag} label={t("salesPeriod", { days })} value={s.sales.periodCount} detail={t.plural("units", s.sales.unitsSold)} />
-          <SignalCard icon={ReceiptText} label={t("grossRevenue")} value={formatCents(s.financial.grossCents)} detail={t("lastNDays", { days })} tone="emerald" />
+        <div className="grid grid-cols-2 gap-3 lg:col-span-5 lg:gap-4">
+          <SignalCard icon={CircleDollarSign} label={monthLabel} value={formatCents(monthCents)} detail={showProfit ? t("billedAmount", { amount: formatCents(s.revenue.monthToDateCents) }) : undefined} tone="emerald" />
           <SignalCard
             icon={AlertTriangle}
-            label={t("outstanding", { amount: formatCents(s.unpaid.cents) })}
-            value={s.unpaid.count}
-            detail={t.plural("notFullyPaid", s.unpaid.count)}
+            label={t("toCollect")}
+            value={formatCents(s.unpaid.cents)}
+            detail={s.unpaid.count > 0 ? t.plural("notFullyPaid", s.unpaid.count) : t("allPaid")}
             tone={s.unpaid.count > 0 ? MONEY_DUE_TONE.outstanding : "neutral"}
           />
         </div>
       </section>
 
-      <section className="rounded-[24px] border border-white/[0.075] bg-white/[0.028] px-4 py-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.025)] sm:px-5 lg:px-6 lg:py-5">
-        <div className="mb-4 flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.2em] text-white/32">
-          <BarChart3 className="h-3.5 w-3.5 text-emerald-300/60" />
-          {t("financialBreakdown")}
-        </div>
-        {/* Two by two on a phone, where four columns cut the amounts ("$1,05…"). */}
-        <div className="grid grid-cols-2 gap-x-3 gap-y-4 sm:grid-cols-4 sm:gap-y-3">
-          <FinancialMetric label={t("grossRevenue")} value={formatCents(s.financial.grossCents)} />
-          <FinancialMetric label={t("discountsGiven")} value={formatCents(s.financial.discountCents)} accent="cost" />
-          <FinancialMetric label={t("acquisitionCosts")} value={formatCents(s.financial.costCents)} accent="cost" />
-          <FinancialMetric label={t("grossProfitMetric")} value={formatCents(s.financial.grossProfitCents)} accent="profit" />
-        </div>
-      </section>
-
-      {/* Outstanding is to be collected, not late: amber like its tile (MONEY_DUE_TONE). */}
-      {s.unpaid.count > 0 && (
-        <InlineAlert tone="warning" title={t("outstanding", { amount: formatCents(s.unpaid.cents) })}>
-          <span className="text-[11px] text-white/40">{t.plural("notFullyPaid", s.unpaid.count)}</span>
-        </InlineAlert>
-      )}
-
       {chart.length > 1 && (
         <section className="overflow-hidden rounded-[28px] border border-white/[0.075] bg-white/[0.028] shadow-[0_18px_60px_rgba(0,0,0,0.18)]">
           <div className="flex flex-wrap items-center justify-between gap-3 border-b border-white/[0.06] px-5 py-4 lg:px-6">
             <div>
-              <div className="text-sm font-bold tracking-[-0.01em] text-white">{t("keptPerDay")}</div>
+              <div className="text-sm font-bold tracking-[-0.01em] text-white">{showProfit ? t("keptPerDay") : t("soldPerDay")}</div>
               <div className="mt-0.5 text-[10px] font-semibold uppercase tracking-[0.16em] text-white/28">{t("lastNDays", { days })}</div>
             </div>
-            <div className="flex items-center gap-4 text-[10px] font-semibold uppercase tracking-[0.12em] text-white/40">
-              <span className="flex items-center gap-1.5"><span className={`h-2 w-2 rounded-full ${MONEY_CHART.profit.swatch}`} />{t("kept")}</span>
-              <span className="flex items-center gap-1.5"><span className={`h-2 w-2 rounded-full ${MONEY_CHART.revenue.swatch}`} />{t("billed")}</span>
-            </div>
+            {showProfit ? (
+              <div className="flex items-center gap-4 text-[10px] font-semibold uppercase tracking-[0.12em] text-white/40">
+                <span className="flex items-center gap-1.5"><span className={`h-2 w-2 rounded-full ${MONEY_CHART.profit.swatch}`} />{t("kept")}</span>
+                <span className="flex items-center gap-1.5"><span className={`h-2 w-2 rounded-full ${MONEY_CHART.revenue.swatch}`} />{t("billed")}</span>
+              </div>
+            ) : null}
           </div>
           <div className="h-52 w-full px-1 pb-3 pt-5 sm:h-60 lg:h-[300px] lg:px-3">
             <ResponsiveContainer width="100%" height="100%">
@@ -199,7 +195,7 @@ export function SalesOverview({ onGoToConsignments }: { onGoToConsignments?: () 
                     <stop offset="80%" stopColor={MONEY_CHART.profit.stroke} stopOpacity={0.02} />
                   </linearGradient>
                   <linearGradient id="salesRevenueFill" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor={MONEY_CHART.revenue.stroke} stopOpacity={0.12} />
+                    <stop offset="0%" stopColor={MONEY_CHART.revenue.stroke} stopOpacity={showProfit ? 0.12 : 0.34} />
                     <stop offset="90%" stopColor={MONEY_CHART.revenue.stroke} stopOpacity={0} />
                   </linearGradient>
                 </defs>
@@ -210,20 +206,20 @@ export function SalesOverview({ onGoToConsignments }: { onGoToConsignments?: () 
                   formatter={(v: number, name) => [formatCents(Math.round(v * 100)), name === "profit" ? t("kept") : t("billed")]}
                   cursor={{ stroke: "rgba(255,255,255,0.12)", strokeWidth: 1, strokeDasharray: "4 4" }}
                 />
-                <Area type="monotone" dataKey="revenue" stroke={MONEY_CHART.revenue.stroke} strokeOpacity={0.6} strokeWidth={1.5} fill="url(#salesRevenueFill)" />
-                <Area type="monotone" dataKey="profit" stroke={MONEY_CHART.profit.stroke} strokeWidth={2.5} fill="url(#salesProfitFill)" />
+                <Area type="monotone" dataKey="revenue" stroke={MONEY_CHART.revenue.stroke} strokeOpacity={showProfit ? 0.6 : 1} strokeWidth={showProfit ? 1.5 : 2.5} fill="url(#salesRevenueFill)" />
+                {showProfit ? <Area type="monotone" dataKey="profit" stroke={MONEY_CHART.profit.stroke} strokeWidth={2.5} fill="url(#salesProfitFill)" /> : null}
               </AreaChart>
             </ResponsiveContainer>
           </div>
         </section>
       )}
 
-      <section className="grid min-w-0 grid-cols-1 gap-4 lg:grid-cols-12">
+      <section className="grid min-w-0 grid-cols-1 gap-4 lg:grid-cols-12 lg:items-start">
         <button
           type="button"
           onClick={onGoToConsignments}
           disabled={!onGoToConsignments}
-          className={`group relative isolate flex min-w-0 flex-col overflow-hidden rounded-2xl border p-5 text-left transition-colors lg:col-span-5 lg:p-6 ${s.consignment.dueCount > 0 ? "border-red-400/25 bg-red-500/[0.07]" : "border-white/[0.09] bg-white/[0.04] hover:bg-white/[0.06]"}`}
+          className="group relative isolate flex min-w-0 flex-col self-start overflow-hidden rounded-2xl border border-white/[0.09] bg-white/[0.04] p-5 text-left transition-colors hover:bg-white/[0.06] lg:col-span-5 lg:p-6"
         >
           <div className="relative flex items-start justify-between gap-4">
             <div className="flex h-10 w-10 items-center justify-center rounded-2xl border border-white/10 bg-white/[0.05]">
@@ -248,9 +244,10 @@ export function SalesOverview({ onGoToConsignments }: { onGoToConsignments?: () 
           </div>
           {(s.consignment.dueCount > 0 || s.consignment.dueSoonCount > 0) && (
             <div className="relative mt-5 flex items-center gap-2 border-t border-white/[0.07] pt-3 text-[11px]">
-              <CalendarClock className="h-3.5 w-3.5 shrink-0 text-white/35" />
-              <span className={s.consignment.dueCount > 0 ? "text-red-300" : "text-white/45"}>
-                {s.consignment.dueCount > 0 ? t.plural("settlementsOverdue", s.consignment.dueCount) : null}
+              <CalendarClock className={`h-3.5 w-3.5 shrink-0 ${s.consignment.dueCount > 0 ? "text-red-300" : "text-white/35"}`} />
+              {/* Only the overdue count is red: the card is a stock summary, not an alarm. */}
+              <span className="text-white/45">
+                {s.consignment.dueCount > 0 ? <span className="font-semibold text-red-300">{t.plural("settlementsOverdue", s.consignment.dueCount)}</span> : null}
                 {s.consignment.dueCount > 0 && s.consignment.dueSoonCount > 0 ? " · " : null}
                 {s.consignment.dueSoonCount > 0 ? t("dueWithinWeek", { count: s.consignment.dueSoonCount }) : null}
               </span>
@@ -262,7 +259,7 @@ export function SalesOverview({ onGoToConsignments }: { onGoToConsignments?: () 
           <div className="mb-4 flex items-center justify-between gap-3">
             <div>
               <div className="text-sm font-bold text-white">{t("byProduct")}</div>
-              {topProduct && s.sales.settlementCents > 0 ? (
+              {s.byProduct.length > 0 && s.sales.settlementCents > 0 ? (
                 <div className="mt-0.5 text-[10px] text-white/28">{t("directVsSettlement", { direct: formatCents(s.sales.directCents), settlement: formatCents(s.sales.settlementCents) })}</div>
               ) : null}
             </div>
@@ -279,15 +276,17 @@ export function SalesOverview({ onGoToConsignments }: { onGoToConsignments?: () 
                   <div className="relative flex items-center gap-3">
                     <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-white/[0.045] text-[10px] font-bold tabular-nums text-white/35">{String(index + 1).padStart(2, "0")}</span>
                     <div className="min-w-0 flex-1">
-                      <div className="truncate text-sm font-semibold text-white/85">{p.name}</div>
+                      <div className="line-clamp-2 text-sm font-semibold text-white/85">{p.name}</div>
                       <div className="text-[10px] text-white/35">{t("nSold", { count: p.quantity })}</div>
                     </div>
                     <div className="shrink-0 text-right">
                       <div className="text-sm font-bold tabular-nums text-white">{formatCents(p.revenueCents)}</div>
-                      <div className="text-[10px] tabular-nums text-emerald-300/65">
-                        {t("keptAmount", { amount: formatCents(p.profitCents) })}
-                        {p.quantity > 0 ? ` · ${t("perUnitShort", { amount: formatCents(Math.round(p.profitCents / p.quantity)) })}` : ""}
-                      </div>
+                      {showProfit ? (
+                        <div className="text-[10px] tabular-nums text-emerald-300/65">
+                          {t("keptAmount", { amount: formatCents(p.profitCents) })}
+                          {p.quantity > 1 ? ` · ${t("perUnitShort", { amount: formatCents(Math.round(p.profitCents / p.quantity)) })}` : ""}
+                        </div>
+                      ) : null}
                     </div>
                   </div>
                 </div>
@@ -298,6 +297,23 @@ export function SalesOverview({ onGoToConsignments }: { onGoToConsignments?: () 
           )}
         </div>
       </section>
+
+      {/* What the products cost and what is left is the owner's number, kept one tap away. */}
+      {showProfit ? (
+        <details className="group rounded-[24px] border border-white/[0.075] bg-white/[0.028] px-4 py-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.025)] sm:px-5 lg:px-6" data-testid="sales-more-details">
+          <summary className="flex min-h-10 cursor-pointer list-none items-center gap-2 text-[10px] font-bold uppercase tracking-[0.2em] text-white/45 [&::-webkit-details-marker]:hidden">
+            <ChevronRight className="h-3.5 w-3.5 transition-transform group-open:rotate-90" aria-hidden="true" />
+            {t("moreDetails")}
+          </summary>
+          {/* Two by two on a phone, where four columns cut the amounts ("$1,05…"). */}
+          <div className="mt-3 grid grid-cols-2 gap-x-3 gap-y-4 pb-2 sm:grid-cols-4 sm:gap-y-3">
+            <FinancialMetric label={t("grossRevenue")} value={formatCents(s.financial.grossCents)} />
+            <FinancialMetric label={t("discountsGiven")} value={formatCents(s.financial.discountCents)} accent="cost" />
+            <FinancialMetric label={t("acquisitionCosts")} value={formatCents(s.financial.costCents)} accent="cost" />
+            <FinancialMetric label={t("grossProfitMetric")} value={formatCents(s.financial.grossProfitCents)} accent="profit" />
+          </div>
+        </details>
+      ) : null}
     </div>
   );
 }

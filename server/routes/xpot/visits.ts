@@ -60,7 +60,7 @@ export function createVisitsRouter() {
         ...visit,
         lead: lead ? { ...lead, locations: locationsByLead.get(visit.leadId) ?? [] } : undefined,
         note: noteByVisit.get(visit.id),
-        visitSales: visitSalesById.get(visit.id) ?? { transactions: 0, pieces: 0, totalCents: 0 },
+        visitSales: visitSalesById.get(visit.id) ?? { transactions: 0, pieces: 0, items: 0, totalCents: 0 },
       };
     }));
   });
@@ -233,6 +233,11 @@ export function createVisitsRouter() {
       return res.status(404).json({ code: "visit_not_found", message: "Visit not found" });
     }
     const { status } = req.body as { status?: SalesVisitStatus };
+    // A result belongs to a finished visit: set on one still open it would end up with no
+    // check-out time, no duration and nothing sent to the CRM. Finishing goes through check-out.
+    if (status && !visit.checkedOutAt) {
+      return res.status(409).json({ code: "visit_not_finished", message: "Finish the visit before setting its result" });
+    }
     const updated = await storage.updateSalesVisit(visitId, { ...(status ? { status } : {}) });
     res.json(updated);
 

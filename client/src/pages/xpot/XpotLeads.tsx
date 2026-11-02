@@ -45,6 +45,7 @@ import { currentSearch, useUrlFilters } from "@/hooks/use-url-filters";
 import { ListPager, usePagedList } from "@/components/xpot/pagination";
 import { selectLeadForDetail } from "./lead-detail-selection";
 import { companyStage, followUpDueTime, isWorkedCompany, needsFollowUp } from "./visitRules";
+import { Segmented } from "@/components/xpot/Segmented";
 import { leadAccess } from "./leadAccess";
 import { isFinishedVisitStatus } from "@shared/visit-status";
 
@@ -71,9 +72,11 @@ function LeadPiecesChip({ lead, summary, onOpen }: { lead: FullSalesLead; summar
   );
 }
 
-function LeadCard({ lead, onOpen, onMore, pieces, onOpenPieces, lastVisit }: {
+function LeadCard({ lead, onOpen, onMore, pieces, onOpenPieces, lastVisit, worked, followUp }: {
   lead: FullSalesLead;
   lastVisit: Date | null;
+  worked: boolean;
+  followUp: boolean;
   pieces?: LeadTagSummary;
   onOpenPieces?: () => void;
   onOpen: () => void;
@@ -93,7 +96,7 @@ function LeadCard({ lead, onOpen, onMore, pieces, onOpenPieces, lastVisit }: {
         lead={lead}
         subtitle={
           <div className="space-y-1.5">
-            <LeadRowFacts lead={lead} lastVisit={lastVisit} />
+            <LeadRowFacts lead={lead} lastVisit={lastVisit} worked={worked} followUp={followUp} />
             {pieces && onOpenPieces ? <LeadPiecesChip lead={lead} summary={pieces} onOpen={onOpenPieces} /> : null}
           </div>
         }
@@ -127,9 +130,9 @@ function LeadActionSheet({ lead, onClose, onSell, onCheckIn, onDelete, canDelete
 }) {
   const t = useT(leadsMessages);
   const items = [
-    { key: "sell", label: t("salesAndConsignment"), icon: DollarSign, run: onSell, cls: "text-emerald-300" },
     { key: "checkin", label: t("checkIn"), icon: LogIn, run: onCheckIn, cls: "text-blue-300" },
-    ...(canDelete ? [{ key: "delete", label: t("delete"), icon: Trash2, run: onDelete, cls: "text-red-300" }] : []),
+    { key: "sell", label: t("salesAndConsignment"), icon: DollarSign, run: onSell, cls: "text-emerald-300" },
+    ...(canDelete ? [{ key: "delete", label: t("deleteCompany"), icon: Trash2, run: onDelete, cls: "text-red-300" }] : []),
   ];
   return (
     <BottomSheet open={Boolean(lead)} onClose={onClose} title={lead?.name}>
@@ -153,14 +156,15 @@ function LeadActionSheet({ lead, onClose, onSell, onCheckIn, onDelete, canDelete
 
 // ─── Main Component ───────────────────────────────────────────────────────────
 
-const LEAD_FILTERS = ["all", "followup", "lead", "customer", "prospect"] as const;
+// The chips narrow "My companies" and add up inside it. The companies not visited yet are a tab of their own
+// (status=prospect in the link), never a chip that counts a different group.
+const LEAD_FILTERS = ["all", "followup", "lead", "customer"] as const;
 type LeadFilter = (typeof LEAD_FILTERS)[number];
 const LEAD_FILTER_LABEL = {
   all: "filterAll",
   followup: "filterFollowUp",
   lead: "filterLeads",
   customer: "filterCustomers",
-  prospect: "tabProspects",
 } as const satisfies Record<LeadFilter, string>;
 
 /**
@@ -195,6 +199,7 @@ export function XpotLeads() {
   const organizationOptions = (me?.organizations ?? [])
     .filter((organization) => !organization.personal || organization.id === organizationId)
     .map((organization) => ({ value: String(organization.id), label: organization.name }));
+  const toVisitTab = filters.values.status === "prospect";
   const leadFilter: LeadFilter = (LEAD_FILTERS as readonly string[]).includes(filters.values.status) ? (filters.values.status as LeadFilter) : "all";
   const search = filters.values.q;
   const day = fromDayKey(filters.values.day);
@@ -203,6 +208,9 @@ export function XpotLeads() {
   const [leadPendingDelete, setLeadPendingDelete] = useState<FullSalesLead | null>(null);
   const [actionLead, setActionLead] = useState<FullSalesLead | null>(null);
   const [addOpen, setAddOpen] = useState(false);
+  // What was searched when "Add" was tapped, so the new company starts with that name.
+  const [addName, setAddName] = useState("");
+  const openAdd = (name = "") => { setAddName(name); setAddOpen(true); };
 
   const { leadsQuery, deleteLeadMutation } = useLeads(routeId === null, organizationId);
   const leadDetailQuery = useQuery<{
@@ -254,7 +262,7 @@ export function XpotLeads() {
   // Businesses saved (e.g. picked on the Dashboard) but never checked in stay out
   // of the default view; the Prospects chip is where they can be found.
   const prospects = allLeads.filter((lead) => !isWorkedLead(lead));
-  const pool = leadFilter === "prospect" ? prospects : leads;
+  const pool = toVisitTab ? prospects : leads;
   const visitsByLead = useMemo(() => {
     const map = new Map<number, EnrichedSalesVisit[]>();
     for (const v of visits ?? []) {
@@ -284,6 +292,8 @@ export function XpotLeads() {
       } as FullSalesLead
     : selectLeadForDetail(allLeads, routeId);
 
+  const isFollowUp = useCallback((lead: FullSalesLead) => needsFollowUp(lead, lastOutcomeFor(lead.id)), [lastOutcomeFor]);
+
   // Companies visited (checked in) on the chosen day.
   const visitedOnDay = useMemo(() => {
     if (!day) return null;
@@ -302,7 +312,7 @@ export function XpotLeads() {
   );
   const baseList = useMemo(() => narrow(pool), [narrow, pool]);
   const displayList = useMemo(() => {
-    const filtered = baseList.filter((lead) => matchesLeadFilter(lead, leadFilter, lastOutcomeFor(lead.id)));
+    const filtered = toVisitTab ? baseList : baseList.filter((lead) => matchesLeadFilter(lead, leadFilter, lastOutcomeFor(lead.id)));
     return [...filtered].sort((a, b) => {
       const aDue = followUpDueTime(a);
       const bDue = followUpDueTime(b);
@@ -312,10 +322,10 @@ export function XpotLeads() {
       if (aVisited !== bVisited) return bVisited - aVisited;
       return a.name.localeCompare(b.name);
     });
-  }, [baseList, leadFilter, lastOutcomeFor]);
+  }, [baseList, leadFilter, toVisitTab, lastOutcomeFor]);
 
   // Big portfolios render 50 at a time; a new filter starts from the top.
-  const pagedLeads = usePagedList(displayList, { resetKey: `${leadFilter}|${search}|${filters.values.day}` });
+  const pagedLeads = usePagedList(displayList, { resetKey: `${toVisitTab}|${leadFilter}|${search}|${filters.values.day}` });
 
   const countsByDay = useMemo(() => {
     const relevantIds = new Set(leads.map((lead) => lead.id));
@@ -352,10 +362,13 @@ export function XpotLeads() {
   const filterChips = LEAD_FILTERS.map((id) => ({
     id,
     label: t(LEAD_FILTER_LABEL[id]),
-    count: id === "prospect"
-      ? narrow(prospects).length
-      : worked.filter((lead) => matchesLeadFilter(lead, id, lastOutcomeFor(lead.id))).length,
+    count: worked.filter((lead) => matchesLeadFilter(lead, id, lastOutcomeFor(lead.id))).length,
   }));
+  const companyTabs = [
+    { id: "mine", label: t("tabMine"), count: worked.length },
+    { id: "tovisit", label: t("tabProspects"), count: narrow(prospects).length },
+  ];
+  const nothingSaved = !leadsQuery.isLoading && !leadsQuery.isError && allLeads.length === 0;
 
   const filterBar = (
     <FilterBar
@@ -386,7 +399,7 @@ export function XpotLeads() {
         <Button
           type="button"
           variant="brand"
-          onClick={() => setAddOpen(true)}
+          onClick={() => openAdd()}
           title={t("newLead")}
           aria-label={t("newLead")}
           data-shortcut="new"
@@ -406,7 +419,15 @@ export function XpotLeads() {
               detail={t.plural("companyCount", displayList.length)}
             />
           ) : null}
-          <FilterChips items={filterChips} value={leadFilter} onChange={(status) => filters.set({ status })} ariaLabel={t("filterByStatus")} />
+          <Segmented
+            ariaLabel={t("tabLeads")}
+            className="w-full lg:max-w-md"
+            itemClassName="min-h-10 px-1"
+            value={toVisitTab ? "tovisit" : "mine"}
+            onChange={(tab) => filters.set({ status: tab === "tovisit" ? "prospect" : null })}
+            items={companyTabs}
+          />
+          {toVisitTab ? null : <FilterChips items={filterChips} value={leadFilter} onChange={(status) => filters.set({ status })} ariaLabel={t("filterByStatus")} />}
         </div>
       }
       summary={{ shown: displayList.length, total: pool.length, active: filters.activeCount() > 0, onClear: () => filters.reset() }}
@@ -421,16 +442,20 @@ export function XpotLeads() {
     <EmptyState tone="red" icon={Building2} title={t("loadFailed")} hint={(leadsQuery.error as Error).message}>
       <RetryButton onRetry={() => void leadsQuery.refetch()} busy={leadsQuery.isFetching} />
     </EmptyState>
-  ) : leadFilter === "prospect" && prospects.length === 0 ? (
+  ) : toVisitTab && prospects.length === 0 ? (
     <EmptyState icon={Building2} title={t("noProspects")} hint={t("noProspectsHint")} />
-  ) : leads.length === 0 && !search && leadFilter !== "prospect" ? (
+  ) : leads.length === 0 && !search && !toVisitTab ? (
     <EmptyState icon={Building2} title={t("noLeads")} hint={t("noLeadsHint")}>
-      <Button type="button" variant="brand" size="sm" onClick={() => setAddOpen(true)}>
+      <Button type="button" variant="brand" size="sm" onClick={() => openAdd()}>
         <Plus aria-hidden="true" /> {t("addLead")}
       </Button>
     </EmptyState>
   ) : displayList.length > 0 ? null : search ? (
-    <EmptyState icon={Search} title={t("noResults", { query: search })} hint={t("chooseAnotherFilter")} />
+    <EmptyState icon={Search} title={t("noResults", { query: search })} hint={t("checkSpelling")}>
+      <Button type="button" variant="brand" size="sm" onClick={() => openAdd(search)}>
+        <Plus aria-hidden="true" /> {t("addNamed", { query: search })}
+      </Button>
+    </EmptyState>
   ) : day ? (
     <EmptyState icon={CalendarDays} title={t("noCompaniesOnDate")} hint={t("chooseAnotherDate")} />
   ) : (
@@ -459,7 +484,7 @@ export function XpotLeads() {
         )
       ) : (
         <>
-          {filterBar}
+          {nothingSaved ? null : filterBar}
           {isDesktop ? (
             <>
               {emptyStates}
@@ -470,6 +495,8 @@ export function XpotLeads() {
                   onSelect={openLead}
                   piecesFor={piecesFor}
                   lastVisitFor={lastVisitFor}
+                  worked={!toVisitTab}
+                  isFollowUp={isFollowUp}
                   onSell={setSalesLead}
                   onCheckIn={(lead) => setLocation(`/route/check-in?leadId=${lead.id}`)}
                   onDelete={setLeadPendingDelete}
@@ -488,6 +515,8 @@ export function XpotLeads() {
                   onOpen={() => openLead(lead)}
                   onMore={() => setActionLead(lead)}
                   lastVisit={lastVisitFor(lead.id)}
+                  worked={!toVisitTab}
+                  followUp={isFollowUp(lead)}
                   pieces={piecesFor(lead.id)}
                   onOpenPieces={() => setLocation(`${canManage ? "~" : ""}${leadPiecesPath(lead.id, lead.name, canManage)}`)}
                 />
@@ -519,7 +548,7 @@ export function XpotLeads() {
       {/* The same "New company" dialog as check-in and the Dashboard (Google
           autofill with coordinates, phone mask); created here as a lead, the
           status this list shows. */}
-      <CreateLeadDialog open={addOpen} onOpenChange={setAddOpen} initialName="" status="lead" />
+      <CreateLeadDialog open={addOpen} onOpenChange={setAddOpen} initialName={addName} status="lead" />
 
       <ConfirmDialog
         open={Boolean(leadPendingDelete)}

@@ -58,7 +58,7 @@ export function AdminApp({ section }: { section: string }) {
   if (!me) return <SessionGate error={meQuery.error} />;
   const profile = profileOfMe(me);
   const hasPanel = !!profile && can(profile, "useManagementPanel");
-  const allowed = hasPanel && (profile === "platform" || ORGANIZATION_SECTIONS.includes(active));
+  const allowed = hasPanel && (profile === "platform" || ORGANIZATION_SECTIONS.includes(active) || active === "overview");
   if (!me || !hasPanel) {
     const exit = me ? homeForModules(modules) : "/";
     return <AppBackground><div className="mx-auto w-full max-w-md px-4 pb-20 pt-6"><PageHeader backHref={exit} backLabel={me ? tm("backToApp") : tc("goToSignIn")} title={tm("accessRestricted")} /><EmptyState icon={ShieldAlert} title={me ? tm("ownersOnly") : tm("signInToContinue")} action={<Button variant="secondary" onClick={() => navigate(exit)}>{me ? tm("backToApp") : tc("goToSignIn")}</Button>} /></div></AppBackground>;

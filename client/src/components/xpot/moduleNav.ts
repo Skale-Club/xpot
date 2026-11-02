@@ -355,7 +355,8 @@ export function panelGroups(profile: Profile | null | undefined, modules: readon
         ...overview,
       ],
     },
-    { label: names.field, items: work },
+    // What each person on the team did: an owner's and a partner's own copy of the platform's Team results.
+    { label: names.field, items: [...work, ...(visits ? [{ href: "/admin/overview", label: l.shell("manageTeam"), icon: TrendingUp, match: starts("/admin/overview") }] : [])] },
   ]);
 }
 

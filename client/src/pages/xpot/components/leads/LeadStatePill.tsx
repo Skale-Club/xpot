@@ -1,6 +1,7 @@
 import { useT } from "@/i18n";
 import { leadsMessages } from "@/i18n/messages/leads";
 import { Pill, toneOf, type PillTone } from "@/components/xpot/StatusPill";
+import { companyStateLabel } from "../../visitRules";
 
 /**
  * Where a company is with us. A prospect has not been worked yet (idle
@@ -24,9 +25,14 @@ const LABEL_KEY = {
   customer: "stateCustomer",
 } as const;
 
-/** The company's state as a pill (lead page header, company list rows and cards). */
-export function LeadStatePill({ status }: { status: string }) {
+/**
+ * The company's state as a pill (lead page header, company list rows and cards).
+ * A prospect that was already visited is "In talks" like a lead, so the pill agrees with the filter it is listed under.
+ */
+export function LeadStatePill({ status, worked }: { status: string; worked?: boolean }) {
   const t = useT(leadsMessages);
+  const label = companyStateLabel(status, worked ?? status !== "prospect");
+  if (label === "inTalks") return <Pill tone={LEAD_STATE_TONE.lead}>{t("stateLead")}</Pill>;
   const key = LABEL_KEY[status as keyof typeof LABEL_KEY];
   return <Pill tone={toneOf(LEAD_STATE_TONE, status, "muted")}>{key ? t(key) : status}</Pill>;
 }

@@ -110,7 +110,7 @@ export function ConsignmentsTable({ rows, selectedId, onSelect, onSettle, onRest
     },
     {
       key: "settle",
-      label: t("actionSettle"),
+      label: t("colNextCount"),
       cellClassName: "whitespace-nowrap",
       render: ({ consignment }) => <ConsignmentDuePill consignment={consignment} emptyAsDash />,
     },
@@ -141,13 +141,13 @@ export function ConsignmentsTable({ rows, selectedId, onSelect, onSettle, onRest
             </Button>
           )}
           {onRestock && (
-            <Button type="button" variant="ghost" size="icon" className="h-9 w-9" title={t("actionRestock")} aria-label={t("actionRestock")} onClick={(e) => { e.stopPropagation(); onRestock(row); }}>
-              <ArrowDownLeft aria-hidden="true" />
+            <Button type="button" variant="ghost" size="sm" onClick={(e) => { e.stopPropagation(); onRestock(row); }}>
+              <ArrowDownLeft aria-hidden="true" /> {t("actionRestock")}
             </Button>
           )}
           {onReturn && (
-            <Button type="button" variant="ghost" size="icon" className="h-9 w-9" title={t("actionTakeBack")} aria-label={t("actionTakeBack")} onClick={(e) => { e.stopPropagation(); onReturn(row); }}>
-              <Undo2 aria-hidden="true" />
+            <Button type="button" variant="ghost" size="sm" onClick={(e) => { e.stopPropagation(); onReturn(row); }}>
+              <Undo2 aria-hidden="true" /> {t("actionTakeBack")}
             </Button>
           )}
         </div>
