@@ -167,6 +167,7 @@ Problema: Today diz "2 Chips to write" e a linha abre "Chips to write (7)". Diz 
 Mudança: a linha do Today leva a empresa no link, e a lista abre filtrada, com a etiqueta "Skale Club" e o link "See all organizations" (PT "Ver todas as organizações", ES "Ver todas las organizaciones"). Não trocar o número do Today.
 Arquivos: client/src/pages/admin/AdminHome.tsx:36-37, client/src/pages/admin/home-model.ts:113, client/src/pages/admin/tags/OverviewTab.tsx:187-192, server/tags/routes.ts:502 (já aceita `organizationId`)
 Risco: nenhuma regra muda.
+Status: feito. Today da plataforma conta o que a lista abre (7 e 7 em Chips, 4 e 4 em Scanned, not live) e a lista abre com "All organizations" à vista (conferido na captura).
 
 ### NAV-2 [S1] "Scanned, not live" diz que alguém leu e mostra "Last scan: —"
 Telas: platform/en-desktop/panel-tags-overview-scannedNotLive, owner/en-desktop/panel-tags-overview-scannedNotLive, platform/en-phone/panel-tags-overview-scannedNotLive
@@ -174,6 +175,7 @@ Problema: o texto é "Someone scanned these pieces in the last 7 days" e a colun
 Mudança: a lista passa a trazer a data do último `inventory_scan` e a mostrar na coluna e no card ("Scanned Oct 30", PT "Lida em 30/10", ES "Leída el 30/10"). `lastInteractionAt` continua igual nas outras telas.
 Arquivos: server/tags/queues.ts:14-21, server/tags/repository.ts:70,243-247, client/src/pages/admin/tags/OverviewTab.tsx:209, client/src/pages/admin/tags/piece-table.tsx:142-146
 Risco: nenhuma regra muda; só um campo novo na resposta.
+Status: feito. A fila "Scanned, not live" traz a coluna "Scanned" com a data da última leitura ("Nov 1") e o cartão do celular a repete.
 
 ### NAV-3 [S1] Grupo "MY COMPANY" da plataforma mostra dados de todas as organizações
 Telas: platform/en-desktop/panel-today, platform/en-desktop/panel-kits-history, platform/en-desktop/panel-tags-overview, platform/en-desktop/panel-tags-overview-chipPending
@@ -181,7 +183,7 @@ Problema: sob "MY COMPANY", Pieces results soma 415 scans e o Top pieces traz Je
 Mudança: tirar o título "MY COMPANY" do menu e agrupar por tarefa (seção Navegação final). Pieces results e Stock ganham a etiqueta "All organizations" (PT "Todas as organizações", ES "Todas las organizaciones") no filtro, para deixar claro o alcance.
 Arquivos: client/src/components/xpot/moduleNav.ts:336-357
 Risco: decisão do dono: a plataforma quer abrir na própria empresa ou em todas? Recomendo todas, com o filtro à vista, porque é o que as telas já fazem.
-Status: pendente (o titulo "MY COMPANY" e as etiquetas do menu estao em `moduleNav.ts`, da F1). Na tela de Entregar o filtro "All organizations" ja fica a vista no historico.
+Status: feito. O título "MY COMPANY" saiu do menu (grupos por tarefa: Make, Pieces, Field, Administration); Stock e Pieces results mostram "All organizations" no filtro. O bloco "My company" do Today da plataforma é o que é da Skale Club (impressões), e diz isso no título.
 
 ### NAV-4 [S1] Take back não diz para qual estoque vai, e pode mudar a peça de empresa
 Telas: platform/en-desktop/panel-kits-returns, platform/en-desktop/panel-kits-history, owner-multi/en-desktop/panel-kits-history
@@ -221,6 +223,7 @@ Problema: a tela é "Chips to write" e nenhum card diz se o chip não foi gravad
 Mudança: o card mostra a etiqueta do chip sempre que a coluna `chip` estiver ativa. Falha sobe para o topo da lista.
 Arquivos: client/src/pages/admin/tags/piece-table.tsx:207,226-230, client/src/pages/admin/tags/OverviewTab.tsx:209
 Risco: nenhum.
+Status: feito. O cartão do celular mostra a etiqueta do chip ("Not written", "Write failed", "Not tested") e a falha sobe para o topo.
 
 ### NAV-9 [S2] Hand out no celular: 500px de moldura antes do primeiro campo
 Telas: platform/en-phone/panel-kits-handout, partner/en-phone/panel-kits-handout, owner/en-phone/panel-kits-handout, owner-multi/en-phone/panel-kits-handout
@@ -228,7 +231,7 @@ Problema: "Hand out" aparece no título, no select, no subtítulo e na aba. O ca
 Mudança: sai o subtítulo repetido e a seta. O texto vira "Give pieces to someone and take them back." (PT "Entregue peças a alguém e receba de volta.", ES "Entrega piezas a alguien y recíbelas de vuelta."), escondido depois da primeira entrega. Passos futuros viram uma só linha: "Next: who pays, pieces, confirm" (PT "Depois: quem paga, peças, confirmar", ES "Después: quién paga, piezas, confirmar").
 Arquivos: client/src/pages/admin/tags/KitsTab.tsx:257-260, client/src/pages/admin/tags/kits-give-form.tsx:213-262, client/src/i18n/messages/adminTagsFlow.ts:50-51, client/src/pages/admin/AdminApp.tsx:68
 Risco: nenhum.
-Status: feito (moldura) | pendente (texto). Saíram o select, o título repetido e o campo Code or scanned link; sobram a introdução, os passos futuros e os termos hand-over/kit em KitsTab e kits-give-form (frente F4, NAV-10/FLX-1).
+Status: feito. A introdução não fala mais de kit nem de lista de separação. Os passos 2 a 4 continuam à vista, apagados, como roteiro do que vem depois do passo 1.
 
 ### NAV-10 [S2] "Reseller / Reseller" e "Ownership and cost": a mesma regra dita três vezes em jargão
 Telas: platform/en-desktop/handout-form-reseller-picked, platform/en-desktop/handout-form-codes-checked, platform/en-phone/handout-form-reseller-picked
@@ -291,7 +294,7 @@ Problema: Today mostra "2 Team purchases" e o menu não tem esse item. "Team" ac
 Mudança: ver a seção Navegação final, "Owner com várias empresas". O filtro de organização passa a valer para quem administra mais de uma.
 Arquivos: client/src/components/xpot/moduleNav.ts:351-366, client/src/pages/admin/tags/KitsTab.tsx:155-158,189-197, client/src/pages/admin/tags/kits-list.tsx:248
 Risco: nenhuma regra muda; o servidor já limita ao que a pessoa administra.
-Status: feito (nomes) | pendente (listas). O item Team vira My companies e abre a lista; o painel se chama My companies. Pendente: um item Team purchases (não existe lista entre empresas; o Today abre /organizations, onde Team fica aceso) e empresa em cada linha com filtro All my companies em Stock, Hand out e Pieces results (telas da F2 e F4).
+Status: feito (nomes) | pendente (listas). O item Team vira My companies e abre a lista; o painel se chama My companies. Pendente: o item Team purchases (não existe lista entre empresas) e a empresa em cada linha com filtro "All my companies": precisa do nome da organização na lista de peças (campo novo do servidor).
 
 ### NAV-16 [S2] "A cost here is for reference" é falso quando a regra é "they buy"
 Telas: platform/en-desktop/handout-form-codes-checked, platform/en-phone/handout-form-codes-checked
@@ -316,6 +319,7 @@ Mudança: a volta vai ao Today e se chama "Today". O título é o nome da fila. 
 
 Arquivos: client/src/pages/admin/tags/OverviewTab.tsx:196-199, client/src/i18n/messages/adminTagsFlow.ts:128-135, client/src/i18n/messages/tags.ts:135, client/src/pages/admin/AdminApp.tsx:64
 Risco: `tags.ts:135` é usado em outras telas; mudar só na fila ou conferir as demais.
+Status: feito. A volta se chama "Today", o título da tela é o nome da fila, cada fila tem sua frase de ação e o chip da fila diz "Not written" / "Not tested". Os nomes "Scanned but not working" e "Missing a product" não foram aplicados: o Today usa os nomes antigos e os dois precisam bater.
 
 ### NAV-18 [S3] Take back tem título de outra tela e três instruções iguais
 Telas: platform/en-desktop/panel-kits-returns, partner/en-desktop/panel-kits-returns, owner/en-phone/panel-kits-returns, platform/en-phone/panel-kits-returns
@@ -339,6 +343,7 @@ Problema: 415 e 393 aparecem duas vezes em dois blocos seguidos (336/316, 17/17,
 Mudança: fica um bloco só, com período e filtros: Scans, QR, NFC. Sai "Est. visitors" da linha principal. O título vira "Scans" e o Top pieces sobe para logo abaixo do gráfico. Uma só nota: "A scan is someone opening the page of a piece. Bots are left out." (PT "Leitura é alguém abrindo a página de uma peça. Robôs ficam de fora.", ES "Una lectura es alguien abriendo la página de una pieza. Los robots quedan fuera."). "5 scans while not live" vira link para a fila. Filtros recolhidos atrás de "Filter" (PT "Filtrar", ES "Filtrar"), e somem os filtros com uma opção só.
 Arquivos: client/src/pages/admin/tags/OverviewTab.tsx:51-67,83, client/src/pages/admin/tags/pieces-analytics.tsx, client/src/i18n/messages/adminTagsFlow.ts:148-149, client/src/i18n/messages/manageTags.ts:141-142
 Risco: decisão do dono: incluir vendas e peças ativas aqui? Recomendo renomear para "Scans" (o glossário fechou "Pieces results": precisa reabrir) até haver dado de venda nesta tela.
+Status: feito. Um bloco de leituras com uma só nota; os filtros ficam atrás de "Filter" e só aparecem os que têm mais de uma opção; "5 scans while not live" leva à fila. O título continua "Pieces results" (o glossário fechou esse nome); incluir vendas e peças ativas ficou sem decisão.
 
 ### NAV-21 [S3] Atividade: mesma peça com dois títulos, e lista tomada por repetição
 Telas: platform/en-desktop/panel-tags-overview, owner/en-desktop/panel-tags-overview, partner/en-desktop/panel-tags-overview, owner-multi/en-desktop/panel-tags-overview
@@ -346,7 +351,7 @@ Problema: "East Boston Bike Works" e "F3G1VTJK" são a mesma peça, em duas linh
 Mudança: sempre o nome da empresa como título, código como detalhe. Agrupar: "East Boston Bike Works: 10 scans, last Nov 1" (PT "10 leituras, última em 1/11", ES "10 lecturas, última el 1/11"). A URL fica recolhida na peça. Limite de 5 linhas, com "See all" (PT "Ver tudo", ES "Ver todo").
 Arquivos: client/src/pages/admin/tags/OverviewTab.tsx:106-183
 Risco: nenhum.
-Status: feito (agrupar e limitar) | pendente (títulos). As leituras de uma peça viram uma linha com a contagem e a data da última; 5 linhas antes de See all. Não feito: a URL crua e a mesma peça com dois títulos (cliente e código) em linhas de tipos diferentes.
+Status: feito. Mudança de destino traz o nome do cliente como título (o mesmo da linha "Went live"), leituras de uma peça são uma linha e são 5 linhas antes de "See all". A URL nova continua na linha da mudança de destino, porque é o que mudou.
 
 ### NAV-22 [S3] Top pieces: texto sobreposto no celular, e formato desperdiçado no desktop
 Telas: platform/en-phone/panel-tags-overview, partner/en-phone/panel-tags-overview, owner/en-phone/panel-tags-overview, platform/en-desktop/panel-tags-overview
@@ -370,6 +375,7 @@ Problema: na coluna COMPANY está "Seaport Coworking", que é o cliente. Ao lado
 Mudança: nas telas de Tags do painel, coluna "Customer" (PT "Cliente", ES "Cliente"), filtro "All customers" (PT "Todos os clientes", ES "Todos los clientes"). A coluna RESELLER fica vazia quando a peça está no estoque. "Companies" fica só para a tela de Visits.
 Arquivos: client/src/i18n/messages/manageTags.ts:85,160, client/src/i18n/messages/manageTagsPieces.ts:13,16-17, client/src/pages/admin/tags/piece-table.tsx:115,207
 Risco: confirme com quem audita Estoque; a mudança atinge a mesma tabela.
+Status: feito. Coluna "Customer" e filtro "All customers"; a coluna de quem guarda a peça se chama "With" e diz "Company stock" quando é do estoque da empresa.
 
 ### NAV-25 [S3] Barra lateral da plataforma: item cortado e ícones que confundem
 Telas: platform/en-desktop/sidebar-both-sections-open, platform/en-desktop/sidebar-collapsed-default
@@ -401,7 +407,7 @@ Problema: abas Overview, Team, Stock, Kits, Team purchases, Companies e Settings
 Mudança: dono de uma empresa só: Team abre só a equipe, sem abas, com o link "Company details". As abas ficam para a plataforma e para quem tem várias empresas, como o PR 3 decidiu, com "Kits" trocado por "Past hand-outs" (PT e ES "Entregas anteriores"). No celular, a barra inferior vale aqui também.
 Arquivos: client/src/pages/xpot/OrganizationsPage.tsx:292-300,316,328-340, client/src/i18n/messages/organizations.ts:25,55, client/src/components/xpot/moduleNav.ts:361-366
 Risco: confirmar o caso do PR 3, "dono só com Tags vê as empresas": ele precisa manter a aba Companies, pois o menu dele não tem o item.
-Status: pendente (OrganizationsPage é da frente F4). As abas repetidas e Kits continuam; Settings saiu do menu do painel, mas a aba Settings ainda existe na página da empresa.
+Status: feito. Dono de uma empresa só: sem abas (Team, Team purchases e Company details), "Kits" virou "Past hand-outs"; a aba Settings só existe para quem edita ou para parceiro que imprime. A plataforma e o dono de várias empresas mantêm as abas, como o PR 3 decidiu.
 
 ### NAV-29 [S2] Histórico no celular: botões sem nome, nota cortada
 Telas: platform/en-phone/panel-kits-history, partner/en-phone/panel-kits-history, owner/en-phone/panel-kits-history, owner-multi/en-phone/panel-kits-history
@@ -409,7 +415,7 @@ Problema: "Packing list" e "Take back unsold" viram dois ícones sem texto. Um d
 Mudança: texto nos botões, em linha própria, ou um menu "⋯" com nomes. Preço e nota em linhas separadas. Filtro só com mais de um revendedor.
 Arquivos: client/src/pages/admin/tags/kits-list.tsx:248-277, client/src/pages/admin/tags/KitsTab.tsx:178-197
 Risco: nenhum.
-Status: pendente (kits-list é da frente F4).
+Status: feito. "Packing list" e "Take back unsold" têm texto, em linha própria; preço e nota quebram linha; o filtro de revendedor só aparece com mais de um. Visto no celular.
 
 ### NAV-30 [S4] Sem acesso a Wholesale orders: cai em Hand out sem dizer nada
 Telas: partner/en-desktop/panel-kits-orders-denied, owner/en-desktop/panel-kits-orders-denied, owner-multi/en-desktop/panel-kits-orders-denied
@@ -433,7 +439,7 @@ Problema: em Hand out e Take back há "Code or scanned link" no topo e "Scan, ty
 Mudança: "Code or scanned link" sai de Hand out e Take back. Fica em Stock e na busca (NAV-26). Em Hand out, a aba "Type or paste" sai, pois o campo de "Scan" já aceita os três modos; ficam "Scan" e "Next from a batch".
 Arquivos: client/src/pages/admin/AdminApp.tsx:65-67,73, client/src/pages/admin/tags/kits-give-form.tsx:262-280
 Risco: nenhum; conferir se a aba Type tem cola de várias linhas que o campo único não aceita.
-Status: feito (moldura) | pendente. Hand out e Take back não têm mais o campo de cima (AdminApp). A aba Type or paste fica com a F4 (kits-give-form).
+Status: feito. A aba "Type or paste" saiu de Hand out: o campo de Scan aceita digitar e colar várias linhas (separadas por linha, vírgula ou ponto e vírgula), então ficam "Scan" e "Next from a batch".
 
 ### NAV-33 [S3] "Take back" tem sentido oposto em espanhol
 Telas: platform/es-desktop/panel-kits-handout
@@ -457,6 +463,7 @@ Problema: 013VW8NC é "Sold" no menu Stock e "Ready, not live" na aba Stock. 0XB
 Mudança: a aba Stock da organização usa a mesma etiqueta do menu (`WherePill`), ou some para quem tem uma empresa só (NAV-28).
 Arquivos: client/src/pages/xpot/OrganizationsPage.tsx:294, client/src/pages/admin/tags/piece-table.tsx
 Risco: nenhuma regra muda.
+Status: feito. A aba Stock da organização usa a mesma etiqueta de status do menu (`PieceStatusPill`), com a contagem por status no topo.
 
 ## Plano sugerido
 

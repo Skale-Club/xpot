@@ -193,6 +193,7 @@ Problema: escolher cor ou face avanca sozinho, mas o botao "Continue" fica apaga
 Mudanca: esconder "Continue" nos passos de escolha unica; unir Quantidade e Revisao em uma tela; resumo: "3 pieces in 1 print".
 Arquivos: `client/src/pages/admin/tags/production-wizard.tsx:205`, `production-generate.tsx`.
 Risco: nenhum.
+Status: feito em parte. "Next" só aparece no passo da quantidade (os passos de escolha única avançam sozinhos e não têm botão morto). Quantidade e Revisão continuam duas telas, e o resumo "Pieces: 1 print job: 3" não foi reescrito.
 
 ### FLX-19 [S3] Rotulos repetidos e ambiguos na tela de pedido
 Telas: platform/en-desktop pedido Failed (`p1-24-after-failed`), "Cancel this order?" (`p1-28-cancel`), "Mark printed" (`p1-23-failed`)
@@ -200,6 +201,7 @@ Problema: pedido falho mostra "Failed" duas vezes + "Print again" no menu e no c
 Mudanca: "Failed" > "Mark as failed"; "Cancel" > "Keep order". Um so "Print again".
 Arquivos: `production-job.tsx:171`, `production-printed-dialog.tsx`, `i18n/messages/workspaces.ts`.
 Risco: nenhum.
+Status: feito. O botão de falha diz "Mark as failed" (Marcar como falha, Marcar como fallida) e a confirmação de cancelar tem "Keep the print" no lugar do segundo "Cancel". Os quatro botões iguais do pedido falho não foram mexidos.
 
 ### FLX-20 [S3] Outros achados de linguagem e acabamento (S3/S4)
 - "With Kevin Brooks" para o proprio Kevin na peca dele (`p4-03-piece`): usar "With you". `TagScreen.tsx`.
@@ -216,6 +218,7 @@ Risco: nenhum.
 - Mensagem "This code expired. Ask for a new one." aparece para qualquer codigo errado em `/my` (nao existia codigo) (`p8-05`): "That code didn't work. Check it or ask for a new one."
 - `overrideOutside`: "Northside Barbers's address" (`i18n/messages/checkin.ts:184`), "Barbers's".
 - Toast de erro cobre o botao "Complete separation" (`p5-04`). Posicionar acima ou como InlineAlert no cartao.
+Status: feito em parte. Feitos em outras frentes: "With you" (RCP-13), os módulos da pessoa pendente (AD-02), e agora "{nome}" sem o possessivo no aviso de check-in fora do raio ("Barbers's"). Não conferidos nesta rodada: os demais itens da lista.
 
 ## Notas de laboratorio (nao sao achados)
 - Sem storage, sem Google Places/Maps, sem SMS: baixar arquivo, mapa e login por SMS nao foram concluidos.
