@@ -4,7 +4,7 @@ import { Check, Package, ShoppingCart } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { EmptyState } from "@/components/xpot/EmptyState";
-import { Field, Input, Select, Textarea } from "@/components/xpot/Field";
+import { Field, Input, Textarea } from "@/components/xpot/Field";
 import { InlineAlert } from "@/components/xpot/InlineAlert";
 import { GLASS_SUBTLE_CLASS } from "@/components/xpot/surface";
 import { useToast } from "@/hooks/use-toast";
@@ -12,8 +12,9 @@ import type { TagListItem } from "@shared/tagsApi";
 import { computeSaleTotals, resolveUnitPriceCents } from "@shared/pricing";
 import { saleCostPreview, saleCustomerConflict, suggestSaleCustomer } from "@shared/tagSales";
 import { canManage, isSuperAdmin } from "@shared/modules";
-import type { ProductWithTiers, PaymentMethod, PaymentStatus } from "@/pages/xpot/hooks/useSalesModule";
-import { usePaymentOptions } from "@/pages/xpot/hooks/useSalesModule";
+import type { ProductWithTiers } from "@/pages/xpot/hooks/useSalesModule";
+import { NO_PAYMENT_CHOSEN, PaymentChoice, type PaymentChoiceState } from "@/pages/xpot/components/sales/PaymentChoice";
+import { settlePayment } from "@/pages/xpot/components/sales/settleCount";
 import type { FullSalesLead, XpotMeResponse } from "@/pages/xpot/types";
 import { centsToInput, formatCents, inputToCents } from "@/pages/xpot/utils";
 import { MONEY_CHART } from "@/pages/xpot/components/sales/moneyPalette";
@@ -86,7 +87,6 @@ export default function TagSaleDialog({
   const ts = useT(salesModuleMessages);
   const qc = useQueryClient();
   const { toast } = useToast();
-  const { statusOptions, methodOptions } = usePaymentOptions();
   const { data: me } = useQuery<XpotMeResponse>({ queryKey: ["/api/xpot/me"], enabled: open, retry: false });
   const catalog = useQuery<ProductWithTiers[]>({
     queryKey: ["/api/xpot/tags/catalog"],
@@ -100,9 +100,8 @@ export default function TagSaleDialog({
   const [lead, setLead] = useState<LeadChoice>(null);
   const [prices, setPrices] = useState<PriceState>({});
   const [discountCents, setDiscountCents] = useState(0);
-  const [paymentStatus, setPaymentStatus] = useState<PaymentStatus>("paid");
-  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod | "">("cash");
-  const [paidCents, setPaidCents] = useState(0);
+  // Nothing is paid until the seller says so (the same choice as Count and bill).
+  const [pay, setPay] = useState<PaymentChoiceState>(NO_PAYMENT_CHOSEN);
   const [notes, setNotes] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -121,9 +120,7 @@ export default function TagSaleDialog({
     }));
     setPrices({});
     setDiscountCents(0);
-    setPaymentStatus("paid");
-    setPaymentMethod("cash");
-    setPaidCents(0);
+    setPay(NO_PAYMENT_CHOSEN);
     setNotes("");
     setError(null);
     attempt.current = null;
@@ -185,11 +182,14 @@ export default function TagSaleDialog({
     };
   });
   const totals = computeSaleTotals(lineInputs, discountCents);
-  const partialInvalid = paymentStatus === "partial" && (paidCents <= 0 || paidCents >= totals.totalCents);
+  // A free sale has nothing to pay; any other waits for "they paid" (and how) or "they'll pay later".
+  const payment = totals.totalCents === 0
+    ? { paymentStatus: "paid" as const, paymentMethod: null, paidCents: undefined }
+    : settlePayment(pay.choice, pay.method, pay.partialCents, totals.totalCents);
   // A piece linked to another customer still opens that customer's link; selling it
   // to someone else would leave it there. The server refuses it, so say so up front.
   const conflict = lead ? saleCustomerConflict(selectedPieces, lead.leadId) : null;
-  const canSubmit = Boolean(lead && selectedPieces.length && !conflict && !unmapped && !missingCost && !unconfiguredPolicy && !catalogUnavailable && !partialInvalid && totals.totalCents >= 0 && !busy);
+  const canSubmit = Boolean(lead && selectedPieces.length && !conflict && !unmapped && !missingCost && !unconfiguredPolicy && !catalogUnavailable && payment !== null && totals.totalCents >= 0 && !busy);
 
 
   async function resolveLeadId(): Promise<number> {
@@ -203,7 +203,7 @@ export default function TagSaleDialog({
   }
 
   async function submit() {
-    if (!canSubmit) return;
+    if (!canSubmit || !payment) return;
     setBusy(true);
     setError(null);
     try {
@@ -219,9 +219,9 @@ export default function TagSaleDialog({
           unitPriceCents: prices[group.productId]?.cents ?? 0,
         })),
         discountCents: discountCents || undefined,
-        paymentStatus,
-        paymentMethod: paymentMethod || null,
-        paidCents: paymentStatus === "partial" ? paidCents : undefined,
+        paymentStatus: payment.paymentStatus,
+        paymentMethod: payment.paymentMethod,
+        paidCents: payment.paidCents,
         notes: notes.trim() || null,
       };
       const signature = JSON.stringify(body);
@@ -341,18 +341,8 @@ export default function TagSaleDialog({
             )}
           </div>
 
-          <div className="grid grid-cols-2 gap-2">
-            <Field label={ts("payment")}>
-              <Select value={paymentStatus} onChange={(e) => { setPaymentStatus(e.target.value as PaymentStatus); attempt.current = null; }} options={statusOptions} className={INPUT_ACCENT} />
-            </Field>
-            <Field label={ts("method")}>
-              <Select value={paymentMethod} onChange={(e) => { setPaymentMethod(e.target.value as PaymentMethod); attempt.current = null; }} placeholder="—" options={methodOptions} className={INPUT_ACCENT} />
-            </Field>
-          </div>
-          {paymentStatus === "partial" && (
-            <Field label={ts("amountReceived")} hint={partialInvalid ? t("partialPaymentHint") : undefined}>
-              <MoneyInput valueCents={paidCents} onChangeCents={(value) => { setPaidCents(value); attempt.current = null; }} />
-            </Field>
+          {totals.totalCents === 0 ? null : (
+            <PaymentChoice value={pay} onChange={(next) => { setPay(next); attempt.current = null; }} amountCents={totals.totalCents} currency="USD" />
           )}
           <Field label={ts("notes")}>
             <Textarea value={notes} onChange={(event) => { setNotes(event.target.value); attempt.current = null; }} rows={2}
