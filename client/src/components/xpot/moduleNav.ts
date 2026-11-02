@@ -116,17 +116,6 @@ export function activeVisitsTab(path: string): VisitsTabId | null {
   return screen;
 }
 
-/**
- * The screens inside something (a piece, a company, a visit) show their own back
- * arrow and title: the phone's top bar (the module switch, the avatar menu) is for
- * the screens you start from. A plain chip (/tags/direct) is reached from a link, so it has its own back arrow too.
- */
-export function phoneBarHidden(path: string): boolean {
-  if (/^\/tags\/(?:t|pieces|customers)\/[^/]+/.test(path) || path === "/tags/direct") return true;
-  if (/^\/leads\/[^/]+/.test(path) && !/^\/leads\/prospect/.test(path)) return true;
-  return /^\/dashboard\/history\/[^/]+/.test(path) || visitsScreen(path) === "visit";
-}
-
 export type Labels = {
   shell: (key: ShellKey) => string;
   /** Tags app labels used by the shared shell. */

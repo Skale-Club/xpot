@@ -15,7 +15,6 @@ const en = {
   todayBlockProduction: "Production",
   todayBlockPieces: "Pieces",
   moreTab: "More",
-  accountMenu: "Account menu",
   signOutTitle: "Sign out of Xpot?",
   signOutHint: "You'll need a text code to come back.",
   // Group headings and screens that only the panels have (components/xpot/moduleNav.ts panelGroups)
@@ -56,7 +55,6 @@ export const workspacesMessages: Dictionary<typeof en> = {
     todayBlockProduction: "Produção",
     todayBlockPieces: "Peças",
     moreTab: "Mais",
-    accountMenu: "Menu da conta",
     signOutTitle: "Sair do Xpot?",
     signOutHint: "Para voltar, você vai precisar de um código por SMS.",
     panelTeam: "Equipe",
@@ -93,7 +91,6 @@ export const workspacesMessages: Dictionary<typeof en> = {
     todayBlockProduction: "Producción",
     todayBlockPieces: "Piezas",
     moreTab: "Más",
-    accountMenu: "Menú de la cuenta",
     signOutTitle: "¿Salir de Xpot?",
     signOutHint: "Para volver necesitarás un código por SMS.",
     panelTeam: "Equipo",

@@ -34,7 +34,7 @@ import { commonMessages } from "@/i18n/messages/common";
 import { settingsMessages } from "@/i18n/messages/settings";
 import { navIaMessages } from "@/i18n/messages/navIa";
 import { shellMessages } from "@/i18n/messages/shell";
-import { SignOutConfirm } from "@/components/xpot/AccountMenu";
+import { SignOutConfirm } from "@/components/xpot/SignOutConfirm";
 import { addPersonMessages } from "@/i18n/messages/addPerson";
 import { runsATeam } from "@shared/organizations";
 import type { XpotMeResponse } from "./types";

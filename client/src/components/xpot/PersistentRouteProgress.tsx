@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { ChevronRight, Radar } from "lucide-react";
+import { Check, ChevronRight, Radar } from "lucide-react";
 import { Link } from "wouter";
 import { useT } from "@/i18n";
 import { prospectingMessages } from "@/i18n/messages/prospecting";
@@ -32,11 +32,13 @@ type ProspectingRoute = { id: number; jobId: number | null; status: string; rout
 function stageStatus(stage: ProspectingProgressStage, t: ReturnType<typeof useT<typeof prospectingMessages.en>>) {
   if (stage === "queued") return t("statusQueued");
   if (stage === "review") return t("preparingRoute");
+  if (stage === "route") return t("statusCompleted");
   if (stage === "failed") return t("statusFailed");
   return t("statusRunning");
 }
 
 function progressStep(stage: ProspectingProgressStage) {
+  if (stage === "route") return 3;
   if (stage === "review") return 2;
   if (stage === "filtering") return 1;
   return 0;
@@ -117,8 +119,7 @@ export function PersistentRouteProgress({ collapsed = false, className = "" }: {
     jobStatus: details.job.status,
     runs: details.runs,
     eligibleCount: details.summary.eligible,
-    // The bar only lives while the route is being prepared: once it exists, the route is the thing to look at.
-    hasRoute: false,
+    hasRoute: Boolean(shellItem.route),
     routePlanningStatus: details.job.routePlanningStatus,
     typicalRunMs: details.timing?.typicalRunMs,
     nowMs: serverNowMs(details.timing, detailsQuery.dataUpdatedAt, now),
@@ -127,7 +128,9 @@ export function PersistentRouteProgress({ collapsed = false, className = "" }: {
   const foundSoFar = progress.stage === "searching"
     ? details.runs.reduce((sum, run) => sum + (run.resultCount ?? 0), 0)
     : 0;
-  const destination = `/route?jobId=${details.job.id}`;
+  const destination = shellItem.route
+    ? `/route?routeId=${shellItem.route.id}`
+    : `/route?jobId=${details.job.id}`;
   const accessibleLabel = `${t("recentPlans")}: ${status}, ${progress.percent}%. ${details.job.location}`;
   const isSearching = ["queued", "running"].includes(details.job.status) || progress.stage === "review";
   const activeStep = progressStep(progress.stage);
@@ -156,7 +159,9 @@ export function PersistentRouteProgress({ collapsed = false, className = "" }: {
     >
       <span className="flex items-center gap-2.5">
         <span className="relative flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-indigo-400/15 text-indigo-200">
-          <Radar className={`h-4 w-4 ${isSearching ? "animate-pulse" : ""}`} aria-hidden="true" />
+          {progress.stage === "route"
+            ? <Check className="h-4 w-4" aria-hidden="true" />
+            : <Radar className={`h-4 w-4 ${isSearching ? "animate-pulse" : ""}`} aria-hidden="true" />}
           {isSearching ? <span className="absolute right-1 top-1 h-1.5 w-1.5 rounded-full bg-sky-300 shadow-[0_0_7px_rgba(125,211,252,0.9)]" aria-hidden="true" /> : null}
         </span>
         <span className="min-w-0 flex-1 text-left">

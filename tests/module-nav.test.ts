@@ -11,7 +11,6 @@ import {
   panelGroups,
   panelPhoneTabs,
   paletteExtras,
-  phoneBarHidden,
   platformItems,
   visitsAdminSection,
   visitsScreen,
@@ -245,13 +244,6 @@ describe("visitsScreen", () => {
     expect(activeVisitsTab("/dashboard")).toBe("dashboard");
     expect(activeVisitsTab("/admin/overview")).toBe("manage");
     expect(activeVisitsTab("/sales/stock/3")).toBe("sales");
-  });
-});
-
-describe("phoneBarHidden", () => {
-  it("hides the top bar inside a piece, a customer, a company or a visit, and keeps it on the screens you start from", () => {
-    for (const p of ["/tags/t/ABC123", "/tags/pieces/ABC123", "/tags/customers/27", "/tags/direct", "/leads/9", "/dashboard/history/4", "/route/check-in", "/check-in"]) expect(phoneBarHidden(p)).toBe(true);
-    for (const p of ["/tags", "/tags/pieces", "/tags/customers", "/tags/shop", "/dashboard", "/dashboard/history", "/route", "/leads", "/leads/prospects", "/tasks", "/sales"]) expect(phoneBarHidden(p)).toBe(false);
   });
 });
 

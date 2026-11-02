@@ -2,7 +2,9 @@ import { useCallback, useEffect, useRef, useState, type CSSProperties, type Reac
 import { useQuery } from "@tanstack/react-query";
 import { Link, useLocation, useSearch } from "wouter";
 import {
+  Camera,
   ChevronRight,
+  LogOut,
   MapPinned,
   Nfc,
   PanelLeftClose,
@@ -32,7 +34,7 @@ import { AppBackground } from "./AppBackground";
 import { CommandPalette } from "./CommandPalette";
 import { useDesktopShortcuts } from "./useDesktopShortcuts";
 import { useIsDesktop } from "@/hooks/use-is-desktop";
-import { MODULE_ACCENT } from "./surface";
+import { BRAND_GRADIENT, MODULE_ACCENT } from "./surface";
 import {
   panelGroups,
   contextOfPath,
@@ -45,10 +47,15 @@ import {
   type ShellContext,
 } from "./moduleNav";
 import { XpotLogo } from "./XpotLogo";
-import { AccountMenu, useOnline } from "./AccountMenu";
+import { useOnline } from "@/hooks/use-online";
 import { rememberPanelRoute } from "./panelRoute";
 import { PanelTabBar } from "./PanelTabBar";
-import { PhoneTopBar } from "./PhoneTopBar";
+import { AdminModeBar } from "./AdminMode";
+import { PanelDoorRow } from "./panelDoor";
+import { SignOutConfirm } from "./SignOutConfirm";
+import { InstallAppSidebarItem } from "./InstallApp";
+import { UserGreeting } from "./UserGreeting";
+import { useAvatarUpload } from "./useAvatarUpload";
 import { ScreenErrorBoundary } from "./ScreenErrorBoundary";
 import { usePanelNames } from "./panelNames";
 import { PersistentRouteProgress } from "./PersistentRouteProgress";
@@ -56,10 +63,11 @@ import { navigateGuarded } from "@/hooks/useUnsavedChangesGuard";
 import { subscribeToRoutePush } from "@/lib/pushNotifications";
 
 // The frame around every rep screen. Below `lg` it is the phone column the app
-// always had (the caller passes its bottom nav; the top bar and the panel's bar
-// are the frame's). From `lg` up a sidebar and a top bar take over. Two areas,
-// told apart by colour: "My work" (the modules) and "My company" (the panel,
-// amber); the avatar menu is the way between them, and holds the person's own things.
+// always had (the caller passes its header row and bottom nav). From `lg` up a
+// sidebar and a top bar take over, and those mobile pieces are hidden. Two areas,
+// told apart by colour: the modules, and the panel (amber), which has its own bar
+// at the top; the way between them is a door at the foot of the sidebar and a
+// round button on the phone header (ShellHeader).
 
 const COLLAPSED_KEY = "xpot.sidebar.collapsed";
 const GROUP_KEY = "xpot.nav.group.";
@@ -175,8 +183,8 @@ function SidebarLink({ item, collapsed, active, accent, warningLabel }: { item: 
 
 /**
  * The module switch at the top of the sidebar: the desktop twin of the phone's
- * ModuleSwitch. Both modules visible, each in its own colour. With one module
- * there is nothing to switch, so it is not shown.
+ * ModuleSwitch. Both modules always visible, each in its own colour; a rep with
+ * one module sees just its name.
  */
 function SidebarModuleSwitch({ collapsed, module, modules, label }: {
   collapsed: boolean;
@@ -186,7 +194,7 @@ function SidebarModuleSwitch({ collapsed, module, modules, label }: {
 }) {
   const tc = useT(commonMessages);
   const [, navigate] = useLocation();
-  if (modules.length < 2) return null;
+  if (modules.length === 0) return null;
   const go = (m: XpotModule) => {
     if (m === module) return;
     if (module) rememberModuleRoute(module, `${window.location.pathname}${window.location.search}`);
@@ -282,9 +290,18 @@ function ScrollingNav({ children, label }: { children: ReactNode; label: string 
 function DesktopSidebar({ collapsed, onToggle }: { collapsed: boolean; onToggle: () => void }) {
   const t = useT(shellMessages);
   const [location] = useLocation();
-  const { context, module, modules, groups, moduleLabel, panel } = useShellNav();
+  const { context, module, modules, groups, moduleLabel, me, panel } = useShellNav();
   const { panelName } = usePanelNames();
   const { profile } = useViewerAccess();
+  const avatar = useAvatarUpload();
+  const online = useOnline();
+  const [, navigate] = useLocation();
+  const [confirming, setConfirming] = useState(false);
+  const name = me
+    ? me.rep.displayName || [me.user.firstName, me.user.lastName].filter(Boolean).join(" ").trim() || me.user.email
+    : "";
+  const initials = name.split(" ").map((n) => n[0]).slice(0, 2).join("").toUpperCase();
+  const firstName = name.split(" ")[0] ?? "";
   const accent = panel ? MANAGEMENT_ACCENT : MODULE_ACCENT[module ?? "visits"];
 
   return (
@@ -314,8 +331,38 @@ function DesktopSidebar({ collapsed, onToggle }: { collapsed: boolean; onToggle:
         </button>
       </div>
 
+      {!panel ? <div className="px-3 pb-3">
+        <div className={`flex items-center ${collapsed ? "justify-center py-2" : "gap-3 px-2 py-2"}`}>
+          <button
+            type="button"
+            onClick={avatar.pick}
+            disabled={avatar.pending}
+            title={avatar.label}
+            aria-label={avatar.label}
+            className="group relative shrink-0 touch-manipulation rounded-2xl transition-transform hover:scale-[1.03] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-300/60 active:scale-95 disabled:cursor-wait"
+          >
+            {me?.rep.avatarUrl ? (
+              <img src={me.rep.avatarUrl} alt="" className={`${collapsed ? "h-9 w-9 rounded-xl" : "h-12 w-12 rounded-[18px]"} border border-white/10 object-cover`} />
+            ) : (
+              <div
+                className={`${collapsed ? "h-9 w-9 rounded-xl text-xs" : "h-12 w-12 rounded-[18px] text-base"} flex items-center justify-center font-bold text-white`}
+                style={{ background: BRAND_GRADIENT }}
+              >
+                {initials}
+              </div>
+            )}
+            <span className={`${collapsed ? "rounded-xl" : "rounded-[18px]"} absolute inset-0 flex items-center justify-center bg-black/60 opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100 ${avatar.pending ? "opacity-100" : ""}`} aria-hidden="true">
+              {avatar.pending ? <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/30 border-t-white" /> : <Camera className="h-4 w-4 text-white" />}
+            </span>
+            <span className={`absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full border-2 border-[#080c18] ${online ? "bg-emerald-400" : "bg-slate-500"}`} />
+          </button>
+          <input {...avatar.inputProps} />
+          {!collapsed && <UserGreeting name={firstName} compact />}
+        </div>
+      </div> : null}
+
       <div className="space-y-2 px-3 pb-3">
-        {!panel ? <SidebarModuleSwitch collapsed={collapsed} module={module} modules={modules} label={moduleLabel} /> : null}
+        {panel ? <div className={`flex min-h-20 items-center gap-3 border-b border-amber-200/10 pb-4 text-amber-100 ${collapsed ? "justify-center" : "px-2"}`} title={panelName(profile)}><span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-amber-300/25 bg-amber-300/10"><ShieldCheck className="h-5 w-5" /></span>{!collapsed && <span className="text-base font-semibold leading-snug">{panelName(profile)}</span>}</div> : <SidebarModuleSwitch collapsed={collapsed} module={module} modules={modules} label={moduleLabel} />}
         {module === "visits" && !panel ? <PersistentRouteProgress collapsed={collapsed} className={collapsed ? "mt-2" : "mt-2.5"} /> : null}
       </div>
 
@@ -331,8 +378,23 @@ function DesktopSidebar({ collapsed, onToggle }: { collapsed: boolean; onToggle:
         })}
       </ScrollingNav>
 
-      <div className="border-t border-white/[0.07] px-3 py-3">
-        <AccountMenu variant="sidebar" collapsed={collapsed} />
+      <div className="space-y-1 border-t border-white/[0.07] px-3 py-3">
+        {panel && !collapsed ? <p className="truncate px-3 pb-2 text-xs text-white/35">{name}</p> : null}
+        <PanelDoorRow collapsed={collapsed} />
+        {!panel && <InstallAppSidebarItem collapsed={collapsed} />}
+        {!panel ? <SidebarLink item={{ href: "/settings", label: t("navSettings"), icon: Settings, match: starts("/settings") }} collapsed={collapsed} active={starts("/settings")(location)} accent={MODULE_ACCENT.visits} /> : null}
+        <button
+          type="button"
+          onClick={() => setConfirming(true)}
+          title={collapsed ? t("signOut") : undefined}
+          aria-label={t("signOut")}
+          className={`flex h-10 w-full items-center rounded-xl text-sm font-medium text-white/45 transition-colors hover:bg-red-500/10 hover:text-red-300 ${collapsed ? "justify-center" : "gap-3 px-3"}`}
+          data-testid="sidebar-sign-out"
+        >
+          <LogOut className="h-[18px] w-[18px] shrink-0" />
+          {!collapsed && <span>{t("signOut")}</span>}
+        </button>
+        <SignOutConfirm open={confirming} onOpenChange={setConfirming} />
       </div>
     </aside>
   );
@@ -436,7 +498,6 @@ export function AppLayout({
   topBarActions,
   wide = false,
   size,
-  phoneBar,
   mobileColumnClassName = "pb-28 pt-5",
   mobileMaxWidth = "max-w-md",
   mobileColumnStyle,
@@ -444,7 +505,7 @@ export function AppLayout({
   /** Shown in the desktop top bar. */
   title: ReactNode;
   children: ReactNode;
-  /** Phone-only row below the top bar (offline notice, route progress…). */
+  /** Phone-only row above the content (the shell header, module switch, offline notice…). */
   mobileHeader?: ReactNode;
   /** Phone-only bottom navigation. */
   mobileNav?: ReactNode;
@@ -453,8 +514,6 @@ export function AppLayout({
   wide?: boolean;
   /** Desktop content width; overrides `wide`. "medium" suits forms. */
   size?: "narrow" | "medium" | "wide";
-  /** The phone's top bar (areas, modules, account). On by default in the panel; off for a screen that has its own back and title. */
-  phoneBar?: boolean;
   /** Width cap below `lg` (admin tables need more than a phone column on a tablet). */
   mobileMaxWidth?: string;
   /** Padding of the phone column; desktop padding is fixed. */
@@ -495,7 +554,6 @@ export function AppLayout({
       return !c;
     });
   };
-  const showPhoneBar = phoneBar ?? panel;
 
   return (
     <Background>
@@ -507,6 +565,7 @@ export function AppLayout({
       </a>
       <DesktopSidebar collapsed={collapsed} onToggle={toggle} />
       <div className={`relative ${collapsed ? "lg:pl-[72px]" : "lg:pl-60"}`}>
+        <AdminModeBar />
         <DesktopTopBar
           title={title}
           crumb={crumb}
@@ -521,7 +580,8 @@ export function AppLayout({
           }`}
           style={mobileColumnStyle}
         >
-          {showPhoneBar ? <PhoneTopBar module={module} title={title} /> : null}
+          {/* The panel has no shell header: the bar above names it, and the screen's title is said once here (a phone has no top bar). */}
+          {panel ? <h1 className="mb-4 truncate text-lg font-bold tracking-tight text-white lg:hidden" data-testid="phone-title">{title}</h1> : null}
           {mobileHeader ? <div className="lg:hidden">{mobileHeader}</div> : null}
           <main id="xpot-main-content" tabIndex={-1} className="flex-1">
             <ScreenErrorBoundary resetKey={location}>{children}</ScreenErrorBoundary>

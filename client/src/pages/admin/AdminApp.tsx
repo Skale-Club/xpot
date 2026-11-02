@@ -95,7 +95,7 @@ export function AdminApp({ section }: { section: string }) {
   </AppLayout>;
   return <AppLayout title={title} size="wide" mobileMaxWidth="max-w-5xl" mobileColumnClassName="pb-10 pt-5"
     topBarActions={lookupBox ? <CodeLookup onFound={(id) => navigate(`/admin/tags/pieces/${id}`)} /> : undefined}
-    // The phone bar already says the screen's title (PhoneTopBar).
+    // The frame says the screen's title on a phone (AppLayout), once.
     mobileHeader={lookupBox ? <div className="mb-5"><CodeLookup fill onFound={(id) => navigate(`/admin/tags/pieces/${id}`)} /></div> : undefined}>
     {active === "home" && <AdminHome />}
     {active === "work" && <AdminWork />}

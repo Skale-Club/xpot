@@ -1,7 +1,7 @@
 import { useEffect } from "react";
 import { Redirect, Route, Switch, useLocation } from "wouter";
 import { useQuery } from "@tanstack/react-query";
-import { rememberModule, useXpotModules } from "@/components/ModuleSwitch";
+import { ModuleSwitch, rememberModule, useXpotModules } from "@/components/ModuleSwitch";
 import { useT } from "@/i18n";
 import { tagsMessages } from "@/i18n/messages/tags";
 import { customerOrdersMessages } from '@/i18n/messages/customerOrders';
@@ -19,7 +19,9 @@ import { APP_BASE, tagPath } from "./lib";
 import { useIsDesktop } from "@/hooks/use-is-desktop";
 import { AppLayout, MODULE_COLUMN } from "@/components/xpot/AppLayout";
 import { TAGS_NAV, TagsTabBar, activeTagsTab } from "./TagsTabBar";
-import { phoneBarHidden } from "@/components/xpot/moduleNav";
+import { ShellHeader } from "@/components/xpot/ShellHeader";
+import { XpotLogo } from "@/components/xpot/XpotLogo";
+import { useOnline } from "@/hooks/use-online";
 import { MODULE_HOME, rememberModuleRoute } from "@/lib/xpot";
 import { SessionGate } from "@/components/xpot/SessionGate";
 
@@ -28,6 +30,7 @@ import { SessionGate } from "@/components/xpot/SessionGate";
 export function TagsApp() {
   const t = useT(tagsMessages);
   const ordersT=useT(customerOrdersMessages);
+  const online = useOnline();
   const [location] = useLocation();
   const meQuery = useQuery<XpotMeResponse>({ queryKey: ["/api/xpot/me"], retry: false });
   const modules = useXpotModules();
@@ -60,7 +63,19 @@ export function TagsApp() {
       title={pieceCode ?? (location.startsWith(`${APP_BASE}/orders`)?ordersT('title'):location.startsWith(`${APP_BASE}/direct`) ? t("navDirect") : location.startsWith(`${APP_BASE}/results`) ? t("resultsTitle") : t(currentNav.key))}
       wide={wide}
       mobileColumnClassName={MODULE_COLUMN}
-      phoneBar={!phoneBarHidden(location)}
+      mobileHeader={
+        <>
+          {!online && <p className="mb-3 rounded-2xl border border-red-500/20 bg-red-500/10 px-4 py-3 text-sm text-red-300" role="status" data-testid="offline-strip">{t("offlineNotice")}</p>}
+          <ShellHeader />
+          <div className="mb-4">
+            {modules.length > 1 ? (
+              <ModuleSwitch current="tags" />
+            ) : (
+              <XpotLogo className="h-7 w-auto" />
+            )}
+          </div>
+        </>
+      }
       mobileNav={<TagsTabBar />}
     >
       <Switch>
