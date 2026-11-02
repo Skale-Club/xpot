@@ -10,7 +10,6 @@ const en = {
   navPieces: "My pieces",
   navShop: "Shop",
   navDirect: "Plain chip (no tracking)",
-  directLink: "Need a plain chip with no tracking?",
 
   // Customers
   customersTitle: "Customers",
@@ -96,7 +95,6 @@ const en = {
   notXpot: "That is not an Xpot piece: {text}",
   chipEmpty: "This chip is empty",
   chipEmptyHint: "Type the code printed on the piece to write this chip.",
-  openDirect: "Write a plain chip instead",
   notYours: "This piece isn't in your list. Ask your company to hand it to you, or check the code.",
   notYoursTitle: "This piece isn't in your list",
   notYoursHint: "Ask your company to hand it to you, or check the code.",
@@ -522,7 +520,6 @@ export const tagsMessages: Dictionary<typeof en> = {
     navPieces: "Minhas peças",
     navShop: "Loja",
     navDirect: "Chip simples (sem acompanhamento)",
-    directLink: "Precisa de um chip simples, sem acompanhamento?",
 
     customersTitle: "Clientes",
     customerToFinish_one: "{count} peça para terminar",
@@ -606,7 +603,6 @@ export const tagsMessages: Dictionary<typeof en> = {
     notXpot: "Isso não é uma peça Xpot: {text}",
     chipEmpty: "Este chip está vazio",
     chipEmptyHint: "Digite o código impresso na peça para gravar este chip.",
-    openDirect: "Gravar um chip simples",
     notYours: "Esta peça não está na sua lista. Peça à sua empresa que entregue a você, ou confira o código.",
     notYoursTitle: "Esta peça não está na sua lista",
     notYoursHint: "Peça à sua empresa que entregue a você, ou confira o código.",
@@ -1011,7 +1007,6 @@ export const tagsMessages: Dictionary<typeof en> = {
     navPieces: "Mis piezas",
     navShop: "Tienda",
     navDirect: "Chip simple (sin seguimiento)",
-    directLink: "¿Necesitas un chip simple, sin seguimiento?",
 
     customersTitle: "Clientes",
     customerToFinish_one: "{count} pieza por terminar",
@@ -1095,7 +1090,6 @@ export const tagsMessages: Dictionary<typeof en> = {
     notXpot: "Eso no es una pieza Xpot: {text}",
     chipEmpty: "Este chip está vacío",
     chipEmptyHint: "Escribe el código impreso en la pieza para grabar este chip.",
-    openDirect: "Grabar un chip simple",
     notYours: "Esta pieza no está en tu lista. Pide a tu empresa que te la entregue, o revisa el código.",
     notYoursTitle: "Esta pieza no está en tu lista",
     notYoursHint: "Pide a tu empresa que te la entregue, o revisa el código.",
