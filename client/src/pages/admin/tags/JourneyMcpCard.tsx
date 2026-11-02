@@ -240,7 +240,14 @@ export function JourneyMcpCard() {
 
       <ConnectedApps />
 
-      <div className="border-t border-white/5 pt-4">
+      {/* Most assistants sign in by themselves; tokens are for the few that take a header instead. */}
+      <details className="group border-t border-white/5 pt-2" data-testid="journey-mcp-advanced">
+      <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between text-sm font-semibold text-white/70 marker:content-none">
+        {ti("advanced")}
+        <span className="text-lg font-light text-white/35 transition-transform group-open:rotate-45">+</span>
+      </summary>
+      <div className="space-y-4 pt-2">
+      <div>
         <h4 className={`flex items-center gap-2 ${EYEBROW}`}>
           <KeyRound className="h-3.5 w-3.5" />
           {t("tokens")}
@@ -297,6 +304,8 @@ export function JourneyMcpCard() {
           )}
         </>
       )}
+      </div>
+      </details>
 
       <ConfirmDialog
         open={!!revoking}
