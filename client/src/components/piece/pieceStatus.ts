@@ -11,7 +11,7 @@ export type PieceStatusKey =
   | "damaged" | "lost" | "retired"
   | "soldLive" | "soldNotLive"
   | "pending" | "printFailed" | "printCancelled"
-  | "live" | "paused" | "ready"
+  | "live" | "paused" | "ready" | "chipToWrite" | "chipFailed"
   | "noCustomer" | "reserved" | "internalUse" | "other";
 
 /**
@@ -67,7 +67,8 @@ export function pieceStatus(piece: PieceStatusInput): PieceStatus {
   }
   if (status === "active") return done("live", "green");
   if (status === "disabled") return done("paused", "amber");
-  if (status === "assigned") return done("ready", "sky");
+  // Set up for a customer: "Ready" only when the chip works. A chip to write, or one that failed, is what the pill says.
+  if (status === "assigned") return chip === "failed" ? done("chipFailed", "red") : chip === "needsWriting" ? done("chipToWrite", "amber") : done("ready", "sky");
   if (status === "inventory") {
     if (stockStatus === "available") return done("noCustomer", "slate");
     if (stockStatus === "reserved") return done("reserved", "blue");

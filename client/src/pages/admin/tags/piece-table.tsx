@@ -5,14 +5,16 @@ import { PieceChipPill, PieceStatusPill } from "@/components/piece/PieceStatusPi
 import { CompactDataTable, type CompactDataColumn } from "@/components/xpot/CompactDataTable";
 import { EmptyState } from "@/components/xpot/EmptyState";
 import { GLASS_CLASS } from "@/components/xpot/surface";
-import { TagPieceVisual, tagPlaqueSpec } from "@/components/xpot/TagProductThumbnail";
+import { TagPieceVisual, useTagModelName } from "@/components/xpot/TagProductThumbnail";
 import { ListPager, usePagedList } from "@/components/xpot/pagination";
 import { useT } from "@/i18n";
 import { formatDate } from "@/lib/format";
 import { manageTagsMessages } from "@/i18n/messages/manageTags";
 import { manageTagsPiecesMessages } from "@/i18n/messages/manageTagsPieces";
+import { pieceScreenMessages } from "@/i18n/messages/pieceScreen";
 import { tagsMessages } from "@/i18n/messages/tags";
-import { pieceChipState } from "@/components/piece/pieceStatus";
+import { pieceChipState, pieceStatus } from "@/components/piece/pieceStatus";
+import { matchesStockMetric } from "@shared/tagMetrics";
 import { pieceHasLocation } from "@/components/piece/pieceView";
 
 // The one pieces table of the Tags admin: Stock, a batch's pieces, a kit's pieces and the Today lists. On
@@ -21,9 +23,9 @@ import { pieceHasLocation } from "@/components/piece/pieceView";
 // picks. The chip only speaks when it is something to do. Text and pills align left, counts right.
 
 /** Optional columns, always drawn in this order after Code and Status. */
-export type PieceColumn = "customer" | "reseller" | "chip" | "scans" | "scanned" | "sold" | "batch";
+export type PieceColumn = "organization" | "customer" | "reseller" | "chip" | "scans" | "scanned" | "sold" | "batch";
 
-const ORDER: readonly PieceColumn[] = ["customer", "reseller", "chip", "scans", "scanned", "sold", "batch"];
+const ORDER: readonly PieceColumn[] = ["organization", "customer", "reseller", "chip", "scans", "scanned", "sold", "batch"];
 
 export interface PieceSelection {
   /** Which pieces can be ticked (e.g. the ones a return accepts). */
@@ -37,18 +39,6 @@ export interface PieceSelection {
 /** The one status pill of a piece: the same words and colour as its pop-up, its page and the reseller's app. */
 export function WherePill({ piece }: { piece: TagListItem }) {
   return <PieceStatusPill piece={piece} />;
-}
-
-/** "Large plate": size and model in one name, or the product's name for a piece that is not a plaque. */
-function usePieceModelName() {
-  const tp = useT(manageTagsPiecesMessages);
-  const tt = useT(tagsMessages);
-  return (piece: Pick<TagListItem, "productType" | "face" | "batchCode">): string => {
-    const { size, model } = tagPlaqueSpec(piece.productType, piece.face, piece.batchCode);
-    if (size && model) return tp(`modelName_${model}_${size}` as "modelName_Plate_Large");
-    if (model) return tt(`plaqueModel_${model}` as "plaqueModel_Plate");
-    return tt(`product_${piece.productType}` as "product_custom");
-  };
 }
 
 const SHORT_DAY: Intl.DateTimeFormatOptions = { month: "short", day: "numeric" };
@@ -93,6 +83,7 @@ export function PieceTable({
   testId,
   selectedId,
   headTop,
+  organizationName,
 }: {
   pieces: readonly TagListItem[];
   onOpen: (id: string) => void;
@@ -107,10 +98,13 @@ export function PieceTable({
   testId?: string;
   /** Keep the column headings in view while the list scrolls, this many px below the top of the scrolling area. */
   headTop?: number;
+  /** Platform management: the company of a piece, for the "organization" column. */
+  organizationName?: (id: number | null) => string | null;
 }) {
   const tm = useT(manageTagsMessages);
   const tp = useT(manageTagsPiecesMessages);
-  const modelName = usePieceModelName();
+  const modelName = useTagModelName();
+  const tps = useT(pieceScreenMessages);
   // A new list (another filter) starts from the first page again.
   const paged = usePagedList(pieces, { pageSize: pageSize ?? Math.max(pieces.length, 1), resetKey: `${pieces.length}:${pieces[0]?.id ?? ""}` });
   const shown = pageSize ? paged.visible : pieces;
@@ -123,17 +117,28 @@ export function PieceTable({
   const selectableCodes = selection ? pieces.filter(selection.canSelect).map((p) => p.publicCode) : [];
   const allOn = selectableCodes.length > 0 && selectableCodes.every((c) => selection?.selected.has(c));
   const none = <span className="text-white/30">—</span>;
-  /** The company's stock is where a piece in a box with no reseller is; one not in stock yet, sold, lost or already at its customer is not in anyone's. */
-  const heldBy = (p: TagListItem): string | null => p.repName ?? (pieceHasLocation(p) && p.repId === null && !p.leadName ? tp("houseStock") : null);
+  // "Company stock" is the same set the "In company stock" chip counts (shared/tagMetrics.ts house): not reserved, for internal
+  // use, sold, lost or already at its customer. Those say what they are in the Status column.
+  const heldBy = (p: TagListItem): string | null => p.repName ?? (pieceHasLocation(p) && matchesStockMetric(p, "house") && !p.leadName ? tp("houseStock") : null);
+  // With a Customer column beside it, "No customer yet" goes there in quiet text: a Status pill repeated on every shelf row hides the rows that differ.
+  const chipSaidByStatus = (p: TagListItem) => ((k) => k === "chipToWrite" || k === "chipFailed")(pieceStatus(p).key);
+  const noCustomerInColumn = has("customer");
+  const noCustomerText = (p: TagListItem): string | null => (noCustomerInColumn && !p.leadName && pieceStatus(p).key === "noCustomer" ? tps("situation_noCustomer") : null);
   const scansOf = (p: TagListItem) => p.qrInteractions + p.nfcInteractions;
   const day = (at: string | null) => formatDate(at, SHORT_DAY);
 
   const cells: Record<PieceColumn, CompactDataColumn<TagListItem>> = {
+    organization: {
+      key: "organization",
+      label: tm("colCompany"),
+      cellClassName: "max-w-[170px] truncate text-white/70",
+      render: (p) => organizationName?.(p.organizationId) ?? none,
+    },
     customer: {
       key: "customer",
       label: tm("colCustomer"),
       cellClassName: "max-w-[200px] truncate text-white/80",
-      render: (p) => p.leadName ?? none,
+      render: (p) => p.leadName ?? (noCustomerText(p) ? <span className="text-white/40">{noCustomerText(p)}</span> : none),
     },
     reseller: {
       key: "reseller",
@@ -204,7 +209,7 @@ export function PieceTable({
       cellClassName: "max-w-[300px] !py-2",
       render: (p) => <PieceCell piece={p} modelName={modelName(p)} />,
     },
-    { key: "status", label: tm("colStatus"), render: (p) => <WherePill piece={p} /> },
+    { key: "status", label: tm("colStatus"), render: (p) => (noCustomerText(p) ? null : <WherePill piece={p} />) },
     ...ORDER.filter(has).map((column) => cells[column]),
   ];
 
@@ -213,7 +218,7 @@ export function PieceTable({
       {/* Phones: tappable cards */}
       <ul className="space-y-2 md:hidden">
         {shown.map((p) => {
-          const meta = [has("customer") ? p.leadName : null, has("reseller") ? heldBy(p) : null].filter(Boolean).join(" · ");
+          const meta = [has("organization") ? organizationName?.(p.organizationId) : null, has("customer") ? p.leadName ?? noCustomerText(p) : null, has("reseller") ? heldBy(p) : null].filter(Boolean).join(" · ");
           const scans = has("scans") && scansOf(p) > 0 ? `${tp("colScans")} ${scansOf(p)} · ${day(p.lastInteractionAt)}` : null;
           const scanned = has("scanned") && p.lastInventoryScanAt ? tp("cardScanned", { date: day(p.lastInventoryScanAt) }) : null;
           return (
@@ -226,8 +231,9 @@ export function PieceTable({
               <button type="button" onClick={() => onOpen(p.id)} className="min-w-0 flex-1 text-left" data-testid={`admin-piece-card-${p.publicCode}`}>
                 <PieceCell piece={p} modelName={modelName(p)} stacked />
                 <div className="mt-2 flex flex-wrap items-center gap-1.5">
-                  <WherePill piece={p} />
-                  {has("chip") ? <PieceChipPill piece={p} quiet="none" /> : null}
+                  {noCustomerText(p) ? null : <WherePill piece={p} />}
+                  {/* A status that already says "Chip to write" / "Chip write failed" is not said twice on a card. */}
+                  {has("chip") && !chipSaidByStatus(p) ? <PieceChipPill piece={p} quiet="none" /> : null}
                 </div>
                 {meta ? <p className="mt-1.5 break-words text-xs text-white/60">{meta}</p> : null}
                 {scans || scanned ? <p className="mt-0.5 text-xs tabular-nums text-white/40">{scanned ?? scans}</p> : null}

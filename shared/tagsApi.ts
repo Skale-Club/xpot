@@ -35,6 +35,8 @@ export interface TagListItem {
   /** The business it was sold to (an Xpot lead). */
   leadId: number | null;
   leadName: string | null;
+  /** The company the piece belongs to (platform management reads it as a column; everyone else sees one company). */
+  organizationId: number | null;
   /** The reseller holding / credited with the piece. */
   repId: number | null;
   repName: string | null;

@@ -154,7 +154,7 @@ export function NfcProvisioningCard({
         <div className="space-y-2 rounded-xl border border-white/10 bg-white/[0.03] p-3">
           <p className="flex items-center gap-2 text-sm font-medium text-white">
             <Loader2 className="h-4 w-4 text-white/50" />
-            <Pill tone={toneOf(PROVISIONING_JOB_TONE, latest.status)}>{JOB_STEP_KEYS[latest.status] ? t(JOB_STEP_KEYS[latest.status]) : latest.status}</Pill>
+            <Pill tone={toneOf(PROVISIONING_JOB_TONE, latest.status)} className="min-w-0 whitespace-normal">{JOB_STEP_KEYS[latest.status] ? t(JOB_STEP_KEYS[latest.status]) : latest.status}</Pill>
           </p>
           <p className="text-xs text-white/50">
             {latest.deviceName

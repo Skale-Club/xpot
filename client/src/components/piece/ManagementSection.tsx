@@ -16,7 +16,7 @@ import { manageTagsPiecesMessages } from "@/i18n/messages/manageTagsPieces";
 import { manageTagsBatchesMessages } from "@/i18n/messages/manageTagsBatches";
 import { pieceScreenMessages } from "@/i18n/messages/pieceScreen";
 import { formatCents } from "@/pages/xpot/utils";
-import { CopyRow, useReps } from "@/pages/admin/tags/pieces-shared";
+import { CopyRow, useOrganizations, useReps } from "@/pages/admin/tags/pieces-shared";
 import { catalogOptions, useTagCatalog } from "@/pages/admin/tags/batches-shared";
 import { useTagLabels } from "@/pages/admin/tags/labels";
 import { errorText } from "@/pages/tags/lib";
@@ -57,6 +57,9 @@ export function ManagementSection() {
   const cross = pieceCrossLink(viewer, tag);
   const qrBase = `/api/xpot/admin/tags/${tag.id}`;
   const holder = tag.repId !== null ? tag.repName ?? tm("resellerNumber", { id: tag.repId }) : tm("houseStock");
+  // Platform management sees every company's pieces: "Belongs to" names the company, not just "the company".
+  const { data: organizations = [] } = useOrganizations(viewer.isAdmin);
+  const ownerName = tag.ownershipType === "company" ? organizations.find((o) => o.id === tag.organizationId)?.name : undefined;
   // "With" only for a piece somebody has in stock; a sold piece says who sold it; a lost or not yet received one, nothing.
   const holderRow = pieceHasLocation(tag)
     ? { label: tp("rowHolder"), value: holder }
@@ -93,7 +96,7 @@ export function ManagementSection() {
         />
         <Row label={tp("rowKit")} value={kit ? <span className="font-mono">{tp("locationKit", { id: kit })}</span> : tp("noKit")} />
         {holderRow ? <Row label={holderRow.label} value={holderRow.value} testId="piece-holder" /> : null}
-        <Row label={tp("rowOwnership")} value={tp(`ownership_${tag.ownershipType}` as "ownership_company")} />
+        <Row label={tp("rowOwnership")} value={ownerName ?? tp(`ownership_${tag.ownershipType}` as "ownership_company")} />
         <Row label={tp("rowCost")} value={tag.acquisitionCostCents != null ? formatCents(tag.acquisitionCostCents) : tp("noCost")} />
         {tag.internalUseNote ? <Row label={tp("rowInternalUse")} value={tag.internalUseNote} /> : null}
       </Rows>
@@ -163,19 +166,19 @@ export function ManagementSection() {
 function TransferField() {
   const { tag, notify } = usePiece();
   const tm = useT(manageTagsPiecesMessages);
-  const tg = useT(manageTagsMessages);
   const tc = useT(commonMessages);
   const tp = useT(pieceScreenMessages);
   const labels = useTagLabels();
   const write = usePieceWrite();
   const { data: reps = [], error } = useReps();
   const current = tag.repId ? String(tag.repId) : HOUSE;
-  const [choice, setChoice] = useState<string>(current);
-  const [confirming, setConfirming] = useState(false);
+  // Nothing is asked until a button is pressed: a piece in company stock is handed out, a piece with a reseller is taken back or moved.
+  const [picking, setPicking] = useState(false);
+  const [choice, setChoice] = useState("");
+  const [confirming, setConfirming] = useState<"house" | "rep" | null>(null);
   const [moveError, setMoveError] = useState<string | null>(null);
-  const options = [{ value: HOUSE, label: tm("houseStockNoReseller") }, ...reps.map((r) => ({ value: String(r.id), label: labels.repOption(r) }))];
-  if (tag.repId && !options.some((o) => o.value === current)) options.push({ value: current, label: tag.repName ?? tm("resellerNumber", { id: tag.repId }) });
-  const toHouse = choice === HOUSE;
+  const options = reps.filter((r) => String(r.id) !== current).map((r) => ({ value: String(r.id), label: labels.repOption(r) }));
+  const toHouse = confirming === "house";
   const target = toHouse ? tm("houseStockTarget") : options.find((o) => o.value === choice)?.label ?? tm("thisReseller");
   // The server's rules (repository setTagRep), said before the click.
   const blocker = tag.saleId !== null ? tm("moveBlockedSold")
@@ -202,28 +205,37 @@ function TransferField() {
   };
 
   return (
-    <div className="space-y-1.5 border-t border-white/10 pt-4">
+    <div className="space-y-2 border-t border-white/10 pt-4">
       {blocker ? (
         // No control for what cannot be done: the one sentence that says why.
         <p className="text-sm text-white/55" data-testid="admin-piece-move-blocked">{blocker}</p>
-      ) : (
-        <>
-          <label htmlFor={`piece-holder-${tag.id}`} className={EYEBROW}>{tg("colReseller")}</label>
-          <div className="flex gap-2">
-            <div className="min-w-0 flex-1">
-              <Select id={`piece-holder-${tag.id}`} value={choice} onChange={(e) => setChoice(e.target.value || HOUSE)} options={options} data-testid="admin-piece-rep" />
-            </div>
-            <Button type="button" variant="secondary" className="shrink-0" disabled={choice === current} onClick={() => setConfirming(true)} data-testid="admin-piece-rep-move">
-              {toHouse ? <Undo2 className="h-3.5 w-3.5" /> : <Truck className="h-3.5 w-3.5" />}{verb}
-            </Button>
+      ) : picking ? (
+        <div className="flex gap-2">
+          <div className="min-w-0 flex-1">
+            <Select id={`piece-holder-${tag.id}`} aria-label={tm("chooseReseller")} value={choice} onChange={(e) => setChoice(e.target.value)} placeholder={tm("chooseReseller")} options={options} data-testid="admin-piece-rep" />
           </div>
-        </>
+          <Button type="button" variant="secondary" className="shrink-0" disabled={!choice} onClick={() => setConfirming("rep")} data-testid="admin-piece-rep-move">
+            <Truck className="h-3.5 w-3.5" />{tm("move")}
+          </Button>
+          <Button type="button" variant="ghost" className="shrink-0" onClick={() => { setPicking(false); setChoice(""); }}>{tc("cancel")}</Button>
+        </div>
+      ) : (
+        <div className="flex flex-wrap gap-2">
+          {current !== HOUSE ? (
+            <Button type="button" variant="secondary" onClick={() => setConfirming("house")} data-testid="admin-piece-take-back">
+              <Undo2 className="h-3.5 w-3.5" />{tp("takeBack")}
+            </Button>
+          ) : null}
+          <Button type="button" variant="secondary" onClick={() => setPicking(true)} data-testid="admin-piece-give">
+            <Truck className="h-3.5 w-3.5" />{current === HOUSE ? tm("giveToReseller") : tm("moveToAnotherReseller")}
+          </Button>
+        </div>
       )}
       {error ? <p className="text-xs text-red-300">{tm("resellersFailed")}</p> : null}
       <ConfirmDialog
         accent="tags"
-        open={confirming}
-        onOpenChange={setConfirming}
+        open={confirming !== null}
+        onOpenChange={(open) => !open && setConfirming(null)}
         title={toHouse ? tp("takeBackTitle", { code: tag.publicCode }) : tm("moveTitle", { code: tag.publicCode, target })}
         description={consequences}
         confirmLabel={verb}
@@ -307,10 +319,13 @@ function HeavyActions() {
   const [actionError, setActionError] = useState<string | null>(null);
   const damaged = tag.stockStatus === "damaged";
   const canDamage = tag.status === "inventory" && tag.repId === null && tag.leadId === null && (tag.stockStatus === "available" || tag.stockStatus === "pending");
-  const items: Array<{ action: HeavyAction; icon: typeof Archive; enabled: boolean; reversible: boolean; note?: string }> = [];
-  if (!damaged && planTransition(tag, "retire").ok) items.push({ action: "retire", icon: Archive, enabled: true, reversible: true });
-  if (!damaged && planTransition(tag, "restore").ok) items.push({ action: "restore", icon: RotateCcw, enabled: true, reversible: true });
-  if (!damaged && tag.status !== "retired") items.push({ action: "damage", icon: Ban, enabled: canDamage, reversible: false, note: canDamage ? undefined : tp("damageHouseOnly") });
+  // What cannot be done is not offered. A broken piece that is already out with a customer or a reseller has no path here: Deactivate it.
+  const items: Array<{ action: HeavyAction; icon: typeof Archive; reversible: boolean }> = [];
+  if (!damaged && planTransition(tag, "retire").ok) items.push({ action: "retire", icon: Archive, reversible: true });
+  if (!damaged && planTransition(tag, "restore").ok) items.push({ action: "restore", icon: RotateCcw, reversible: true });
+  if (!damaged && tag.status !== "retired" && canDamage) items.push({ action: "damage", icon: Ban, reversible: false });
+  // Deactivating a piece the customer already paid for says so.
+  const describe = (action: HeavyAction) => [tm(`action_${action}_description`), action === "retire" && pieceIsSold(tag) ? tm("retireSoldWarning") : null].filter(Boolean).join(" ");
 
   const confirm = async (reason: string) => {
     if (!pending) return;
@@ -339,17 +354,16 @@ function HeavyActions() {
 
       <BottomSheet open={open} onClose={() => setOpen(false)} title={tp("moreActionsTitle", { code: tag.publicCode })}>
         <ul className="space-y-2">
-          {items.map(({ action, icon: Icon, enabled, reversible, note }) => (
+          {items.map(({ action, icon: Icon, reversible }) => (
             <li key={action}>
               <button
                 type="button"
-                disabled={!enabled}
                 onClick={() => {
                   setOpen(false);
                   setActionError(null);
                   setPending(action);
                 }}
-                className="flex w-full items-start gap-3 rounded-2xl border border-white/10 bg-white/[0.03] p-3 text-left transition-colors hover:bg-white/[0.06] disabled:cursor-not-allowed disabled:opacity-50"
+                className="flex w-full items-start gap-3 rounded-2xl border border-white/10 bg-white/[0.03] p-3 text-left transition-colors hover:bg-white/[0.06]"
                 data-testid={`piece-more-${action}`}
               >
                 <Icon className={`mt-0.5 h-5 w-5 shrink-0 ${action === "restore" ? "text-white/60" : "text-red-400"}`} />
@@ -358,8 +372,7 @@ function HeavyActions() {
                     <span className="font-semibold text-white">{tm(`action_${action}_confirm`)}</span>
                     <Pill tone={reversible ? "slate" : "red"}>{reversible ? tp("reversible") : tp("irreversible")}</Pill>
                   </span>
-                  <span className="block text-sm text-white/55">{tm(`action_${action}_description`)}</span>
-                  {note ? <span className="block text-xs text-amber-200/80">{note}</span> : null}
+                  <span className="block text-sm text-white/55">{describe(action)}</span>
                 </span>
               </button>
             </li>
@@ -372,12 +385,12 @@ function HeavyActions() {
         open={pending !== null}
         onOpenChange={(v) => !v && setPending(null)}
         title={pending ? tm(`action_${pending}_title`) : ""}
-        description={pending ? tm(`action_${pending}_description`) : null}
+        description={pending ? describe(pending) : null}
         confirmLabel={pending ? tm(`action_${pending}_confirm`) : null}
         tone={pending === "restore" ? "default" : "danger"}
         reason={pending === "damage" ? "required" : "optional"}
-        reasonPlaceholder={tm("reasonPlaceholder")}
-        confirmWord={pending === "damage" ? tag.publicCode : undefined}
+        // A reason is what a damaged piece asks for (the warning already says it cannot be undone), so it is asked in its own words and there is no second hurdle.
+        reasonPlaceholder={pending === "damage" ? tm("reasonRequiredPlaceholder") : tm("reasonPlaceholder")}
         error={actionError}
         testId="admin-piece-action-confirm"
         onConfirm={(reason) => confirm(reason)}
