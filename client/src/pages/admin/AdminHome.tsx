@@ -82,8 +82,8 @@ function TodayList({ blocks, loading, error, retry }: Today) {
   // A list that failed to load is never "Nothing waiting": say so, and keep whatever did load.
   const failure = error ? <LoadError compact what={t("todayWhat")} error={error} onRetry={retry} /> : null;
   if (!blocks.length) return failure ?? <EmptyState compact dense tone="tags" icon={CheckCircle2} title={t("todayNothing")} hint={t("todayNothingHint")} />;
-  // Only the platform's home is split in two, each with its heading; one list needs none.
-  const headings: Partial<Record<TodayBlock["id"], string>> = { platform: t("todayForPlatform"), company: t("panelCompany") };
+  // Only the platform's home is split, by the kind of work, each block with its heading; one list needs none.
+  const headings: Partial<Record<TodayBlock["id"], string>> = { people: t("todayBlockPeople"), production: t("todayBlockProduction"), pieces: t("todayBlockPieces") };
   return <div className="space-y-5">{failure}{blocks.map((block) => <section key={block.id} className="space-y-2" aria-label={headings[block.id]} data-testid={`today-block-${block.id}`}>
     {headings[block.id] ? <h2 className="text-xs font-semibold uppercase tracking-wider text-white/40">{headings[block.id]}</h2> : null}
     <ul className="divide-y divide-white/[0.06] overflow-hidden rounded-2xl border border-white/10 bg-white/[0.02]" data-testid="today-list">
