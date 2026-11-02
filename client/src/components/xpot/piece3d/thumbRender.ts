@@ -23,7 +23,7 @@ function sharedRenderer(): THREE.WebGLRenderer {
 const FRONT = new THREE.Vector3(0.28, 0.22, 1).normalize();
 const UP = new THREE.Vector3(0, 1, 0);
 /** Share of the square the piece's box may fill: the rest is margin. */
-const FILL = 0.94;
+const FILL = 0.97;
 
 function newScene(root: THREE.Object3D): THREE.Scene {
   const scene = new THREE.Scene();
@@ -82,15 +82,16 @@ async function drawTurntable(url: string, px: number, frames: number): Promise<s
   const box = new THREE.Box3().setFromObject(gltf.scene);
   const centre = box.getCenter(new THREE.Vector3());
   const directions = Array.from({ length: frames }, (_, i) => FRONT.clone().applyAxisAngle(UP, (i / frames) * Math.PI * 2));
-  // One distance for the whole lap (the widest turn), so the piece does not pulse in and out as it spins.
-  const distance = Math.max(...directions.map((direction) => fitDistance(camera, box, direction)));
+  // Each turn is fitted on its own, so the piece fills the square (a flat plate framed for its widest turn would
+  // sit at two thirds of it, front on); it never leaves the square either.
+  const distances = directions.map((direction) => fitDistance(camera, box, direction));
   const strip = document.createElement("canvas");
   strip.width = px * frames;
   strip.height = px;
   const ctx = strip.getContext("2d");
   if (!ctx) throw new Error("no 2d canvas");
   directions.forEach((direction, i) => {
-    point(camera, centre, direction, distance);
+    point(camera, centre, direction, distances[i]);
     gl.render(scene, camera);
     ctx.drawImage(gl.domElement, i * px, 0);
   });
