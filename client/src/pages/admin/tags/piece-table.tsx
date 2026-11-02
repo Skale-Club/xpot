@@ -38,8 +38,8 @@ export interface PieceSelection {
 }
 
 /** The one status pill of a piece: the same words and colour as its pop-up, its page and the reseller's app. */
-export function WherePill({ piece }: { piece: TagListItem }) {
-  return <PieceStatusPill piece={piece} />;
+export function WherePill({ piece, className }: { piece: TagListItem; className?: string }) {
+  return <PieceStatusPill piece={piece} className={className} />;
 }
 
 const SHORT_DAY: Intl.DateTimeFormatOptions = { month: "short", day: "numeric" };
@@ -116,6 +116,10 @@ export function PieceTable({
   const selectableCodes = selection ? pieces.filter(selection.canSelect).map((p) => p.publicCode) : [];
   const allOn = selectableCodes.length > 0 && selectableCodes.every((c) => selection?.selected.has(c));
   const none = <span className="text-white/30">—</span>;
+  // Many columns (Stock with its Batch): tighter cells and the model name under the code, so the table fits in any language.
+  const crowded = columns.length >= 5;
+  // A long label (Spanish: "Falló la grabación del chip") wraps in its pill instead of widening the column.
+  const wrapPill = crowded ? "max-w-[120px] !whitespace-normal !rounded-xl !leading-tight" : undefined;
   // "Company stock" is the same set the "In company stock" chip counts (shared/tagMetrics.ts house): not reserved, for internal
   // use, sold, lost or already set up for a customer. Those say what they are in the Status column.
   const heldBy = (p: TagListItem): string | null => p.repName ?? (pieceHasLocation(p) && matchesStockMetric(p, "house") ? tp("houseStock") : null);
@@ -153,7 +157,7 @@ export function PieceTable({
     chip: {
       key: "chip",
       label: tp("colChip"),
-      render: (p) => (pieceChipState(p) === "none" ? none : <PieceChipPill piece={p} />),
+      render: (p) => (pieceChipState(p) === "none" ? none : <PieceChipPill piece={p} className={wrapPill} />),
     },
     scans: {
       key: "scans",
@@ -214,9 +218,9 @@ export function PieceTable({
       key: "code",
       label: tm("colCode"),
       cellClassName: "max-w-[300px] !py-2",
-      render: (p) => <PieceCell piece={p} modelName={modelName(p)} />,
+      render: (p) => <PieceCell piece={p} modelName={modelName(p)} stacked={crowded} />,
     },
-    { key: "status", label: tm("colStatus"), render: (p) => (noCustomerText(p) ? null : <WherePill piece={p} />) },
+    { key: "status", label: tm("colStatus"), render: (p) => (noCustomerText(p) ? null : <WherePill piece={p} className={wrapPill} />) },
     ...ORDER.filter(has).map((column) => cells[column]),
   ];
 
@@ -263,7 +267,7 @@ export function PieceTable({
         selectedKey={selectedId}
         isRowSelected={selection ? (p) => selection.selected.has(p.publicCode) : undefined}
         stickyHeadTop={headTop}
-        dense={tableColumns.length >= 7}
+        dense={crowded}
       />
 
       {pageSize ? <ListPager shown={paged.shown} total={paged.total} hasMore={paged.hasMore} onMore={paged.showMore} pageSize={pageSize} auto={false} /> : null}
