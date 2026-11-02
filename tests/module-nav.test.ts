@@ -50,7 +50,7 @@ describe("one panel per profile", () => {
     expect(labelsOf(groups)).toEqual(["", "Organization"]);
     expect(itemHrefs(groups, "Organization")).toEqual([
       "/organizations/7?tab=team", "/admin/tags/pieces", "/admin/tags/kits", "/organizations/7?tab=purchases",
-      "/admin/work/leads", "/admin/work/tasks", "/admin/work/sales", "/admin/tags/overview", "/organizations/7?tab=settings",
+      "/admin/work/leads", "/admin/work/tasks", "/admin/work/sales", "/admin/tags/overview", "/admin/overview", "/organizations/7?tab=settings",
     ]);
     const all = hrefs(groups);
     for (const href of ["/admin/tags/production", "/admin/tags/provisioners", "/admin/tags/journey", "/admin/tags/shop", "/admin/reps", "/admin/products", "/admin/settings", "/admin/integrations", "/admin/branding", "/admin/health"]) expect(all).not.toContain(href);
@@ -97,12 +97,12 @@ describe("one panel per profile", () => {
       expect(labelsOf(groupsOf(profile))).not.toContain("Platform");
     }
     // Without the one organization to open, an owner reaches the organizations list as Team, and has no purchases or settings item to duplicate it.
-    expect(itemHrefs(groupsOf("owner", both, null), "Organization")).toEqual(["/organizations", "/admin/tags/pieces", "/admin/tags/kits", "/admin/work/leads", "/admin/work/tasks", "/admin/work/sales", "/admin/tags/overview"]);
+    expect(itemHrefs(groupsOf("owner", both, null), "Organization")).toEqual(["/organizations", "/admin/tags/pieces", "/admin/tags/kits", "/admin/work/leads", "/admin/work/tasks", "/admin/work/sales", "/admin/tags/overview", "/admin/overview"]);
   });
 
   it("follows the modules: no Visits items without Visits, no Tags items without Tags", () => {
     expect(itemHrefs(groupsOf("owner", ["tags"]), "Organization")).toEqual(["/organizations/7?tab=team", "/admin/tags/pieces", "/admin/tags/kits", "/organizations/7?tab=purchases", "/admin/tags/overview", "/organizations/7?tab=settings"]);
-    expect(itemHrefs(groupsOf("owner", ["visits"]), "Organization")).toEqual(["/organizations/7?tab=team", "/admin/work/leads", "/admin/work/tasks", "/admin/work/sales", "/organizations/7?tab=settings"]);
+    expect(itemHrefs(groupsOf("owner", ["visits"]), "Organization")).toEqual(["/organizations/7?tab=team", "/admin/work/leads", "/admin/work/tasks", "/admin/work/sales", "/admin/overview", "/organizations/7?tab=settings"]);
     expect(itemHrefs(groupsOf("partner", ["visits"]), "Production")).toBeUndefined();
   });
 

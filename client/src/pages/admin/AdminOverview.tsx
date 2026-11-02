@@ -8,7 +8,7 @@ import { EmptyState, ErrorState } from "@/components/xpot/EmptyState";
 import { ListSkeleton } from "@/components/xpot/ListSkeleton";
 import { KpiTile, SectionCard } from "@/components/xpot/DashboardKit";
 import { Segmented } from "@/components/xpot/Segmented";
-import { useIsSuperAdmin } from "@/components/xpot/AdminBadge";
+import { useViewerAccess } from "@/lib/adminMode";
 import { useUrlFilters } from "@/hooks/use-url-filters";
 import { useT } from "@/i18n";
 import { manageMessages } from "@/i18n/messages/manage";
@@ -37,13 +37,14 @@ export function AdminOverview() {
   const t = useT(manageMessages);
   const tw = useT(peopleWorkspaceMessages);
   const [, navigate] = useLocation();
-  const isSuperAdmin = useIsSuperAdmin();
+  // The platform's copy covers every organization; an owner's or a partner's covers their own team.
+  const { profile } = useViewerAccess();
   // ?period=today|7|30|90 (30 by default).
   const filters = useUrlFilters({ period: "30" });
   const period = TEAM_PERIODS.find((p) => p === filters.values.period) ?? "30";
   // The start is fixed per period choice (not per render), so the query key stays put.
   const since = useMemo(() => teamPeriodSince(period).toISOString(), [period]);
-  const query = useQuery<TeamActivityResponse>({ queryKey: [`/api/xpot/admin/team-activity?since=${encodeURIComponent(since)}`] });
+  const query = useQuery<TeamActivityResponse>({ queryKey: [`/api/xpot/team-results?since=${encodeURIComponent(since)}`] });
   const to = links(period);
 
   const picker = (
@@ -59,7 +60,7 @@ export function AdminOverview() {
   const head = (
     <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
       <div className="sm:order-2">{picker}</div>
-      <p className="min-w-0 flex-1 text-xs text-white/45">{tw("scopeNote")}</p>
+      <p className="min-w-0 flex-1 text-xs text-white/45">{profile === "platform" ? tw("scopeNote") : tw("scopeNoteTeam")}</p>
     </div>
   );
 
@@ -182,13 +183,6 @@ export function AdminOverview() {
         )}
       </SectionCard>
 
-      {isSuperAdmin && (
-        <p className="text-right">
-          <button type="button" onClick={() => navigate("/admin/health")} className="min-h-11 text-xs font-medium text-blue-300 hover:text-blue-200">
-            {tw("syncProblemsLink")}
-          </button>
-        </p>
-      )}
     </div>
   );
 }

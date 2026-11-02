@@ -364,6 +364,8 @@ export function panelGroups(profile: Profile | null | undefined, modules: readon
     // Without one workspace to open (someone who runs several), the organizations list is the one door.
     ...(organizationId && tags && can(profile, "viewTeamPurchases") ? [workspaceItem("purchases", names.purchases, ShoppingBag, "purchases")] : []),
     ...work, ...overview,
+    // What each person on the team did: an owner's and a partner's own copy of the platform's Team results.
+    ...(visits ? [{ href: "/admin/overview", label: l.shell("manageTeam"), icon: LayoutDashboard, match: starts("/admin/overview") }] : []),
     ...(organizationId ? [workspaceItem("settings", names.settings, Settings, "settings")] : []),
   ] };
   // A partner's production comes first: it is what the panel is for.

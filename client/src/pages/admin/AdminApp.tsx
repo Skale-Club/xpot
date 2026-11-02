@@ -53,7 +53,7 @@ export function AdminApp({ section }: { section: string }) {
   const active = SECTIONS.find((id) => id === section) ?? "home";
   if (meQuery.isLoading) return <AppLoader />;
   const profile = profileOfMe(me);
-  const allowed = !!profile && can(profile, "useManagementPanel") && (profile === "platform" || ORGANIZATION_SECTIONS.includes(active));
+  const allowed = !!profile && can(profile, "useManagementPanel") && (profile === "platform" || ORGANIZATION_SECTIONS.includes(active) || active === "overview");
   if (!me || !allowed) {
     const exit = me ? homeForModules(modules) : "/";
     return <AppBackground><div className="mx-auto w-full max-w-md px-4 pb-20 pt-6"><PageHeader backHref={exit} backLabel={me ? tm("backToApp") : tc("goToSignIn")} title={tm("accessRestricted")} /><EmptyState tone="red" icon={ShieldAlert} title={me ? tm("noAdminPermission") : tm("signInToContinue")} action={<Button variant="secondary" onClick={() => navigate(exit)}>{me ? tm("backToApp") : tc("goToSignIn")}</Button>} /></div></AppBackground>;
