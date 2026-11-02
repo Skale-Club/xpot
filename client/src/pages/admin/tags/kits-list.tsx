@@ -125,11 +125,17 @@ export function PackingListDialog({ kit, onOpenChange }: { kit: TagKitItem | nul
   );
 }
 
-/** The confirmation's text for a purchased kit: taking it back does not give the reseller's money back. */
+/**
+ * The confirmation's text for the two ways a kit is held. A purchased kit: taking it back does not give the reseller's
+ * money back. A consigned one: taking it back does not bill what is still owed for what was sold.
+ */
 function BoughtNote({ kit }: { kit: TagKitItem }) {
   const t = useT(manageTagsBatchesMessages);
-  if (kit.ownershipType !== "rep") return null;
-  return <span className="mt-2 block font-medium text-amber-200" data-testid="return-bought-note">{t("returnBoughtNote", { name: kit.repName ?? t("resellerNumber", { id: kit.repId }) })}</span>;
+  if (kit.ownershipType !== "rep" && kit.ownershipType !== "company") return null;
+  const name = kit.repName ?? t("resellerNumber", { id: kit.repId });
+  return kit.ownershipType === "rep"
+    ? <span className="mt-2 block font-medium text-amber-200" data-testid="return-bought-note">{t("returnBoughtNote", { name })}</span>
+    : <span className="mt-2 block font-medium text-amber-200" data-testid="return-consigned-note">{t("returnConsignedNote", { name })}</span>;
 }
 
 function KitPieces({ kit, go }: { kit: TagKitItem; go: (path: string) => void }) {
