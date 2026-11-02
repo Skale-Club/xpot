@@ -2,7 +2,8 @@ import { Router } from "express";
 import { z } from "zod";
 import { storage } from "../../storage.js";
 import { requireXpotUser, ensureXpotRep, isPlatformAdmin, listsEveryone, listScope, visitsInOrganizations, canAccessLead, loadAccessibleLead, type XpotActor } from "./middleware.js";
-import { teamMembers } from "../../organizations/service.js";
+import { canManageOrganizationForActor, teamMembers } from "../../organizations/service.js";
+import { countsTowardTeam } from "#shared/teamActivity.js";
 import { syncOpportunityToGhl } from "./helpers.js";
 import { xpotOpportunityCreateSchema, xpotOpportunityUpdateSchema } from "#shared/xpot.js";
 import { getGHLPipelines } from "../../integrations/ghl.js";
@@ -31,11 +32,18 @@ export function createOpportunitiesRouter() {
     // members on the organizations' companies (like their visits history). Their own are "My work".
     const scope = await listScope(req, actor as XpotActor);
     const wholeTeam = scope.kind === "organizations";
+    const wholePlatform = listsEveryone(req, actor!) && req.query.all === "true";
     let opportunities = await storage.listSalesOpportunities({
       // SEG-08: same "who sees everything" rule as leads/visits/tasks.
-      repId: wholeTeam || (listsEveryone(req, actor!) && req.query.all === "true") ? undefined : actor!.rep.id,
+      repId: wholeTeam || wholePlatform ? undefined : actor!.rep.id,
       status,
     });
+    // The platform's list is the one Team results counts: deals of the field team (living accounts that use Visits), not a
+    // Tags-only reseller's or a closed account's, so the number on the tile and the list it opens agree.
+    if (wholePlatform) {
+      const counted = new Set((await storage.listSalesReps()).filter(countsTowardTeam).map((rep) => rep.id));
+      opportunities = opportunities.filter((item) => item.repId != null && counted.has(item.repId));
+    }
 
     // One query for every lead instead of one per opportunity.
     const leads = await storage.getSalesLeadsByIds(Array.from(new Set(opportunities.map((item) => item.leadId))));
@@ -112,8 +120,13 @@ export function createOpportunitiesRouter() {
     if (!existing) {
       return res.status(404).json({ message: "Opportunity not found" });
     }
+    // The person's own deal, or the platform's; and an Organization's owner keeps their people's deals, as they keep their
+    // tasks, sales and consignments (the Deals list shows them the team's, so opening one must be able to save it).
     if (!isPlatformAdmin(actor!) && existing.repId !== actor!.rep.id) {
-      return res.status(403).json({ message: "Access denied" });
+      const lead = await storage.getSalesLead(existing.leadId);
+      if (!lead || !(await canManageOrganizationForActor(actor as XpotActor, lead.organizationId))) {
+        return res.status(403).json({ message: "Access denied" });
+      }
     }
 
     const updated = await storage.updateSalesOpportunity(opportunityId, {

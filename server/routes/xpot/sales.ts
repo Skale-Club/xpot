@@ -4,7 +4,7 @@ import { storage } from "../../storage.js";
 import { salesStorage } from "../../storage-sales.js";
 import { requireXpotUser, isPlatformAdmin, loadAccessibleLead, type XpotActor, listScope, recordFilters } from "./middleware.js";
 import { xpotSaleCreateSchema, xpotSalePaymentSchema, xpotSaleCancelSchema } from "#shared/xpot.js";
-import { allocateSaleLineTotals, computeSaleTotals, paymentStatusFor } from "#shared/pricing.js";
+import { allocateSaleLineTotals, chosenPaymentStatus, computeSaleTotals, PAYMENT_STATUS_REQUIRED_MESSAGE, paymentStatusFor } from "#shared/pricing.js";
 import { syncSaleToXphere } from "./xphere-sync.js";
 import { cancelSale } from "../../tags/sales.js";
 import { canManageOrganizationForActor, canViewOrganizationForActor } from "../../organizations/service.js";
@@ -121,12 +121,14 @@ export function createSalesRouter() {
 
     const totals = computeSaleTotals(lines, input.discountCents ?? 0);
     const allocations = allocateSaleLineTotals(lines, input.discountCents ?? 0);
-    const paidCents = input.paymentStatus === "paid"
+    // Nothing is assumed paid: the seller says (a total of zero needs no choice).
+    const paymentStatus = chosenPaymentStatus(totals.totalCents, input.paymentStatus);
+    if (!paymentStatus) return res.status(400).json({ code: "payment_status_required", message: PAYMENT_STATUS_REQUIRED_MESSAGE });
+    const paidCents = paymentStatus === "paid"
       ? totals.totalCents
-      : input.paymentStatus === "unpaid"
+      : paymentStatus === "unpaid"
         ? 0
         : Math.min(input.paidCents ?? totals.totalCents, totals.totalCents);
-    const paymentStatus = input.paymentStatus ?? paymentStatusFor(paidCents, totals.totalCents);
     const soldAt = input.soldAt ? new Date(input.soldAt) : new Date();
 
     const sale = await salesStorage.createDirectSale(

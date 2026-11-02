@@ -20,6 +20,8 @@ export const tagSaleCreateSchema = z.object({
   visitId: positiveId.nullable().optional(),
   lines: z.array(tagSaleLineSchema).min(1).max(50),
   discountCents: cents.optional(),
+  // Required by the server whenever the total is above zero (createTagSale, chosenPaymentStatus): lines priced from the
+  // catalog have no total until then, so it answers 400 `payment_status_required` instead of defaulting to paid.
   paymentStatus: z.enum(["unpaid", "partial", "paid"]).optional(),
   paymentMethod: z.enum(["cash", "card", "pix", "transfer", "invoice", "other"]).nullable().optional(),
   paidCents: cents.optional(),

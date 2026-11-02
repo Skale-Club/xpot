@@ -32,6 +32,7 @@ import { fileSrc, shrinkImageForUpload } from "@/lib/files";
 import { displayPhone, formatVisitWhen, phoneHref } from "../../utils";
 import { companyStage } from "../../visitRules";
 import { useLeadAccess } from "../../leadAccess";
+import { useLeadDeletionText } from "../../leadDeletionText";
 import { useLeadSalesSnapshot } from "../../hooks/useSalesModule";
 import { LeadStatePill } from "./LeadStatePill";
 
@@ -143,6 +144,8 @@ export function LeadDetailPane({ lead, pieces, visits, onClose, backLabel, onDel
   const routeUrl = buildRouteUrl(location);
   // A rep who only holds a piece here may edit it but not delete it or change its stage.
   const access = useLeadAccess(lead);
+  // A sale, a consignment or a piece keeps the company: no Delete to press, only the reason.
+  const keptBecause = useLeadDeletionText().blocked(lead.deletion);
   const address = [location?.addressLine1, location?.city, location?.state].filter(Boolean).join(", ");
   // The tiles read the same snapshot as the "Sales and stock" card below (one
   // cached query). They used the list's per-lead totals, which the company
@@ -267,7 +270,9 @@ export function LeadDetailPane({ lead, pieces, visits, onClose, backLabel, onDel
             <UserRoundCheck aria-hidden="true" />{t("promote")}
           </Button>
         ) : <span />}
-        {access.owner ? (
+        {access.owner && keptBecause ? (
+          <p className="max-w-md text-xs text-white/45" data-testid="lead-delete-kept">{keptBecause}</p>
+        ) : access.owner ? (
           <Button type="button" variant="ghost" size="sm" onClick={onDelete} className="text-red-300/70 hover:bg-red-500/[0.08] hover:text-red-300"><Trash2 aria-hidden="true" />{t("deleteCompany")}</Button>
         ) : (
           <p className="text-xs text-white/40" data-testid="lead-owner-only-note">{t("ownerOnlyNote")}</p>

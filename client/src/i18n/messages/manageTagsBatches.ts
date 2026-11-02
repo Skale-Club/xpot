@@ -7,6 +7,8 @@ const en = {
   // Shared
   houseStock: "Company stock",
   withResellers: "With resellers",
+  withCustomer: "With a customer",
+  withCustomerHint: "Set up for a customer, not sold yet",
   live: "Live",
   sold: "Sold",
   nfcVerified: "NFC verified",
@@ -158,6 +160,8 @@ export const manageTagsBatchesMessages: Dictionary<typeof en> = {
     // Shared
     houseStock: "Estoque da empresa",
     withResellers: "Com revendedores",
+    withCustomer: "Com um cliente",
+    withCustomerHint: "Preparadas para um cliente, ainda não vendidas",
     live: "No ar",
     sold: "Vendidas",
     nfcVerified: "NFC verificado",
@@ -306,6 +310,8 @@ export const manageTagsBatchesMessages: Dictionary<typeof en> = {
     // Shared
     houseStock: "Stock de la empresa",
     withResellers: "Con revendedores",
+    withCustomer: "Con un cliente",
+    withCustomerHint: "Preparadas para un cliente, aún sin vender",
     live: "Activas",
     sold: "Vendidas",
     nfcVerified: "NFC verificado",

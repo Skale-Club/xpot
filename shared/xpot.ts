@@ -215,6 +215,8 @@ export const xpotSaleCreateSchema = z.object({
   visitId: positiveInt.nullable().optional(),
   items: z.array(xpotSaleItemInputSchema).min(1).max(50),
   discountCents: cents.optional(),
+  // Required by the server whenever the total is above zero (chosenPaymentStatus in pricing.ts): the total is only known
+  // after the lines are priced, so it answers 400 `payment_status_required` there instead of defaulting to paid.
   paymentStatus: z.enum(["unpaid", "partial", "paid"]).optional(),
   paymentMethod: xpotPaymentMethodSchema.nullable().optional(),
   paidCents: cents.optional(),
@@ -250,6 +252,8 @@ export const xpotConsignmentSettleSchema = z.object({
   restockQuantity: z.number().int().nonnegative().optional(),
   // Override the agreed price for this settlement only.
   unitPriceCents: cents.optional(),
+  // Required whenever the count bills something (runSettlement): what sold is only known after the count, so a count that
+  // sells nothing sends none, and one that sells without it is a 400 `payment_status_required`.
   paymentStatus: z.enum(["unpaid", "partial", "paid"]).optional(),
   paymentMethod: xpotPaymentMethodSchema.nullable().optional(),
   paidCents: cents.optional(),

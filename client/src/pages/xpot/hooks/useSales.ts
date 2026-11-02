@@ -5,6 +5,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useXpotShared } from "./useXpotShared";
 import { useXpotQueries } from "./useXpotQueries";
 import { useVisits } from "./useVisits";
+import { useOpportunitiesQuery } from "./useOpportunities";
 import type { SalesOpportunity, SalesTask } from "../types";
 import { useT } from "@/i18n";
 import { salesMessages } from "@/i18n/messages/sales";
@@ -18,7 +19,7 @@ export function useSales() {
 
   const [opportunityForm, setOpportunityForm] = useState({ leadId: "", title: "", value: "", pipelineKey: "", stageKey: "" });
 
-  const opportunitiesQuery = useQuery<SalesOpportunity[]>({ queryKey: ["/api/xpot/opportunities"], enabled: xpotMeQuery.isSuccess });
+  const opportunitiesQuery = useOpportunitiesQuery<SalesOpportunity>();
   const tasksQuery = useQuery<SalesTask[]>({ queryKey: ["/api/xpot/tasks"], enabled: xpotMeQuery.isSuccess });
 
   const createOpportunityMutation = useMutation({

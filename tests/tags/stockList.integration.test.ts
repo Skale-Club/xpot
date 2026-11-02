@@ -73,7 +73,7 @@ test.skipIf(!enabled)("stock list: hidePending, counts that match their lists, t
     // A chip's count is what its list shows.
     const overview = await api("GET", "/api/xpot/admin/tags/overview");
     assert.equal(overview.status, 200, overview.text);
-    for (const [chip, metric] of [["notReceived", "notReceived"], ["house", "house"], ["withResellers", "withResellers"], ["sold", "sold"], ["live", "live"]] as const) {
+    for (const [chip, metric] of [["notReceived", "notReceived"], ["house", "house"], ["withCustomer", "withCustomer"], ["withResellers", "withResellers"], ["sold", "sold"], ["live", "live"]] as const) {
       const list = await api("GET", `/api/xpot/tags?limit=100&metric=${metric}`);
       assert.equal(list.json.length, overview.json.funnel[chip], `${chip}: the chip and its list count the same pieces`);
     }

@@ -17,6 +17,7 @@ import { SheetDialog } from "./components/sales/ui";
 import { apiRequest } from "@/lib/queryClient";
 import { useLeads } from "./hooks/useLeads";
 import { useSales } from "./hooks/useSales";
+import { useOpportunitiesQuery } from "./hooks/useOpportunities";
 import { useVisits } from "./hooks/useVisits";
 import { useXpotQueries } from "./hooks/useXpotQueries";
 import { formatCents } from "./utils";
@@ -186,7 +187,7 @@ export function XpotSales() {
     navigate(`${salesPath(which, itemId)}${currentSearch()}`, { replace: id != null });
   // The Deals tab is for deals: with GoHighLevel off and none saved here it would be an empty tab.
   const { xpotMeQuery } = useXpotQueries();
-  const dealsQuery = useQuery<unknown[]>({ queryKey: ["/api/xpot/opportunities"], enabled: xpotMeQuery.isSuccess });
+  const dealsQuery = useOpportunitiesQuery<unknown>();
   const pipelinesQuery = useQuery<{ pipelines: GHLPipeline[]; _reason?: string }>({
     queryKey: ["/api/xpot/opportunities/pipelines"],
     queryFn: async () => (await apiRequest("GET", "/api/xpot/opportunities/pipelines")).json(),

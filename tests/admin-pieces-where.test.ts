@@ -7,12 +7,13 @@ import { matchesStockMetric, TAG_STOCK_METRIC_NAMES, type StockMetricPiece } fro
 import { houseFilterQuery, isWhere, pieceWhere, WHERE_CHIPS, WHERE_OPTIONS, whereQuery, whereSelection } from "../client/src/pages/admin/tags/where-model";
 
 const url = (where: string, status = "", stock = "") => ({ where, status, stock });
-const piece = (p: Partial<StockMetricPiece>): StockMetricPiece => ({ repId: null, status: "inventory", stockStatus: "available", saleId: null, ...p });
+const piece = (p: Partial<StockMetricPiece>): StockMetricPiece => ({ repId: null, status: "inventory", stockStatus: "available", saleId: null, leadId: null, ...p });
 
 describe("whereQuery", () => {
   it("turns each option into the params the list endpoint takes", () => {
     expect(Object.fromEntries(WHERE_OPTIONS.map((w) => [w, whereQuery(url(w))]))).toEqual({
       house: { metric: "house" },
+      withCustomer: { metric: "withCustomer" },
       withResellers: { metric: "withResellers" },
       sold: { metric: "sold" },
       live: { metric: "live" },
@@ -88,6 +89,8 @@ describe("pieceWhere", () => {
   it("says where a piece is, and whether it is live", () => {
     expect(pieceWhere(piece({}))).toEqual({ place: "house", live: false });
     expect(pieceWhere(piece({ status: "active" }))).toEqual({ place: "house", live: true });
+    expect(pieceWhere(piece({ status: "assigned", leadId: 8 }))).toEqual({ place: "withCustomer", live: false });
+    expect(pieceWhere(piece({ status: "active", leadId: 8 }))).toEqual({ place: "withCustomer", live: true });
     expect(pieceWhere(piece({ repId: 4 }))).toEqual({ place: "withResellers", live: false });
     expect(pieceWhere(piece({ repId: 4, status: "assigned" }))).toEqual({ place: "withResellers", live: false });
     expect(pieceWhere(piece({ stockStatus: "pending" }))).toEqual({ place: "notReceived", live: false });
@@ -108,6 +111,7 @@ describe("pieceWhere", () => {
     const pieces = [
       piece({}),
       piece({ status: "active" }),
+      piece({ status: "assigned", leadId: 5 }),
       piece({ repId: 1 }),
       piece({ repId: 1, status: "active" }),
       piece({ stockStatus: "pending" }),
@@ -116,7 +120,7 @@ describe("pieceWhere", () => {
       piece({ saleId: 3, status: "active", repId: 1 }),
       piece({ status: "retired" }),
     ];
-    for (const metric of ["house", "withResellers", "notReceived", "damaged"] as const) {
+    for (const metric of ["house", "withCustomer", "withResellers", "notReceived", "damaged"] as const) {
       for (const p of pieces.filter((x) => matchesStockMetric(x, metric))) expect(pieceWhere(p).place).toBe(metric);
     }
     for (const p of pieces.filter((x) => matchesStockMetric(x, "sold"))) expect(pieceWhere(p).place).toBe("sold");

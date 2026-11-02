@@ -7,11 +7,14 @@ import { TAG_STATUSES, TAG_STOCK_STATUSES, type TagStatus, type TagStockStatus }
 import { matchesStockMetric, type StockMetricPiece, type TagStockMetric } from "@shared/tagMetrics";
 
 /** The filter's options, in the order the select and the chips list them. */
-export const WHERE_OPTIONS = ["house", "withResellers", "sold", "live", "notReceived", "damaged", "lost", "disabled", "retired"] as const;
+export const WHERE_OPTIONS = ["house", "withCustomer", "withResellers", "sold", "notReceived", "live", "damaged", "lost", "disabled", "retired"] as const;
 export type Where = (typeof WHERE_OPTIONS)[number];
 
-/** The options that are a shared stock number the overview endpoint totals: they get a chip with the real count. */
-export const WHERE_CHIPS = ["house", "withResellers", "sold", "live", "notReceived"] as const satisfies readonly Where[];
+/**
+ * The options that are a shared stock number the overview endpoint totals: they get a chip with the real count. The chips before
+ * `live` are places and add up to the pieces counted; `live` is last because it cuts across them (a set-up piece is also live).
+ */
+export const WHERE_CHIPS = ["house", "withCustomer", "withResellers", "sold", "notReceived", "live"] as const satisfies readonly Where[];
 export type WhereChip = (typeof WHERE_CHIPS)[number];
 
 /** The list endpoint's (GET /api/xpot/tags, listQuerySchema) filter params a bucket turns into. */
@@ -23,6 +26,7 @@ export interface WhereQuery {
 
 const WHERE_QUERY: Record<Where, WhereQuery> = {
   house: { metric: "house" },
+  withCustomer: { metric: "withCustomer" },
   withResellers: { metric: "withResellers" },
   sold: { metric: "sold" },
   live: { metric: "live" },
@@ -87,7 +91,7 @@ export function whereSelection({ where, status, stock }: WhereParams): string {
 }
 
 /** Where a piece is: its place, and whether its link is live (QR and NFC redirect). */
-export type PlaceId = "house" | "withResellers" | "sold" | "notReceived" | "damaged" | "lost" | "disabled" | "retired" | "reserved" | "internalUse";
+export type PlaceId = "house" | "withCustomer" | "withResellers" | "sold" | "notReceived" | "damaged" | "lost" | "disabled" | "retired" | "reserved" | "internalUse";
 export interface PieceWhere {
   place: PlaceId;
   live: boolean;
@@ -107,6 +111,7 @@ export function pieceWhere(piece: StockMetricPiece): PieceWhere {
     if (matchesStockMetric(piece, "notReceived")) return "notReceived";
     if (matchesStockMetric(piece, "sold") || piece.stockStatus === "sold") return "sold";
     if (matchesStockMetric(piece, "withResellers")) return "withResellers";
+    if (matchesStockMetric(piece, "withCustomer")) return "withCustomer";
     if (piece.stockStatus === "reserved") return "reserved";
     if (piece.stockStatus === "internal_use") return "internalUse";
     return "house";

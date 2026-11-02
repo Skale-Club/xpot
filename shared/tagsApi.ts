@@ -200,8 +200,8 @@ export interface TagOverview {
   counts: Record<"total" | "inventory" | "assigned" | "active" | "disabled" | "retired" | "damaged", number>;
   /** Unsold pieces still in house stock vs. out with resellers. */
   stock: { house: number; withResellers: number };
-  /** The stock funnel, one shared stock number each (shared/tagMetrics.ts): not received → house → resellers → sold → live. */
-  funnel: { notReceived: number; house: number; withResellers: number; sold: number; live: number };
+  /** The stock funnel, one shared stock number each (shared/tagMetrics.ts): not received, house, with a customer, with resellers, sold. `live` cuts across the others (a set-up piece is also live). */
+  funnel: { notReceived: number; house: number; withCustomer: number; withResellers: number; sold: number; live: number };
   /** "Needs action" counts (shared/tagQueues.ts). */
   queues: TagQueueCounts;
   interactions: { today: number; last7: number; last30: number };

@@ -67,6 +67,7 @@ const storage = {
   listSalesLeadLocationsBatch: vi.fn(async () => []),
   listSalesLeadContacts: vi.fn(async (leadId: number) => store.contacts.filter((c) => c.leadId === leadId)),
   createSalesLeadContact: vi.fn(async (input: any) => ({ id: 1, ...input })),
+  leadDeletionCounts: vi.fn(async () => new Map()),
   listSalesTasks: vi.fn(async (filters: any = {}) =>
     store.tasks.filter((t) => (filters.repId ? t.repId === filters.repId : true)),
   ),
@@ -97,7 +98,7 @@ const storage = {
   listSalesVisitNotesBatch: vi.fn(async () => []),
 };
 
-vi.mock("../server/storage.js", () => ({ storage }));
+vi.mock("../server/storage.js", () => ({ storage, LeadDeleteBlockedError: class extends Error {} }));
 vi.mock("../server/routes/xpot/google-place-profile.js", () => ({ fetchGooglePlaceProfile }));
 vi.mock("../server/organizations/service.js", () => ({
   activeOrganizationIds: vi.fn(async () => [1]),

@@ -500,7 +500,7 @@ export function registerTagRoutes(app: Express) {
       const organizationIds = actor.isManager ? undefined : actor.organizationIds ?? [];
       if (own) return res.json(await repo.listTags({ ...rest, repId: actor.repId, house: undefined, organizationIds }));
       // House stock never adds up across organizations: unnarrowed, it means the company's.
-      const housePieces = rest.house || rest.metric === "house" || rest.metric === "handOut";
+      const housePieces = rest.house || rest.metric === "house" || rest.metric === "withCustomer" || rest.metric === "handOut";
       res.json(await repo.listTags({ ...rest, organizationId: organizationId ?? (housePieces ? await companyOrganizationId() : undefined) }));
     } catch (err) {
       fail(res, err, "Failed to load tags");

@@ -48,6 +48,8 @@ import { selectLeadForDetail } from "./lead-detail-selection";
 import { companyStage, followUpDueTime, isWorkedCompany, needsFollowUp } from "./visitRules";
 import { Segmented } from "@/components/xpot/Segmented";
 import { leadAccess } from "./leadAccess";
+import { EMPTY_LEAD_DELETION, leadDeletionVerdict } from "@shared/leadDeletion";
+import { useLeadDeletionText } from "./leadDeletionText";
 import { isFinishedVisitStatus } from "@shared/visit-status";
 
 
@@ -134,7 +136,7 @@ function LeadCard({ lead, onOpen, onMore, pieces, onOpenPieces, lastVisit, worke
   );
 }
 
-function LeadActionSheet({ lead, onClose, onSell, onCheckIn, onDelete, canDelete }: {
+function LeadActionSheet({ lead, onClose, onSell, onCheckIn, onDelete, canDelete, keptBecause }: {
   lead: FullSalesLead | null;
   onClose: () => void;
   onSell: () => void;
@@ -142,6 +144,8 @@ function LeadActionSheet({ lead, onClose, onSell, onCheckIn, onDelete, canDelete
   onDelete: () => void;
   /** Only the owner, a Rep Admin of its organization or a manager may delete it (leadAccess). */
   canDelete: boolean;
+  /** Why an owner cannot delete it (a sale, a consignment or a piece keeps it): one quiet sentence instead of the action. */
+  keptBecause?: string | null;
 }) {
   const t = useT(leadsMessages);
   const items = [
@@ -164,6 +168,7 @@ function LeadActionSheet({ lead, onClose, onSell, onCheckIn, onDelete, canDelete
             {label}
           </button>
         ))}
+        {keptBecause ? <p className="px-1 pt-2 text-xs text-white/45" data-testid="lead-action-kept">{keptBecause}</p> : null}
       </div>
     </BottomSheet>
   );
@@ -197,6 +202,7 @@ function matchesLeadFilter(lead: FullSalesLead, filter: LeadFilter, lastOutcome?
 export function XpotLeads() {
   const t = useT(leadsMessages);
   const tc = useT(commonMessages);
+  const deletionText = useLeadDeletionText();
   const { setLocation, me } = useXpotQueries();
   // The panel is for looking at the portfolio, My work is for working it: the first tab is named for that.
   const inPanel = useRouter().base.startsWith("/admin");
@@ -204,7 +210,8 @@ export function XpotLeads() {
   const checkIn = (lead: FullSalesLead) => setLocation(`/route/check-in?leadId=${lead.id}`);
   const backToVisit = () => setLocation("/route/check-in");
   // A rep who only holds a piece at a company may not delete it (the server refuses).
-  const canDelete = useCallback((lead: FullSalesLead) => leadAccess(me, lead).owner, [me]);
+  // A company with a sale, a consignment or a piece is kept (the server refuses it too): Delete is not offered, the detail says why.
+  const canDelete = useCallback((lead: FullSalesLead) => leadAccess(me, lead).owner && leadDeletionVerdict(lead.deletion ?? EMPTY_LEAD_DELETION).canDelete, [me]);
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const isDesktop = useIsDesktop();
@@ -239,6 +246,7 @@ export function XpotLeads() {
     contacts: FullSalesLead["contacts"];
     visits: EnrichedSalesVisit[];
     opportunities: Array<{ status: string }>;
+    deletion?: FullSalesLead["deletion"];
   }>({
     queryKey: ["/api/xpot/leads", routeId],
     enabled: routeId !== null,
@@ -310,6 +318,7 @@ export function XpotLeads() {
         ...leadDetailQuery.data.lead,
         locations: leadDetailQuery.data.locations,
         contacts: leadDetailQuery.data.contacts,
+        deletion: leadDetailQuery.data.deletion,
         openOpportunities: leadDetailQuery.data.opportunities.filter((opportunity) => opportunity.status === "open").length,
       } as FullSalesLead
     : selectLeadForDetail(allLeads, routeId);
@@ -562,6 +571,7 @@ export function XpotLeads() {
         onCheckIn={() => actionLead && setLocation(`/route/check-in?leadId=${actionLead.id}`)}
         onDelete={() => actionLead && setLeadPendingDelete(actionLead)}
         canDelete={actionLead ? canDelete(actionLead) : false}
+        keptBecause={actionLead && leadAccess(me, actionLead).owner ? deletionText.blocked(actionLead.deletion) : null}
       />
 
       {/* Sales & consignment for one company, with no visit attached. */}
@@ -583,7 +593,7 @@ export function XpotLeads() {
         onOpenChange={(open) => { if (!open) setLeadPendingDelete(null); }}
         tone="danger"
         title={t("deleteLeadTitle")}
-        description={leadPendingDelete ? t("deleteNamed", { name: leadPendingDelete.name }) : t("deleteGeneric")}
+        description={leadPendingDelete ? deletionText.confirm(leadPendingDelete.name, leadPendingDelete.deletion) : t("deleteGeneric")}
         confirmLabel={t("delete")}
         cancelLabel={t("keep")}
         onConfirm={handleDeleteLead}

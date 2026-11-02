@@ -20,11 +20,15 @@ export interface StockMetricRule {
   notRetired?: boolean;
   /** Has an active financial sale (true) or none (false). */
   sold?: boolean;
+  /** Has a customer (tags.lead_id) or none. */
+  customer?: boolean;
 }
 
 export const TAG_STOCK_METRICS = {
-  /** Company (house) stock: physically in stock, no rep, not retired, unsold. Set-up or live pieces count too. */
-  house: { holder: "house", stockStatus: "available", notRetired: true, sold: false },
+  /** Company (house) stock: physically in stock, no rep, not retired, unsold, and no customer yet. A piece set up for a customer is theirs. */
+  house: { holder: "house", stockStatus: "available", notRetired: true, sold: false, customer: false },
+  /** Held by the company, in stock and unsold, but already set up for a customer: no longer company stock. house + withCustomer is what house used to be. */
+  withCustomer: { holder: "house", stockStatus: "available", notRetired: true, sold: false, customer: true },
   /** In reps' hands and unsold: physically in stock with a rep, not retired, no financial sale. */
   withResellers: { holder: "rep", stockStatus: "available", notRetired: true, sold: false },
   /** A recorded financial sale. */
@@ -49,6 +53,8 @@ export interface StockMetricPiece {
   status: string;
   stockStatus: string;
   saleId: number | null;
+  /** The customer (TagListItem.leadId). */
+  leadId: number | null;
 }
 
 export function matchesStockRule(piece: StockMetricPiece, rule: StockMetricRule): boolean {
@@ -58,6 +64,7 @@ export function matchesStockRule(piece: StockMetricPiece, rule: StockMetricRule)
   if (rule.status && piece.status !== rule.status) return false;
   if (rule.notRetired && piece.status === "retired") return false;
   if (rule.sold !== undefined && (piece.saleId !== null) !== rule.sold) return false;
+  if (rule.customer !== undefined && (piece.leadId !== null) !== rule.customer) return false;
   return true;
 }
 

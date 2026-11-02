@@ -132,7 +132,7 @@ test.skipIf(!enabled)("piece-only access to a company: read and edit, not own", 
     assert.equal((await api("PATCH", `/api/xpot/leads/${inside.id}`, "pa-owen", { status: "customer" })).status, 200);
 
     // A sale or consigned stock at a company outside her Organizations: refused, with a reason.
-    const saleOutside = await api("POST", "/api/xpot/sales", "pa-vera", { leadId: outside.id, items: [{ description: "Website", quantity: 1, unitPriceCents: 10000 }] });
+    const saleOutside = await api("POST", "/api/xpot/sales", "pa-vera", { leadId: outside.id, items: [{ description: "Website", quantity: 1, unitPriceCents: 10000 }], paymentStatus: "paid" });
     assert.equal(saleOutside.status, 403, saleOutside.text);
     assert.equal(saleOutside.json.code, "lead_other_organization");
     const stockOutside = await api("POST", "/api/xpot/consignments/deposit", "pa-vera", { leadId: outside.id, productId: product.id, quantity: 2 });
@@ -140,7 +140,7 @@ test.skipIf(!enabled)("piece-only access to a company: read and edit, not own", 
     assert.equal(stockOutside.json.code, "lead_other_organization");
 
     // Inside her team: recorded, and she sees it afterwards.
-    const saleInside = await api("POST", "/api/xpot/sales", "pa-vera", { leadId: inside.id, items: [{ description: "Website", quantity: 1, unitPriceCents: 10000 }] });
+    const saleInside = await api("POST", "/api/xpot/sales", "pa-vera", { leadId: inside.id, items: [{ description: "Website", quantity: 1, unitPriceCents: 10000 }], paymentStatus: "paid" });
     assert.equal(saleInside.status, 201, saleInside.text);
     const saleId = saleInside.json.sale?.id ?? saleInside.json.id;
     assert.equal((await api("GET", `/api/xpot/sales/${saleId}`, "pa-vera")).status, 200);

@@ -2214,10 +2214,11 @@ export async function getOverview(now: Date = new Date(), timezoneOffsetMinutes 
   `);
   // The stock numbers every Tags screen shares (shared/tagMetrics.ts).
   const [stockRow] = await rows<{
-    house: number; with_resellers: number; damaged: number; not_received: number; sold: number; live: number;
+    house: number; with_customer: number; with_resellers: number; damaged: number; not_received: number; sold: number; live: number;
     chip_pending: number; scanned_not_live: number; no_product: number;
   }>(sql`
     SELECT count(t.id) FILTER (WHERE ${stockMetricSql("house")} AND ${inHouseScope})::int AS house,
+           count(t.id) FILTER (WHERE ${stockMetricSql("withCustomer")} AND ${inHouseScope})::int AS with_customer,
            ${countMetricSql("withResellers")} AS with_resellers,
            ${countMetricSql("damaged")} AS damaged,
            ${countMetricSql("notReceived")} AS not_received,
@@ -2241,6 +2242,7 @@ export async function getOverview(now: Date = new Date(), timezoneOffsetMinutes 
   const funnel: TagOverview["funnel"] = {
     notReceived: Number(stockRow?.not_received ?? 0),
     house: stock.house,
+    withCustomer: Number(stockRow?.with_customer ?? 0),
     withResellers: stock.withResellers,
     sold: Number(stockRow?.sold ?? 0),
     live: Number(stockRow?.live ?? 0),

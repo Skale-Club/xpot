@@ -5,6 +5,7 @@
 import { describe, expect, it } from "vitest";
 import {
   allocateSaleLineTotals,
+  chosenPaymentStatus,
   computeSaleTotals,
   computeSettlement,
   lineProfitCents,
@@ -12,6 +13,7 @@ import {
   paymentStatusFor,
   resolveUnitPriceCents,
   unitMarginCents,
+  voicePaymentStatus,
 } from "../shared/pricing.js";
 
 describe("resolveUnitPriceCents", () => {
@@ -116,6 +118,38 @@ describe("paymentStatusFor", () => {
     expect(paymentStatusFor(1000, 1000)).toBe("paid");
     expect(paymentStatusFor(1200, 1000)).toBe("paid");
     expect(paymentStatusFor(0, 0)).toBe("paid");
+  });
+});
+
+describe("chosenPaymentStatus: nothing is assumed paid", () => {
+  // [total, what the seller sent, what is recorded (null: the server answers 400 payment_status_required)]
+  const CASES: Array<[number, "paid" | "partial" | "unpaid" | undefined, "paid" | "partial" | "unpaid" | null]> = [
+    [1000, undefined, null],
+    [1, undefined, null],
+    [1000, "paid", "paid"],
+    [1000, "partial", "partial"],
+    [1000, "unpaid", "unpaid"],
+    [0, undefined, "paid"],
+    [0, "unpaid", "unpaid"],
+    [0, "paid", "paid"],
+  ];
+  for (const [total, sent, recorded] of CASES) {
+    it(`total ${total}, sent ${sent ?? "nothing"} -> ${recorded ?? "refused"}`, () => {
+      expect(chosenPaymentStatus(total, sent)).toBe(recorded);
+    });
+  }
+
+  it("treats an explicit null like nothing", () => {
+    expect(chosenPaymentStatus(500, null)).toBeNull();
+  });
+});
+
+describe("voicePaymentStatus", () => {
+  it("is paid only when the note says paid", () => {
+    expect(voicePaymentStatus(true)).toBe("paid");
+    expect(voicePaymentStatus(false)).toBe("unpaid");
+    expect(voicePaymentStatus(null)).toBe("unpaid");
+    expect(voicePaymentStatus(undefined)).toBe("unpaid");
   });
 });
 
