@@ -7,6 +7,7 @@ import {
   Building2,
   MapPinned,
   Timer,
+  Star,
   Phone,
   Globe,
   Mail,
@@ -125,11 +126,12 @@ function EditCompanyButton({ onClick, className = "" }: { onClick: () => void; c
   );
 }
 
-function BriefMetric({ label, value, google }: { label: string; value: string; google?: boolean }) {
+function BriefMetric({ label, value, icon }: { label: string; value: string; icon?: "google" | "star" }) {
   return (
     <div className="min-w-0 px-1.5 py-2.5 text-center">
       <div className="flex min-h-5 items-center justify-center gap-1 text-base font-extrabold tabular-nums text-white">
-        {google && <GoogleLogo className="h-3.5 w-3.5 shrink-0" />}
+        {icon === "google" && <GoogleLogo className="h-3.5 w-3.5 shrink-0" />}
+        {icon === "star" && <Star className="h-3.5 w-3.5 shrink-0 fill-amber-400 text-amber-400" aria-hidden="true" />}
         <span className="truncate">{value}</span>
       </div>
       <div className="mt-0.5 text-[10px] font-semibold uppercase leading-tight tracking-[0.08em] text-white/40">{label}</div>
@@ -172,8 +174,8 @@ function ActiveLeadInfo({ lead, profile, profileLoading }: { lead: VisitLead; pr
       </div>
 
       <div className="mt-3 grid grid-cols-4 divide-x divide-white/[0.07] rounded-xl bg-black/15" data-testid="visit-brief-metrics">
-        <BriefMetric label={t("briefRating")} value={rating} google />
-        <BriefMetric label={t("briefReviews")} value={reviews} google />
+        <BriefMetric label={t("briefRating")} value={rating} icon="star" />
+        <BriefMetric label={t("briefReviews")} value={reviews} icon="google" />
         <BriefMetric label={t("briefOnShelf")} value={shelf} />
         <BriefMetric label={t("briefOpenDeals")} value={deals} />
       </div>
