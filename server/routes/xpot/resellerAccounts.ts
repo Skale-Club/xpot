@@ -1,4 +1,4 @@
-import { and, eq, inArray, isNull, sql } from "drizzle-orm";
+import { and, eq, inArray, isNotNull, isNull, or, sql } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "../../db.js";
 import { authAccessRequests, organizationMemberships, organizations, salesReps, users, type SalesRep } from "#shared/schema.js";
@@ -220,14 +220,20 @@ export async function listTagPeople(organizationIds: readonly number[] | null) {
 
 /**
  * Where each person works, for People's list: the organizations they are an active member of, with their role
- * in each. A person's own one-person workspace (slug rep-<id>) is left out: it is not a company to name.
+ * in each. A blocked person keeps theirs (their memberships are suspended because of the block, and the list, the
+ * header and the organization's team all say where they work and that they are blocked). A person's own one-person
+ * workspace (slug rep-<id>) is left out: it is not a company to name.
  */
 async function teamsByRep() {
   const rows = await db
     .select({ repId: organizationMemberships.repId, id: organizations.id, name: organizations.name, slug: organizations.slug, role: organizationMemberships.role })
     .from(organizationMemberships)
     .innerJoin(organizations, eq(organizations.id, organizationMemberships.organizationId))
-    .where(and(eq(organizationMemberships.isActive, true), isNull(organizationMemberships.blockedAt), eq(organizations.isActive, true)))
+    .innerJoin(salesReps, eq(salesReps.id, organizationMemberships.repId))
+    .where(and(
+      or(and(eq(organizationMemberships.isActive, true), isNull(organizationMemberships.blockedAt)), isNotNull(salesReps.blockedAt)),
+      eq(organizations.isActive, true),
+    ))
     .orderBy(organizations.name);
   const byRep = new Map<number, { id: number; name: string; role: "admin" | "member" }[]>();
   for (const row of rows) {

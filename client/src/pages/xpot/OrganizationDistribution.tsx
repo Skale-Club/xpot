@@ -4,6 +4,7 @@ import { Link2Off } from "lucide-react";
 import type { Distribution } from "@shared/organizations";
 import { COMPANY_ORGANIZATION_SLUG, DISTRIBUTIONS } from "@shared/organizations";
 import { Button } from "@/components/ui/button";
+import { ConfirmDialog } from "@/components/xpot/ConfirmDialog";
 import { Select } from "@/components/xpot/Field";
 import { GLASS_SUBTLE_CLASS } from "@/components/xpot/surface";
 import { apiRequest } from "@/lib/queryClient";
@@ -24,15 +25,17 @@ export function DistributionChoice({ value, onChange, disabled }: { value: Distr
   return (
     <fieldset className="space-y-2" disabled={disabled} data-testid="organization-distribution">
       <legend className="text-sm font-semibold text-white">{t("distributionTitle")}</legend>
-      <p className="text-xs text-white/50">{t("distributionHint")}</p>
       <div className="grid gap-2 sm:grid-cols-2" role="radiogroup" aria-label={t("distributionTitle")}>
         {DISTRIBUTIONS.map((option) => (
           <label
             key={option}
-            className={`flex min-h-11 cursor-pointer items-center gap-2.5 rounded-xl border p-3 text-sm text-white transition-colors ${value === option ? "border-violet-400/40 bg-violet-500/[0.1]" : "border-white/10 hover:bg-white/[0.03]"} ${disabled ? "cursor-not-allowed opacity-60" : ""}`}
+            className={`flex min-h-11 cursor-pointer items-start gap-2.5 rounded-xl border p-3 text-sm text-white transition-colors ${value === option ? "border-violet-400/40 bg-violet-500/[0.1]" : "border-white/10 hover:bg-white/[0.03]"} ${disabled ? "cursor-not-allowed opacity-60" : ""}`}
           >
-            <input type="radio" name="distribution" value={option} checked={value === option} onChange={() => onChange(option)} className="h-4 w-4 accent-violet-500" data-testid={`organization-distribution-${option}`} />
-            {t(DISTRIBUTION_LABEL[option])}
+            <input type="radio" name="distribution" value={option} checked={value === option} onChange={() => onChange(option)} className="mt-0.5 h-4 w-4 shrink-0 accent-violet-500" data-testid={`organization-distribution-${option}`} />
+            <span className="min-w-0">
+              <span className="block font-medium">{t(DISTRIBUTION_LABEL[option])}</span>
+              <span className="mt-0.5 block text-xs text-white/50">{t(option === "xpot" ? "distributionXpotHint" : "distributionOwnHint")}</span>
+            </span>
           </label>
         ))}
       </div>
@@ -50,6 +53,7 @@ export function OrganizationLinks({ organizationId }: { organizationId: number }
   const qc = useQueryClient();
   const base = `/api/xpot/organizations/${organizationId}/links`;
   const [pick, setPick] = useState("");
+  const [unlinking, setUnlinking] = useState<LinkedOrganization | null>(null);
   const links = useQuery<LinkedOrganization[]>({ queryKey: [base] });
   const organizations = useQuery<OrganizationOption[]>({ queryKey: ["/api/xpot/organizations"] });
   const linked = new Set((links.data ?? []).map((link) => link.sellerId));
@@ -76,7 +80,7 @@ export function OrganizationLinks({ organizationId }: { organizationId: number }
           {links.data.map((link) => (
             <li key={link.sellerId} className="flex min-h-11 items-center justify-between gap-3 px-3 py-2 text-sm text-white">
               <span className="min-w-0 truncate">{link.name}</span>
-              <Button variant="ghost" size="sm" onClick={() => change.mutate({ unlink: link.sellerId })} disabled={change.isPending} data-testid={`organization-unlink-${link.sellerId}`}>
+              <Button variant="ghost" size="sm" onClick={() => setUnlinking(link)} disabled={change.isPending} data-testid={`organization-unlink-${link.sellerId}`}>
                 <Link2Off />
                 {t("linkRemove")}
               </Button>
@@ -96,6 +100,19 @@ export function OrganizationLinks({ organizationId }: { organizationId: number }
       ) : links.isSuccess ? (
         <p className="text-xs text-white/40">{t("linksAllLinked")}</p>
       ) : null}
+      <ConfirmDialog
+        open={!!unlinking}
+        onOpenChange={(open) => !open && setUnlinking(null)}
+        title={unlinking ? t("unlinkTitle", { name: unlinking.name }) : ""}
+        description={t("unlinkBody")}
+        confirmLabel={t("linkRemove")}
+        destructive
+        busy={change.isPending}
+        onConfirm={() => {
+          if (unlinking) change.mutate({ unlink: unlinking.sellerId }, { onSettled: () => setUnlinking(null) });
+        }}
+        testId="organization-unlink-confirm"
+      />
     </section>
   );
 }
