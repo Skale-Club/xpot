@@ -183,7 +183,7 @@ describe("one name per screen", () => {
         for (const group of groups) expect(labels).not.toContain(group.label);
       });
     }
-    it(`${lang}: the panel is not called Production, and the area names differ`, () => {
+    it(`${lang}: the panel is not called Production, and the panel names differ`, () => {
       expect(ws.panelCompany).not.toBe(ws.panelPlatform);
       expect(ws.panelCompanies).not.toBe(ws.panelCompany);
       expect(ws.panelCompany.toLowerCase()).not.toContain("produ");

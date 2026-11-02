@@ -51,7 +51,7 @@ const PLATFORM_ONLY = /^\/admin\/tags\/(?:shop|journey)(?:\/|$)/;
 const PRINT_ONLY = /^\/admin\/tags\/(?:production|batches|provisioners)(?:\/|$)/;
 
 /**
- * The panel's frame, one per profile (shared/profiles.ts): the area switch, the sidebar (a bottom bar on the phone) and
+ * The panel's frame, one per profile (shared/profiles.ts): the sidebar (a bottom bar on the phone) and
  * the screen's own title, once. A member has no panel.
  */
 export function AdminApp({ section }: { section: string }) {

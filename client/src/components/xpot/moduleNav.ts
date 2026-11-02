@@ -118,7 +118,7 @@ export function activeVisitsTab(path: string): VisitsTabId | null {
 
 /**
  * The screens inside something (a piece, a company, a visit) show their own back
- * arrow and title: the phone's top bar (the area switch, the avatar menu) is for
+ * arrow and title: the phone's top bar (the module switch, the avatar menu) is for
  * the screens you start from. A plain chip (/tags/direct) is reached from a link, so it has its own back arrow too.
  */
 export function phoneBarHidden(path: string): boolean {
@@ -257,7 +257,7 @@ export function platformItems(l: Labels): NavItem[] {
 export type PanelNames = {
   /** The panel's first item, "Today". */
   today: string;
-  /** The platform's own name ("Platform"), for the area switch and its Today. */
+  /** The platform's own name ("Platform"), for the account menu's way into it and its Today. */
   platform: string;
   /** The platform's own company, the heading of its Today block. */
   company: string;

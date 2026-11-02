@@ -67,7 +67,7 @@ const COUNTRIES = [
 // wholesale code is in My pieces), My company (where they work and their role there; someone
 // selling alone adds the first colleague here), Sign-in (the sign-in phone as
 // text; the password only for an email login) and Language. The panel is not
-// here: "My company" in the area switch is its door. Sign out is the last row
+// here: "My company" in the account menu is its door. Sign out is the last row
 // of the phone's list, and the avatar menu's on desktop.
 //
 // On a phone it is a list like the phone's own settings (the person's card,

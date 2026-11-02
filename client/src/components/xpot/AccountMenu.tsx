@@ -1,20 +1,24 @@
 import { useEffect, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useLocation } from "wouter";
-import { ChevronUp, LogOut, Settings } from "lucide-react";
+import { Briefcase, ChevronUp, LogOut, Settings, ShieldCheck } from "lucide-react";
 import { useT } from "@/i18n";
 import { shellMessages } from "@/i18n/messages/shell";
 import { workspacesMessages } from "@/i18n/messages/workspaces";
 import { signOut } from "@/lib/signOut";
 import { navigateGuarded } from "@/hooks/useUnsavedChangesGuard";
+import { useViewerAccess } from "@/lib/adminMode";
+import { homeForModules, useXpotModules } from "@/components/ModuleSwitch";
 import type { XpotMeResponse } from "@/pages/xpot/types";
 import { ConfirmDialog } from "./ConfirmDialog";
 import { InstallAppSidebarItem } from "./InstallApp";
 import { BRAND_GRADIENT } from "./surface";
-import { clearPanelRoute } from "./AreaSwitch";
+import { clearPanelRoute, panelEntryPath, rememberPanelRoute } from "./panelRoute";
+import { usePanelNames } from "./panelNames";
 
 // The person's own things, one place on every screen and both areas: their photo
-// and name open Settings, Install app and Sign out. Sign out asks first: on the
+// and name open the way to the other area (the panel from My work, My work from
+// the panel; only for someone with a panel), Settings, Install app and Sign out. Sign out asks first: on the
 // street a wrong tap would cost a text code to come back. The photo itself is
 // changed in Settings.
 
@@ -57,6 +61,9 @@ export function AccountMenu({ variant, collapsed = false }: { variant: "sidebar"
   const tw = useT(workspacesMessages);
   const [, navigate] = useLocation();
   const { name } = useAccountName();
+  const modules = useXpotModules();
+  const { reach, adminMode, profile } = useViewerAccess();
+  const { panelName } = usePanelNames();
   const online = useOnline();
   const [open, setOpen] = useState(false);
   const [confirming, setConfirming] = useState(false);
@@ -71,6 +78,15 @@ export function AccountMenu({ variant, collapsed = false }: { variant: "sidebar"
     return () => { document.removeEventListener("pointerdown", away); document.removeEventListener("keydown", key); };
   }, [open]);
 
+  // The panel remembers where it was left; the way back to My work lands on the first module screen.
+  const goToOtherArea = () => {
+    if (adminMode) {
+      rememberPanelRoute(`${window.location.pathname}${window.location.search}`);
+      navigateGuarded(homeForModules(modules), navigate);
+    } else {
+      navigateGuarded(panelEntryPath(), navigate);
+    }
+  };
   const sidebar = variant === "sidebar";
   const place = sidebar ? (collapsed ? "bottom-0 left-full ml-2" : "bottom-full left-0 mb-2") : "right-0 top-full mt-2";
   const item = "flex h-11 w-full items-center gap-3 rounded-xl px-3 text-sm font-medium text-white/70 transition-colors hover:bg-white/[0.06] hover:text-white";
@@ -100,6 +116,12 @@ export function AccountMenu({ variant, collapsed = false }: { variant: "sidebar"
       {open ? (
         <div role="menu" className={`absolute z-[70] w-60 rounded-2xl border border-white/10 bg-[#0d1322] p-1.5 shadow-[0_16px_48px_rgba(0,0,0,0.5)] ${place}`}>
           {name ? <p className="truncate px-3 pb-1.5 pt-2 text-xs font-semibold text-white/45">{name}</p> : null}
+          {reach ? (
+            <button type="button" role="menuitem" className={item} onClick={() => { setOpen(false); goToOtherArea(); }} data-testid="account-menu-area">
+              {adminMode ? <Briefcase className="h-[18px] w-[18px] shrink-0" aria-hidden="true" /> : <ShieldCheck className="h-[18px] w-[18px] shrink-0" aria-hidden="true" />}
+              {adminMode ? tw("userArea") : panelName(profile)}
+            </button>
+          ) : null}
           <button type="button" role="menuitem" className={item} onClick={() => { setOpen(false); navigateGuarded("/settings", navigate); }} data-testid="account-menu-settings">
             <Settings className="h-[18px] w-[18px] shrink-0" aria-hidden="true" />{t("navSettings")}
           </button>

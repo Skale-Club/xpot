@@ -44,7 +44,7 @@ import {
 } from "./moduleNav";
 import { XpotLogo } from "./XpotLogo";
 import { AccountMenu, useOnline } from "./AccountMenu";
-import { AreaSwitch, rememberPanelRoute } from "./AreaSwitch";
+import { rememberPanelRoute } from "./panelRoute";
 import { PanelTabBar } from "./PanelTabBar";
 import { PhoneTopBar } from "./PhoneTopBar";
 import { ScreenErrorBoundary } from "./ScreenErrorBoundary";
@@ -57,7 +57,7 @@ import { subscribeToRoutePush } from "@/lib/pushNotifications";
 // always had (the caller passes its bottom nav; the top bar and the panel's bar
 // are the frame's). From `lg` up a sidebar and a top bar take over. Two areas,
 // told apart by colour: "My work" (the modules) and "My company" (the panel,
-// amber); one switch between them, and the person's own things in the avatar menu.
+// amber); the avatar menu is the way between them, and holds the person's own things.
 
 const COLLAPSED_KEY = "xpot.sidebar.collapsed";
 const GROUP_KEY = "xpot.nav.group.";
@@ -172,7 +172,7 @@ function SidebarLink({ item, collapsed, active, accent, warningLabel }: { item: 
 }
 
 /**
- * The module switch under the area switch: the desktop twin of the phone's
+ * The module switch at the top of the sidebar: the desktop twin of the phone's
  * ModuleSwitch. Both modules visible, each in its own colour. With one module
  * there is nothing to switch, so it is not shown.
  */
@@ -313,7 +313,6 @@ function DesktopSidebar({ collapsed, onToggle }: { collapsed: boolean; onToggle:
       </div>
 
       <div className="space-y-2 px-3 pb-3">
-        <AreaSwitch collapsed={collapsed} narrow module={module} />
         {!panel ? <SidebarModuleSwitch collapsed={collapsed} module={module} modules={modules} label={moduleLabel} /> : null}
         {module === "visits" && !panel ? <PersistentRouteProgress collapsed={collapsed} className={collapsed ? "mt-2" : "mt-2.5"} /> : null}
       </div>
@@ -474,7 +473,7 @@ export function AppLayout({
   useEffect(() => {
     if (typeof title === "string") document.title = formatTitle(title, crumb?.label, "Xpot");
   }, [title, crumb?.label]);
-  // "My company" comes back to the screen it was left on.
+  // The account menu's "My company" comes back to the screen the panel was left on.
   useEffect(() => {
     if (panel) rememberPanelRoute(`${location}${search ? `?${search}` : ""}`);
   }, [panel, location, search]);
