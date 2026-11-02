@@ -4,6 +4,7 @@ import { and, asc, eq, inArray } from "drizzle-orm";
 import { db } from "../../db.js";
 import { storage } from "../../storage.js";
 import { salesStorage } from "../../storage-sales.js";
+import { voicePaymentStatus } from "#shared/pricing.js";
 import { getLLMClient } from "../../lib/ai.js";
 import { requireXpotUser, isPlatformAdmin, type XpotActor } from "./middleware.js";
 import { syncInterestToXphere } from "./xphere-sync.js";
@@ -320,7 +321,8 @@ export async function applyAction(row: SalesVisitAction, ctx: ApplyCtx): Promise
         repId: ctx.repId,
         countedRemaining,
         restockQuantity: action.restockQuantity ?? undefined,
-        paymentStatus: action.paid === true ? "paid" : action.paid === false ? "unpaid" : undefined,
+        // Paid only when the note says so: saying nothing never records money received.
+        paymentStatus: voicePaymentStatus(action.paid),
         visitId: ctx.visitId,
         notes: action.evidence ?? null,
       });
@@ -359,7 +361,8 @@ export async function applyAction(row: SalesVisitAction, ctx: ApplyCtx): Promise
         });
       }
       const total = lines.reduce((sum, l) => sum + l.totalCents, 0);
-      const paid = action.paid !== false;
+      const paymentStatus = total === 0 ? "paid" : voicePaymentStatus(action.paid);
+      const paid = paymentStatus === "paid";
       const saleLead = await storage.getSalesLead(ctx.leadId);
       if (!saleLead) throw new Error("Customer not found");
       const sale = await salesStorage.createDirectSale(
@@ -374,7 +377,7 @@ export async function applyAction(row: SalesVisitAction, ctx: ApplyCtx): Promise
           subtotalCents: total,
           discountCents: 0,
           totalCents: total,
-          paymentStatus: paid ? "paid" : "unpaid",
+          paymentStatus,
           paidCents: paid ? total : 0,
           paidAt: paid ? new Date() : null,
           soldAt: new Date(),

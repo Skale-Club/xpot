@@ -21,7 +21,7 @@ import {
 import { canWorkOnTag, type TagActor } from "#shared/tagAccess.js";
 import type { LinkableSaleItem } from "#shared/tagsApi.js";
 import { tagSystemReason } from "#shared/tagReasons.js";
-import { allocateSaleLineTotals, paymentStatusFor, resolveUnitPriceCents } from "#shared/pricing.js";
+import { allocateSaleLineTotals, chosenPaymentStatus, PAYMENT_STATUS_REQUIRED_MESSAGE, resolveUnitPriceCents } from "#shared/pricing.js";
 import { resolveTagUnitCost, type TagSaleCreateInput } from "#shared/tagSales.js";
 import { salesStorage } from "../storage-sales.js";
 import { leadUsableBy } from "./repository.js";
@@ -207,7 +207,9 @@ export async function createTagSale(input: TagSaleCreateInput, actor: TagActor, 
     const subtotalCents = allocated.reduce((sum, line) => sum + line.grossCents, 0);
     const discountCents = allocated.reduce((sum, line) => sum + line.discountCents, 0);
     const totalCents = allocated.reduce((sum, line) => sum + line.netCents, 0);
-    const paymentStatus = input.paymentStatus ?? "paid";
+    // Nothing is assumed paid: the seller says (a total of zero needs no choice).
+    const paymentStatus = chosenPaymentStatus(totalCents, input.paymentStatus);
+    if (!paymentStatus) throw new TagSaleError(PAYMENT_STATUS_REQUIRED_MESSAGE, 400, "payment_status_required");
     if (paymentStatus === "partial" && (!input.paidCents || input.paidCents >= totalCents)) {
       throw new TagSaleError("A partial payment must be greater than zero and less than the sale total", 400, "partial_payment_invalid");
     }
@@ -216,7 +218,6 @@ export async function createTagSale(input: TagSaleCreateInput, actor: TagActor, 
       : paymentStatus === "unpaid"
         ? 0
         : Math.min(input.paidCents ?? totalCents, totalCents);
-    const finalPaymentStatus = input.paymentStatus ?? paymentStatusFor(paidCents, totalCents);
     const soldAt = input.soldAt ? new Date(input.soldAt) : new Date();
 
     const [sale] = await tx.insert(salesSales).values({
@@ -233,10 +234,10 @@ export async function createTagSale(input: TagSaleCreateInput, actor: TagActor, 
       subtotalCents,
       discountCents,
       totalCents,
-      paymentStatus: finalPaymentStatus,
+      paymentStatus,
       paymentMethod: input.paymentMethod ?? null,
       paidCents,
-      paidAt: finalPaymentStatus === "paid" ? soldAt : null,
+      paidAt: paymentStatus === "paid" ? soldAt : null,
       soldAt,
       notes: input.notes ?? null,
     }).returning();

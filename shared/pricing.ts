@@ -146,6 +146,27 @@ export function nextDueDate(intervalDays: number, from: Date = new Date()): Date
   return new Date(from.getTime() + days * 24 * 60 * 60 * 1000);
 }
 
+export type PaymentChoice = "unpaid" | "partial" | "paid";
+
+/** The English sentence the API answers (400, code `payment_status_required`) when a sale or settlement with money in it says nothing about payment. */
+export const PAYMENT_STATUS_REQUIRED_MESSAGE =
+  "paymentStatus is required: send \"paid\", \"partial\" or \"unpaid\". Only a total of zero needs no choice.";
+
+/**
+ * The payment status a sale or settlement records. Nothing is assumed paid: the seller chooses (a missing status is null,
+ * which the server answers with a 400). Only a total of zero needs no choice, since there is nothing to pay. A chosen status
+ * is kept as it came.
+ */
+export function chosenPaymentStatus(totalCents: number, paymentStatus: PaymentChoice | null | undefined): PaymentChoice | null {
+  if (paymentStatus) return paymentStatus;
+  return totalCents <= 0 ? "paid" : null;
+}
+
+/** A sale the voice note describes: paid only when the note says so; saying nothing never records money received. */
+export function voicePaymentStatus(paid: boolean | null | undefined): "paid" | "unpaid" {
+  return paid === true ? "paid" : "unpaid";
+}
+
 export function paymentStatusFor(paidCents: number, totalCents: number): "unpaid" | "partial" | "paid" {
   if (totalCents <= 0) return "paid";
   if (paidCents <= 0) return "unpaid";

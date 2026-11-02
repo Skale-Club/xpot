@@ -32,7 +32,7 @@ import {
   type SalesConsignmentStatus,
   type SalesPaymentStatus,
 } from "#shared/schema.js";
-import { computeSettlement, nextDueDate, paymentStatusFor, resolveUnitPriceCents } from "#shared/pricing.js";
+import { chosenPaymentStatus, computeSettlement, nextDueDate, PAYMENT_STATUS_REQUIRED_MESSAGE, resolveUnitPriceCents } from "#shared/pricing.js";
 
 type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
 
@@ -500,6 +500,15 @@ export async function runDeposit(input: {
   });
 }
 
+/** A settlement that bills money without saying whether it was paid (POST /consignments/:id/settle answers 400 with `code`). */
+export class PaymentStatusRequiredError extends Error {
+  code = "payment_status_required";
+  constructor() {
+    super(PAYMENT_STATUS_REQUIRED_MESSAGE);
+    this.name = "PaymentStatusRequiredError";
+  }
+}
+
 /**
  * Settlement visit: count what is left, bill what was sold, optionally leave
  * new stock. Produces a sale (kind = consignment_settlement) when anything sold.
@@ -546,12 +555,14 @@ export async function runSettlement(input: {
 
     let sale: SaleWithItems | null = null;
     if (result.soldQuantity > 0) {
-      const paidCents = input.paymentStatus === "paid"
+      // Nothing is assumed paid: the seller says (a total of zero needs no choice). A count that sells nothing bills nothing.
+      const paymentStatus = chosenPaymentStatus(result.amountCents, input.paymentStatus);
+      if (!paymentStatus) throw new PaymentStatusRequiredError();
+      const paidCents = paymentStatus === "paid"
         ? result.amountCents
-        : input.paymentStatus === "unpaid"
+        : paymentStatus === "unpaid"
           ? 0
           : Math.min(input.paidCents ?? result.amountCents, result.amountCents);
-      const paymentStatus = input.paymentStatus ?? paymentStatusFor(paidCents, result.amountCents);
       const created = await insertSaleWithItems(
         tx,
         {

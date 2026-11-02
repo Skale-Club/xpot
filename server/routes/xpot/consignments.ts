@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { z } from "zod";
 import { storage } from "../../storage.js";
-import { salesStorage, ConsignmentUnitsLeftError } from "../../storage-sales.js";
+import { salesStorage, ConsignmentUnitsLeftError, PaymentStatusRequiredError } from "../../storage-sales.js";
 import { requireXpotUser, isPlatformAdmin, loadAccessibleLead, type XpotActor, listScope, recordFilters } from "./middleware.js";
 import { canManageOrganizationForActor, canViewOrganizationForActor } from "../../organizations/service.js";
 import {
@@ -146,7 +146,7 @@ export function createConsignmentsRouter() {
         syncSaleToXphere(result.sale.sale.id).catch((err) => console.error("[settle] xphere mirror:", err));
       }
     } catch (err) {
-      res.status(400).json({ message: (err as Error).message });
+      res.status(400).json({ ...(err instanceof PaymentStatusRequiredError ? { code: err.code } : {}), message: (err as Error).message });
     }
   });
 
