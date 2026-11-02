@@ -1,11 +1,11 @@
-import { useCallback, useMemo } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useLocation } from "wouter";
 import { useQuery } from "@tanstack/react-query";
-import { Building2, ChevronRight, Nfc, Package, ScanLine, Shapes } from "lucide-react";
+import { Building2, ChevronRight, Nfc, Package, ScanLine, Shapes, SlidersHorizontal } from "lucide-react";
 import { matchesPieceFilters, parsePieceFilters, type PieceSaleFilter, type PieceStatusFilter } from "@shared/tagApp";
 import { useIsDesktop } from "@/hooks/use-is-desktop";
 import { MasterDetail } from "@/components/xpot/MasterDetail";
-import { FilterBar, FilterChips, FilterSearch, FilterSelect, FilterToken } from "@/components/xpot/filters";
+import { FilterBar, FilterChips, FilterSearch, FilterSelect, FilterToggle, FilterToken } from "@/components/xpot/filters";
 import { currentSearch, useUrlFilters } from "@/hooks/use-url-filters";
 import { ListPager, usePagedList } from "@/components/xpot/pagination";
 import { TagPieceMention } from "@/components/xpot/TagProductThumbnail";
@@ -17,7 +17,9 @@ import type { TagListItem } from "@shared/tagsApi";
 import { useT } from "@/i18n";
 import { commonMessages } from "@/i18n/messages/common";
 import { tagsMessages } from "@/i18n/messages/tags";
+import { manageTagsMessages } from "@/i18n/messages/manageTags";
 import { APP_BASE, errorText, shortUrl, tagPath, tagsGet } from "./lib";
+import { countMorePieceFilters, morePiecesOpen } from "./piecesFilters";
 import { CARD, ChipMark, PieceStatusPills, ScanCounts, TopBar } from "./ui";
 import { WholesaleCard } from "./WholesaleCard";
 
@@ -45,6 +47,7 @@ const LIST_LIMIT = 2000;
 export default function PiecesScreen({ selectedCode = null }: { selectedCode?: string | null }) {
   const t = useT(tagsMessages);
   const tc = useT(commonMessages);
+  const tg = useT(manageTagsMessages);
   const [, navigate] = useLocation();
   const isDesktop = useIsDesktop();
   // Moving between pieces and closing replace history; only the first open pushes.
@@ -106,6 +109,13 @@ export default function PiecesScreen({ selectedCode = null }: { selectedCode?: s
       return true;
     });
   }, [companyFilter, data, faceFilter, pieceFilters.status, pieceFilters.sale, pieceFilters.chip, query, scanFilter]); // eslint-disable-line react-hooks/exhaustive-deps
+  // "More filters" opens by itself whenever one of them narrows the list (a link, the back button), so it never hides one.
+  const moreActive = countMorePieceFilters(filters.values);
+  const [moreOpened, setMoreOpened] = useState(moreActive > 0);
+  useEffect(() => {
+    if (moreActive > 0) setMoreOpened(true);
+  }, [moreActive]);
+  const moreOpen = morePiecesOpen(moreOpened, moreActive);
   const hasListFilters = filters.activeCount(["status", "sale", "chip", "q", "company", "face", "scan", "lead"]) > 0;
   // Render 50 rows at a time; the open piece always stays on the page.
   const paged = usePagedList(items, {
@@ -130,79 +140,90 @@ export default function PiecesScreen({ selectedCode = null }: { selectedCode?: s
         testId="pieces-filters"
         search={<FilterSearch value={search} onChange={(q) => filters.set({ q })} placeholder={t("searchPieces")} testId="input-pieces-search" />}
         controls={
-          <>
-            <FilterSelect
-              value={companyFilter}
-              onChange={(company) => filters.set({ company })}
-              placeholder={t("filterAllCompanies")}
-              icon={Building2}
-              options={companyOptions}
-              testId="filter-company"
-            />
-            <FilterSelect
-              value={faceFilter}
-              onChange={(face) => filters.set({ face })}
-              placeholder={t("filterAllChannels")}
-              icon={Shapes}
-              options={faceOptions}
-              testId="filter-face"
-            />
-            <FilterSelect
-              value={scanFilter === "all" ? "" : scanFilter}
-              onChange={(scan) => filters.set({ scan })}
-              placeholder={t("filterAnyActivity")}
-              icon={ScanLine}
-              options={[
-                { value: "with", label: t("filterWithScans") },
-                { value: "without", label: t("filterWithoutScans") },
-              ]}
-              testId="filter-scan-activity"
-            />
-            <FilterSelect
-              value={pieceFilters.chip === "missing" ? "missing" : ""}
-              onChange={(chip) => filters.set({ chip })}
-              placeholder={t("filterAnyChip")}
-              icon={Nfc}
-              options={[{ value: "missing", label: t("filterChipMissing") }]}
-              testId="filter-chip"
-            />
-          </>
+          <FilterToggle
+            pressed={moreOpen}
+            onChange={setMoreOpened}
+            icon={SlidersHorizontal}
+            label={moreActive ? tg("moreFiltersCount", { count: moreActive }) : tg("moreFilters")}
+            testId="pieces-more"
+          />
         }
         secondary={
-          <div className="flex flex-col gap-2.5 lg:flex-row lg:items-center">
-            {leadFilter ? (
-              <FilterToken
-                label={t("piecesOf", { name: leadFilter.name || `#${leadFilter.id}` })}
-                onRemove={() => filters.set({ lead: null, name: null })}
-                testId="lead-filter"
-              />
-            ) : null}
-            <div className="flex min-w-0 flex-1 flex-col gap-2 lg:flex-row lg:items-center lg:gap-4">
-              <div className="flex min-w-0 items-center gap-2">
-                <span className={CHIP_ROW_LABEL} aria-hidden="true">{t("filterStatusGroup")}</span>
-                <div className="min-w-0 flex-1">
-                  <FilterChips
-                    items={STATUS_CHIPS.map((f) => ({ id: f.id, label: t(f.key), testId: `filter-${f.id}` }))}
-                    value={pieceFilters.status}
-                    onChange={(status) => filters.set({ status })}
-                    ariaLabel={t("filterStatusGroup")}
-                    accent="tags"
-                  />
-                </div>
-              </div>
-              <div className="flex min-w-0 items-center gap-2">
-                <span className={CHIP_ROW_LABEL} aria-hidden="true">{t("filterSaleGroup")}</span>
-                <div className="min-w-0 flex-1">
-                  <FilterChips
-                    items={SALE_CHIPS.map((f) => ({ id: f.id, label: t(f.key), testId: `filter-sale-${f.id}` }))}
-                    value={pieceFilters.sale}
-                    onChange={(sale) => filters.set({ sale })}
-                    ariaLabel={t("filterSaleGroup")}
-                    accent="tags"
-                  />
+          <div className="flex flex-col gap-2.5">
+            <div className="flex flex-col gap-2.5 lg:flex-row lg:items-center">
+              {leadFilter ? (
+                <FilterToken
+                  label={t("piecesOf", { name: leadFilter.name || `#${leadFilter.id}` })}
+                  onRemove={() => filters.set({ lead: null, name: null })}
+                  testId="lead-filter"
+                />
+              ) : null}
+              <div className="flex min-w-0 flex-1 flex-col gap-2 lg:flex-row lg:items-center lg:gap-4">
+                <div className="flex min-w-0 items-center gap-2">
+                  <span className={CHIP_ROW_LABEL} aria-hidden="true">{t("filterStatusGroup")}</span>
+                  <div className="min-w-0 flex-1">
+                    <FilterChips
+                      items={STATUS_CHIPS.map((f) => ({ id: f.id, label: t(f.key), testId: `filter-${f.id}` }))}
+                      value={pieceFilters.status}
+                      onChange={(status) => filters.set({ status })}
+                      ariaLabel={t("filterStatusGroup")}
+                      accent="tags"
+                    />
+                  </div>
                 </div>
               </div>
             </div>
+            {moreOpen ? (
+              <div className="flex flex-col gap-2.5 lg:flex-row lg:flex-wrap lg:items-center" data-testid="pieces-more-filters">
+                <div className="flex min-w-0 items-center gap-2">
+                  <span className={CHIP_ROW_LABEL} aria-hidden="true">{t("filterSaleGroup")}</span>
+                  <div className="min-w-0 flex-1">
+                    <FilterChips
+                      items={SALE_CHIPS.map((f) => ({ id: f.id, label: t(f.key), testId: `filter-sale-${f.id}` }))}
+                      value={pieceFilters.sale}
+                      onChange={(sale) => filters.set({ sale })}
+                      ariaLabel={t("filterSaleGroup")}
+                      accent="tags"
+                    />
+                  </div>
+                </div>
+                <FilterSelect
+                  value={companyFilter}
+                  onChange={(company) => filters.set({ company })}
+                  placeholder={t("filterAllCompanies")}
+                  icon={Building2}
+                  options={companyOptions}
+                  testId="filter-company"
+                />
+                <FilterSelect
+                  value={faceFilter}
+                  onChange={(face) => filters.set({ face })}
+                  placeholder={t("filterAllChannels")}
+                  icon={Shapes}
+                  options={faceOptions}
+                  testId="filter-face"
+                />
+                <FilterSelect
+                  value={scanFilter === "all" ? "" : scanFilter}
+                  onChange={(scan) => filters.set({ scan })}
+                  placeholder={t("filterAnyActivity")}
+                  icon={ScanLine}
+                  options={[
+                    { value: "with", label: t("filterWithScans") },
+                    { value: "without", label: t("filterWithoutScans") },
+                  ]}
+                  testId="filter-scan-activity"
+                />
+                <FilterSelect
+                  value={pieceFilters.chip === "missing" ? "missing" : ""}
+                  onChange={(chip) => filters.set({ chip })}
+                  placeholder={t("filterAnyChip")}
+                  icon={Nfc}
+                  options={[{ value: "missing", label: t("filterChipMissing") }]}
+                  testId="filter-chip"
+                />
+              </div>
+            ) : null}
           </div>
         }
         summary={{
