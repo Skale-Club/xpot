@@ -1,10 +1,11 @@
+import { useState } from "react";
 import { useLocation, useRoute } from "wouter";
 import { ChevronRight, MousePointerClick, Users } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { useIsDesktop } from "@/hooks/use-is-desktop";
 import { currentSearch, useUrlFilters } from "@/hooks/use-url-filters";
 import { EmptyState, ErrorState } from "@/components/xpot/EmptyState";
-import { FilterBar, FilterSearch, FilterSelect } from "@/components/xpot/filters";
+import { FilterBar, FilterSearch, FilterSelect, FilterToggle } from "@/components/xpot/filters";
 import { ListSkeleton } from "@/components/xpot/ListSkeleton";
 import { MasterDetail } from "@/components/xpot/MasterDetail";
 import { BackLink } from "@/components/xpot/PageHeader";
@@ -182,6 +183,10 @@ function PeopleToolbar({ value, onChange, active, shown, total }: { value: Peopl
   const t = useT(manageMessages);
   const tc = useT(commonMessages);
   const tw = useT(peopleWorkspaceMessages);
+  const isDesktop = useIsDesktop();
+  // On a phone the three filters wait behind one button, so the first person is not a screen away.
+  const [filtersOpen, setFiltersOpen] = useState(false);
+  const showControls = isDesktop || filtersOpen || active;
   const set = <K extends keyof PeopleFilters>(key: K, v: PeopleFilters[K]) => onChange({ ...value, [key]: v });
   const fromSelect = <V extends string>(v: string) => (v || "all") as V | "all";
   const toSelect = (v: string) => (v === "all" ? "" : v);
@@ -189,7 +194,8 @@ function PeopleToolbar({ value, onChange, active, shown, total }: { value: Peopl
     <FilterBar
       testId="people-toolbar"
       search={<FilterSearch value={value.search} onChange={(v) => set("search", v)} placeholder={t("searchPeople")} testId="people-search" />}
-      controls={
+      actions={isDesktop ? undefined : <FilterToggle pressed={showControls} onChange={setFiltersOpen} label={tw("filters")} testId="people-filters-toggle" />}
+      controls={!showControls ? undefined : (
         <>
           <FilterSelect
             value={toSelect(value.status)}
@@ -211,7 +217,7 @@ function PeopleToolbar({ value, onChange, active, shown, total }: { value: Peopl
             options={XPOT_MODULES.map((m: XpotModule) => ({ value: m, label: tc(MODULE_KEYS[m]) }))}
           />
         </>
-      }
+      )}
       summary={{ active, shown, total, onClear: () => onChange({ search: "", status: "all", role: "all", module: "all" }) }}
     />
   );
