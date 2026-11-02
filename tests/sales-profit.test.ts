@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { hasCost, profitOnCostedProducts } from "../client/src/pages/xpot/components/sales/profitRules";
+import { hasCost, marginPercent, profitCoverage, profitOnCostedProducts } from "../client/src/pages/xpot/components/sales/profitRules";
 
 describe("profit in the Sales overview", () => {
   it("a product sold with no cost entered has no profit to show: its profit is the whole sale", () => {
@@ -22,5 +22,22 @@ describe("profit in the Sales overview", () => {
       { revenueCents: 4000, profitCents: 1800 },
     ];
     expect(profitOnCostedProducts(byProduct)).toEqual({ profitCents: 4200, revenueCents: 9000, products: 2 });
+  });
+});
+
+describe("how much of the sales a profit can be told about", () => {
+  it("none when no product has a cost, so the owner sees what is missing and not a margin", () => {
+    expect(profitCoverage([{ revenueCents: 5000, profitCents: 5000 }])).toBe("none");
+    expect(profitCoverage([])).toBe("none");
+  });
+
+  it("partial when only some products have one, and all when every product sold does", () => {
+    expect(profitCoverage([{ revenueCents: 5000, profitCents: 5000 }, { revenueCents: 4000, profitCents: 1800 }])).toBe("partial");
+    expect(profitCoverage([{ revenueCents: 5000, profitCents: 2400 }, { revenueCents: 4000, profitCents: 1800 }])).toBe("all");
+  });
+
+  it("the margin is taken on the costed sales only: $42 of $90 is 47%", () => {
+    expect(marginPercent({ profitCents: 4200, revenueCents: 9000 })).toBe(47);
+    expect(marginPercent({ profitCents: 0, revenueCents: 0 })).toBe(0);
   });
 });

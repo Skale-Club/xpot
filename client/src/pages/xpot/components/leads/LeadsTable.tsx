@@ -54,7 +54,7 @@ export type LeadRowActions = {
   canDelete?: (lead: FullSalesLead) => boolean;
 };
 
-function RowAction({ title, onClick, children, className = "" }: { title: string; onClick: () => void; children: ReactNode; className?: string }) {
+export function RowAction({ title, onClick, children, className = "" }: { title: string; onClick: () => void; children: ReactNode; className?: string }) {
   return (
     <Button
       type="button"
@@ -269,14 +269,13 @@ export function LeadsTable({
       cellClassName: "whitespace-nowrap !px-2 !py-1.5",
       render: (lead) => (
         <div className="flex items-center justify-end gap-1">
+          <RowAction title={t("salesAndConsignment")} onClick={() => onSell(lead)} className="hover:text-emerald-300">
+            <DollarSign aria-hidden="true" />
+          </RowAction>
           <CheckInAction lead={lead} activeVisitLeadId={activeVisitLeadId} onCheckIn={onCheckIn} onBackToVisit={onBackToVisit} variant="secondary" />
-          <RowMenu
-            label={t("moreActions")}
-            items={[
-              { key: "sell", label: t("salesAndConsignment"), icon: DollarSign, run: () => onSell(lead) },
-              ...(!canDelete || canDelete(lead) ? [{ key: "delete", label: t("deleteCompany"), icon: Trash2, run: () => onDelete(lead), danger: true }] : []),
-            ]}
-          />
+          {!canDelete || canDelete(lead) ? (
+            <RowMenu label={t("moreActions")} items={[{ key: "delete", label: t("deleteCompany"), icon: Trash2, run: () => onDelete(lead), danger: true }]} />
+          ) : null}
         </div>
       ),
     },
