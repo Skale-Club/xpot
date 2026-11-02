@@ -1,7 +1,7 @@
-import { Fragment, useRef, useState } from "react";
+import { Fragment, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { ChevronRight, ClipboardList, FileUp, Files, PackageCheck, Play, Printer, RotateCcw } from "lucide-react";
-import { canMarkPrinted, type PrintJobDetail, type PrintJobFileItem, type PrintRequestItem } from "@shared/printProduction";
+import { ChevronRight, ClipboardList, Files, PackageCheck, Play, Printer, RotateCcw } from "lucide-react";
+import { canMarkPrinted, type PrintJobDetail, type PrintRequestItem } from "@shared/printProduction";
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/xpot/ConfirmDialog";
 import { SectionCard } from "@/components/xpot/DashboardKit";
@@ -12,7 +12,7 @@ import { productionMessages } from "@/i18n/messages/production";
 import { productionBoardMessages } from "@/i18n/messages/productionBoard";
 import { ADMIN_TAGS_KEY, errorMessage, formatDateTime, getJson, invalidateAdminTags, sendJson } from "./api";
 import { Loading, LoadError } from "./pieces-shared";
-import { DownloadFileButton, JobStatusPill, PRODUCTION_BASE, formatBytes, minutesText, uploadFile, useBuildSentence, useFileDownload, usePrintComputers, usePrintModels, useProductionAccess } from "./production-shared";
+import { DownloadFileButton, JobStatusPill, PRODUCTION_BASE, formatBytes, minutesText, useBuildSentence, useFileDownload, usePrintComputers, usePrintModels, useProductionAccess } from "./production-shared";
 import { ProductionIdentity } from "./production-identity";
 import { PrintPreviewCard } from "./production-preview";
 import { PrintedDialog } from "./production-printed-dialog";
@@ -42,7 +42,6 @@ export function PrintJobPage({ id, go }: { id: string; go: Go }) {
   const buildSentence = useBuildSentence();
   const { toast } = useToast();
   const { download, busy: downloading } = useFileDownload();
-  const input = useRef<HTMLInputElement>(null);
   const [confirming, setConfirming] = useState<Step | null>(null);
   const [marking, setMarking] = useState(false);
   const [reporting, setReporting] = useState(false);
@@ -109,14 +108,6 @@ export function PrintJobPage({ id, go }: { id: string; go: Go }) {
       toast({ title: t("printDamagedFailed"), description: errorMessage(err), variant: "destructive" });
     },
   });
-  const upload = useMutation({
-    mutationFn: (file: File) => uploadFile<PrintJobFileItem>(`/api/xpot/admin/print-jobs/${id}/files`, file),
-    onSuccess: async () => {
-      await invalidateAdminTags();
-      toast({ title: t("fileUploaded") });
-    },
-    onError: (err) => toast({ title: t("couldNotUpload"), description: errorMessage(err), variant: "destructive" }),
-  });
 
   const back = <BackLink onBack={() => go(`${PRODUCTION_BASE}/queue`)}>{t("tabQueue")}</BackLink>;
   if (error && !job) return <div className="space-y-4">{back}<LoadError what={t("orderWhat")} error={error} onRetry={() => void refetch()} /></div>;
@@ -131,7 +122,6 @@ export function PrintJobPage({ id, go }: { id: string; go: Go }) {
   const progress = journeyProgress(job);
   const pending = pendingPieces(job);
   const download1 = job.files.find((f) => f.kind === "gcode_3mf") ?? job.files.find((f) => f.kind === "3mf") ?? null;
-  const takesFiles = !["printed", "cancelled"].includes(job.status);
   const assembledAt = (job.report as { assembledAt?: string }).assembledAt ?? null;
   const canAssemble = canAssembleJob(job, job.consumes.length, assembledAt);
   // A failed or cancelled plate is printed again once: after that, its new attempt is where the work goes on.
@@ -239,17 +229,8 @@ export function PrintJobPage({ id, go }: { id: string; go: Go }) {
           {job.reprintedBy ? <p className="text-sm text-white/65" data-testid="production-reprinted"><button type="button" className="underline underline-offset-2 hover:text-white" onClick={() => go(`${PRODUCTION_BASE}/jobs/${job.reprintedBy!.id}`)}>{t("reprintedAs", { code: job.reprintedBy.batchCode ?? "" })}</button></p> : null}
           {job.replaces ? <p className="text-sm text-white/65" data-testid="production-replaces">{t.plural("replacesLine", job.quantity, { code: job.replaces.batchCode ?? "" })}</p> : null}
           <div className="flex flex-wrap items-center gap-2">
-            {job.status === "requested" ? (
-              <Button type="button" variant="brand" accent="tags" loading={upload.isPending} onClick={() => input.current?.click()} data-testid="production-upload">
-                <FileUp />
-                {t("uploadFile")}
-              </Button>
-            ) : null}
-            {/* The computer is making it: nothing to do. When it is off or silent, the way out is to try again, and uploading the file yourself is the small one. */}
-            {job.status === "building" ? <>
-              {building && building !== "making" ? <Button type="button" variant="brand" accent="tags" onClick={() => setConfirming("release")} data-testid="production-release"><RotateCcw />{t("release")}</Button> : null}
-              <Button type="button" variant="ghost" size="sm" loading={upload.isPending} onClick={() => input.current?.click()} data-testid="production-upload">{t("uploadYourself")}</Button>
-            </> : null}
+            {/* The computer is making it: nothing to do. When it is off or silent, the way out is to try again. */}
+            {job.status === "building" && building && building !== "making" ? <Button type="button" variant="brand" accent="tags" onClick={() => setConfirming("release")} data-testid="production-release"><RotateCcw />{t("release")}</Button> : null}
             {job.status === "ready" ? <>
               {download1 ? <Button type="button" variant="brand" accent="tags" loading={downloading === download1.id} onClick={() => void download(download1.id)} data-testid="production-primary-download">{t("downloadSliced")}</Button> : null}
               <Button type="button" variant="secondary" loading={step.isPending} onClick={() => step.mutate({ action: "start" })} data-testid="production-start"><Play />{t("startPrinting")}</Button>
@@ -325,14 +306,6 @@ export function PrintJobPage({ id, go }: { id: string; go: Go }) {
           title={t("filesTitle")}
           icon={Files}
           accent="tags"
-          actions={
-            takesFiles ? (
-              <Button type="button" variant="secondary" size="sm" loading={upload.isPending} onClick={() => input.current?.click()}>
-                <FileUp />
-                {t("uploadFile")}
-              </Button>
-            ) : null
-          }
         >
           {files.length ? (
             <ul className="divide-y divide-white/[0.06] text-sm">
@@ -351,17 +324,6 @@ export function PrintJobPage({ id, go }: { id: string; go: Go }) {
           )}
         </SectionCard>
       </details>
-      <input
-        ref={input}
-        type="file"
-        accept=".3mf,.csv,.json,.png"
-        className="hidden"
-        onChange={(e) => {
-          const file = e.target.files?.[0];
-          e.target.value = "";
-          if (file) upload.mutate(file);
-        }}
-      />
 
       <ConfirmDialog
         open={reporting}

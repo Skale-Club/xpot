@@ -51,10 +51,10 @@ describe("unified production", () => {
   });
   it("offers Mark printed only once the job is on the printer, never without a file or before the file was taken", () => {
     const job = (status: string, files = 1, redoneBy: string | null = null) => ({ status, redoneBy, downloads: Array.from({ length: files }, (_, i) => ({ id: String(i), kind: "gcode_3mf", filename: "x" })) }) as never;
-    expect(plateActions(job("requested", 0))).toEqual(["uploadFile"]);
+    expect(plateActions(job("requested", 0))).toEqual([]);
     expect(plateActions(job("building", 0))).toEqual([]);
     expect(plateActions(job("ready"))).toEqual(["download", "start"]);
-    expect(plateActions(job("ready", 0))).toEqual(["uploadFile"]);
+    expect(plateActions(job("ready", 0))).toEqual([]);
     expect(plateActions(job("printing"))).toEqual(["markPrinted", "download"]);
     expect(plateActions(job("failed"))).toEqual(["printAgain"]);
     expect(plateActions(job("failed", 1, "next"))).toEqual([]);

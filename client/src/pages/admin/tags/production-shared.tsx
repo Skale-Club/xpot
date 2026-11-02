@@ -1,9 +1,9 @@
 import { useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { Download, FileUp } from "lucide-react";
+import { Download } from "lucide-react";
 import { isSuperAdmin } from "@shared/modules";
 import { productionOrganizations } from "@shared/organizations";
-import type { PrintBed, PrintJobDetail, PrintJobFileItem, PrintJobItem, PrintJobStatus, PrintModelItem, PrintModelStatus, PrintRequestItem } from "@shared/printProduction";
+import type { PrintBed, PrintJobDetail, PrintJobItem, PrintJobStatus, PrintModelItem, PrintModelStatus, PrintRequestItem } from "@shared/printProduction";
 import type { ProvisionerDeviceItem } from "@shared/tagsApi";
 import type { XpotMeResponse } from "@/pages/xpot/types";
 import { Button } from "@/components/ui/button";
@@ -129,7 +129,7 @@ export function DownloadFileButton({ id, label, quiet = false, onDownloaded }: {
   );
 }
 
-/** The moves of a print job that are one click: say it is on the printer, send a file by hand. */
+/** The move of a print job that is one click: say it is on the printer. */
 export function usePlateMoves() {
   const t = useT(productionMessages);
   const { toast } = useToast();
@@ -141,40 +141,7 @@ export function usePlateMoves() {
     },
     onError: (err) => toast({ title: t("couldNotUpdateOrder"), description: errorMessage(err), variant: "destructive" }),
   });
-  const upload = useMutation({
-    mutationFn: ({ id, file }: { id: string; file: File }) => uploadFile<PrintJobFileItem>(`/api/xpot/admin/print-jobs/${id}/files`, file),
-    onSuccess: async () => {
-      await invalidateAdminTags();
-      toast({ title: t("fileUploaded") });
-    },
-    onError: (err) => toast({ title: t("couldNotUpload"), description: errorMessage(err), variant: "destructive" }),
-  });
-  return { start: (id: string) => move.mutate({ id, action: "start" }), starting: move.isPending ? move.variables?.id ?? null : null, upload: upload.mutate, uploading: upload.isPending ? upload.variables?.id ?? null : null };
-}
-
-/** The file picker behind "Upload file": one hidden input, opened by the button. */
-export function UploadFileButton({ loading, onFile, quiet = false }: { loading: boolean; onFile: (file: File) => void; quiet?: boolean }) {
-  const t = useT(productionMessages);
-  const [input, setInput] = useState<HTMLInputElement | null>(null);
-  return (
-    <>
-      <Button type="button" variant={quiet ? "secondary" : "brand"} accent="tags" size="sm" loading={loading} onClick={() => input?.click()} data-testid="production-upload">
-        <FileUp />
-        {t("uploadFile")}
-      </Button>
-      <input
-        ref={setInput}
-        type="file"
-        accept=".3mf,.csv,.json,.png"
-        className="hidden"
-        onChange={(event) => {
-          const file = event.target.files?.[0];
-          event.target.value = "";
-          if (file) onFile(file);
-        }}
-      />
-    </>
-  );
+  return { start: (id: string) => move.mutate({ id, action: "start" }), starting: move.isPending ? move.variables?.id ?? null : null };
 }
 
 /** The newest file of each kind a plate offers: the Bambu Studio project and the checked slice. */
