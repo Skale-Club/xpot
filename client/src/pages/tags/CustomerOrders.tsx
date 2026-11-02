@@ -10,6 +10,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft, ArrowRight, ClipboardList, Plus } from "lucide-react";
 import { useT, type Dictionary } from "@/i18n";
 import { customerOrdersMessages } from "@/i18n/messages/customerOrders";
+import { printNfcMessages } from "@/i18n/messages/printNfc";
 import { Button } from "@/components/ui/button";
 import { CARD, INPUT, TopBar } from "./ui";
 import LeadPicker, { type LeadChoice } from "./LeadPicker";
@@ -21,7 +22,7 @@ import type {
 } from "@shared/customerOrdersApi";
 import { TAG_PRODUCT_TYPES } from "@shared/tags";
 import { TAG_FACES } from "@shared/tagFace";
-import { PRINT_MAX_PLATES } from "@shared/printProduction";
+import { PRINT_DEFAULT_NFC_MOUNT, PRINT_MAX_PLATES, PRINT_NFC_MOUNTS } from "@shared/printProduction";
 import { tagsMessages } from "@/i18n/messages/tags";
 import { TagPieceVisual } from "@/components/xpot/TagProductThumbnail";
 import { useXpotModules } from "@/components/ModuleSwitch";
@@ -1219,6 +1220,7 @@ function ActionForm({
   t: T;
 }) {
   const { kind, line } = action;
+  const nfc = useT(printNfcMessages);
   const formRef = useRef<HTMLFormElement>(null);
   useEffect(() => {
     formRef.current?.scrollIntoView({ block: "nearest" });
@@ -1272,7 +1274,11 @@ function ActionForm({
     let body: Fields = {};
     let command = kind;
     if (kind === "produce")
-      body = { lineId: line!.id, quantity: Number(fd.get("quantity")) };
+      body = {
+        lineId: line!.id,
+        quantity: Number(fd.get("quantity")),
+        ...(fd.get("nfcMount") ? { nfcMount: String(fd.get("nfcMount")) } : {}),
+      };
     if (kind === "allocate") body = { lineId: line!.id, tagIds: selected };
     if (kind === "dispatch")
       body = {
@@ -1387,6 +1393,17 @@ function ActionForm({
               className={INPUT}
             />
           </Field>
+          {line?.custom !== "custom" && (
+            <Field label={nfc("question")}>
+              <select name="nfcMount" defaultValue={PRINT_DEFAULT_NFC_MOUNT} className={INPUT}>
+                {PRINT_NFC_MOUNTS.map((mount) => (
+                  <option key={mount} value={mount}>
+                    {nfc(`name_${mount}` as "name_sticker_round_25")}
+                  </option>
+                ))}
+              </select>
+            </Field>
+          )}
         </>
       )}
       {kind === "allocate" && (

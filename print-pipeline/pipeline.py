@@ -171,6 +171,9 @@ def build_order(ticket: dict, out_dir, do_slice: bool = True, log=print) -> dict
             raise BuildFailed(str(err)) from err
         except RuntimeError as err:          # the generators raise this when their own geometry checks fail
             raise BuildFailed(f"{tag['public_code']}: the geometry check failed: {str(err)[:600]}") from err
+        pause_z = piece_report.get('pause_top_z')
+        if pause_z is not None and bed.get('pause') and abs(pause_z - bed['pause']['z']) > 0.001:
+            raise BuildFailed(f"{tag['public_code']}: the pocket pauses at z {pause_z}, the version says {bed['pause']['z']}")
         mesh_parts[tag['serial_number']] = parts
         report['pieces'].append({'serial': tag['serial_number'], 'code': tag['public_code'], 'ok': bool(piece_report.get('ok', True))})
 

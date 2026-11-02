@@ -2,12 +2,13 @@ import { useEffect, useId, useRef, useState, type FormEvent } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { Check, ChevronDown, ChevronRight, Info } from "lucide-react";
 import { TAG_MAX_BATCH_QUANTITY, TAG_PRODUCT_TYPES } from "@shared/tags";
-import type { PrintModelItem, PrintRequestItem } from "@shared/printProduction";
+import { materialsForNfc, nfcMountsOf, preferredNfcMount, type PrintModelItem, type PrintNfcMount, type PrintRequestItem } from "@shared/printProduction";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import { Field, Input, Select, Textarea } from "@/components/xpot/Field";
 import { useToast } from "@/hooks/use-toast";
 import { useT } from "@/i18n";
+import { printNfcMessages } from "@/i18n/messages/printNfc";
 import { commonMessages } from "@/i18n/messages/common";
 import { manageTagsBatchesMessages } from "@/i18n/messages/manageTagsBatches";
 import { batchWorkspaceMessages } from "@/i18n/messages/batchWorkspace";
@@ -15,6 +16,7 @@ import { productionMessages } from "@/i18n/messages/production";
 import { unifiedProductionMessages } from "@/i18n/messages/unifiedProduction";
 import { ProductionIdentity, ProductionPlatePreview } from "./production-identity";
 import { MaterialsNeeded } from "./production-materials";
+import { NfcMountChoice, useNfcMountName } from "./production-nfc";
 import { errorMessage, invalidateAdminTags, sendJson } from "./api";
 import { catalogOptions, useTagCatalog } from "./batches-shared";
 import { useTagLabels } from "./labels";
@@ -61,6 +63,9 @@ export function ProductionWizard({ onClose, onCreated, onOrdered, onCloseAutoFoc
   const fromModel = Boolean(initialModel) && !existingBatch && !external;
   const first = fromModel ? 1 : 0;
   const [step, setStep] = useState(first);
+  const [pickedMount, setPickedMount] = useState<PrintNfcMount | null>(null);
+  const tn = useT(printNfcMessages);
+  const nfcName = useNfcMountName();
   const nameOf = useModelName();
   const bySlug = new Map((modelsQuery.data ?? []).map((m) => [m.slug, m]));
   // Printing is the way in; supplier orders and existing codes sit behind a small link.
@@ -79,6 +84,9 @@ export function ProductionWizard({ onClose, onCreated, onOrdered, onCloseAutoFoc
   const stepNames = [tw("stepProduct"), printing ? u("quantityStep") : tw("stepCodes"), tw("stepReview")];
   const visibleSteps = [0, 1, 2].filter((index) => index >= first);
   const organizationChoices = model?.kind === "serialized" && !existingBatch ? access.organizations : [];
+  const nfcVariants = model?.currentVersion?.nfcVariants;
+  const nfcMounts = printing && !existingBatch ? nfcMountsOf(nfcVariants) : [];
+  const nfcMount = pickedMount && nfcMounts.includes(pickedMount) ? pickedMount : preferredNfcMount(nfcMounts);
   const organization = organizationChoices.find((o) => String(o.id) === organizationId) ?? organizationChoices[0];
   const create = useMutation({
     mutationFn: () => sendJson<{ id: string; batchCode: string; quantity: number; codeSource: string }>("POST", "/api/xpot/admin/tag-batches", {
@@ -97,6 +105,7 @@ export function ProductionWizard({ onClose, onCreated, onOrdered, onCloseAutoFoc
   const order = useMutation({
     mutationFn: () => sendJson<PrintRequestItem>("POST", "/api/xpot/admin/print-jobs", {
       model: model!.id, bed: bed!.label, quantity: printPlan.count, notes: form.notes.trim() || null,
+      ...(nfcMount && !existingBatch ? { nfcMount } : {}),
       ...(existingBatch ? { existingBatch: existingBatch.id } : {}),
       ...(organization ? { organization: organization.id } : {}),
     }),
@@ -163,6 +172,7 @@ export function ProductionWizard({ onClose, onCreated, onOrdered, onCloseAutoFoc
               </Field>
               {catalogError ? <p role="alert" className="text-xs text-red-300">{tw("catalogError")} <button type="button" className="underline underline-offset-2" onClick={() => void reloadCatalog()}>{tw("retryCatalog")}</button></p> : !catalogLoading && catalog.length === 0 ? <p role="status" className="text-xs text-amber-300">{tw("catalogEmpty")}</p> : null}
             </div> : null}
+            {step === 1 && nfcMounts.length ? <div className="space-y-2"><p className="text-sm font-medium text-white/85">{tn("question")}</p><NfcMountChoice mounts={nfcMounts} value={nfcMount} onChange={setPickedMount} /></div> : null}
             {step === 1 ? <fieldset aria-label={tw("codeSetup")} className="space-y-4" data-testid="admin-tags-new-batch-codes">
               {printing ? <>
                 {model ? <ProductionIdentity model={model} hero /> : null}
@@ -176,11 +186,12 @@ export function ProductionWizard({ onClose, onCreated, onOrdered, onCloseAutoFoc
               <p className="flex items-start gap-2 rounded-xl border border-white/[0.06] bg-white/[0.02] p-3 text-xs leading-relaxed text-white/50"><Info className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden="true" />{tw("stockHint")}</p>
             </fieldset> : null}
             {step === 2 ? <>
-              {printing && model ? <><ProductionIdentity model={model} hero /><MaterialsNeeded materials={model.materials} filaments={filamentColours(model)} assembly={assemblyParts(model, bySlug)} /></> : !printing ? <ProductionIdentity model={{ title: form.name, productType: form.productType, face: form.face || (form.productType === "google_review_sign" ? "google_review" : null) }} hero /> : null}
+              {printing && model ? <><ProductionIdentity model={model} hero /><MaterialsNeeded materials={materialsForNfc(model.materials, nfcMount ? nfcVariants?.[nfcMount] : null)} filaments={filamentColours(model)} assembly={assemblyParts(model, bySlug)} /></> : !printing ? <ProductionIdentity model={{ title: form.name, productType: form.productType, face: form.face || (form.productType === "google_review_sign" ? "google_review" : null) }} hero /> : null}
               <dl className="grid grid-cols-1 gap-4 rounded-xl border border-white/10 bg-white/[0.02] p-4 text-sm sm:grid-cols-2">
                 {(printing ? [
                   [tp("fieldQuantity"), String(printPlan.pieces)],
                   [tp("fieldBed"), bed?.label],
+                  ...(nfcMount ? [[tn("field"), nfcName(nfcMount)]] : []),
                   ...(organizationChoices.length > 1 && organization ? [[tp("organization"), organization.name]] : []),
                   [u("output"), model?.kind === "part" ? bed?.fileName ?? ".3mf" : ".3mf + .gcode.3mf"],
                   ...(existingBatch ? [[u("existingCodes"), existingBatch.batchCode]] : []),

@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
+  materialsForNfc,
+  nfcMountsOf,
+  preferredNfcMount,
+  withNfcVariant,
   bedPosition,
   canMarkPrinted,
   PRINT_ERROR_QR_CHECK,
@@ -144,10 +148,47 @@ describe("marking a plate printed", () => {
   });
 });
 
+describe("the NFC choice", () => {
+  const variants = {
+    sticker_10x20: { pause: { z: 1.8, text: "rect" }, consumes: [{ part: "nfc-sticker-10x20", perPiece: 1 }] },
+    sticker_round_25: { pause: { z: 2.28, text: "round" }, consumes: [{ part: "nfc-sticker-round-25", perPiece: 1 }], material: { kind: "nfc_sticker" as const, name: "Round", spec: null, supplier: null, url: null, note: null } },
+  };
+
+  it("offers the round sticker first and marks it as the default", () => {
+    expect(nfcMountsOf(variants)).toEqual(["sticker_round_25", "sticker_10x20"]);
+    expect(preferredNfcMount(nfcMountsOf(variants))).toBe("sticker_round_25");
+    expect(preferredNfcMount(["embedded_round"])).toBe("embedded_round");
+    expect(nfcMountsOf({})).toEqual([]);
+    expect(preferredNfcMount([])).toBeNull();
+  });
+
+  it("applies one type to the params, recipe, every bed and the parts", () => {
+    const version = { params: { size: "large" }, recipe: { pause_top_z: 1.8, _pause: "old", wall_loops: "3" }, beds: [{ label: "x4", copies: 4 }, { label: "x6", copies: 6 }], consumes: [{ part: "base-large", perPiece: 1 }] };
+    const printed = withNfcVariant(version, variants, "sticker_round_25");
+    expect(printed.params).toEqual({ size: "large", nfc_mount: "sticker_round_25" });
+    expect(printed.recipe).toEqual({ pause_top_z: 2.28, wall_loops: "3" });
+    expect(printed.beds.map((bed) => bed.pause?.z)).toEqual([2.28, 2.28]);
+    expect(printed.consumes).toEqual(variants.sticker_round_25.consumes);
+  });
+
+  it("leaves a plate with no type, or a version with no variants, as it is", () => {
+    const version = { params: {}, recipe: {}, beds: [], consumes: [] };
+    expect(withNfcVariant(version, variants, null)).toBe(version);
+    expect(withNfcVariant(version, {}, "sticker_10x20")).toBe(version);
+  });
+
+  it("lists the type's sticker instead of the model's, keeping the rest", () => {
+    const listed = [{ kind: "nfc_sticker" as const, name: "Old", spec: null, supplier: null, url: null, note: null }, { kind: "filament" as const, name: "White PLA", spec: null, supplier: null, url: null, note: null }];
+    expect(materialsForNfc(listed, variants.sticker_round_25).map((m) => m.name)).toEqual(["Round", "White PLA"]);
+    expect(materialsForNfc(listed, variants.sticker_10x20).map((m) => m.name)).toEqual(["Old", "White PLA"]);
+    expect(materialsForNfc(null, null)).toEqual([]);
+  });
+});
+
 describe("the Production page's choices", () => {
   const version = (builder: string | null, beds: PrintBed[], preview = false): PrintModelVersionItem => ({
     id: "v", modelId: "m", version: 1, status: "current", builder, params: {}, recipe: {}, beds,
-    consumes: [], changelog: null, fixesBatchId: null, fixesBatchCode: null, source: "mcp", createdAt: "", jobCount: 0,
+    consumes: [], nfcVariants: {}, changelog: null, fixesBatchId: null, fixesBatchCode: null, source: "mcp", createdAt: "", jobCount: 0,
     preview: preview ? { fileName: "p.glb", bytes: 1, sha256: "a", uploadedAt: "" } : null,
   });
   const model = (over: Partial<PrintModelItem> & { builder?: string | null; preview?: boolean }): PrintModelItem => {

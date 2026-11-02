@@ -1,7 +1,7 @@
 import type { Express } from "express";
 import { z } from "zod";
 import { customerOrderCreateSchema } from "#shared/customerOrders.js";
-import { PRINT_MAX_PLATES } from "#shared/printProduction.js";
+import { PRINT_MAX_PLATES, PRINT_NFC_MOUNTS } from "#shared/printProduction.js";
 import { actorOf, requireTagUser } from "../tags/access.js";
 import * as orders from "./service.js";
 import { TagSaleError } from "../tags/sales.js";
@@ -19,6 +19,7 @@ export const orderCommandSchemas = {
       revision,
       lineId: z.string().uuid(),
       quantity: z.number().int().positive().max(PRINT_MAX_PLATES).optional(),
+      nfcMount: z.enum(PRINT_NFC_MOUNTS).optional(),
     })
     .strict(),
   dispatch: z

@@ -31,7 +31,7 @@ import {
   MAX_ORDER_CENTS,
   type CustomerOrderCreateInput,
 } from "#shared/customerOrders.js";
-import { PRINT_MAX_PLATES } from "#shared/printProduction.js";
+import { PRINT_MAX_PLATES, type PrintNfcMount } from "#shared/printProduction.js";
 import type { TagActor } from "#shared/tagAccess.js";
 import { resolveTagFace } from "#shared/tagFace.js";
 import { createTagSaleWithin, releaseSalePieces } from "../tags/sales.js";
@@ -682,7 +682,7 @@ export async function produceOrder(
   id: string,
   actor: TagActor,
   key: string,
-  input: { revision: number; lineId: string; quantity?: number },
+  input: { revision: number; lineId: string; quantity?: number; nfcMount?: PrintNfcMount },
 ) {
   return command(
     id,
@@ -734,6 +734,7 @@ export async function produceOrder(
         {
           model: line.modelId,
           quantity,
+          nfcMount: input.nfcMount,
           organization: line.producerOrganizationId,
           notes: lead?.name ?? line.description,
         },
