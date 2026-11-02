@@ -35,7 +35,7 @@ const en = {
   todayFilesStuck: "Print files stuck",
   todayFilesStuckHint: "Still being generated after more than 2 hours: open the order and ask for the file again.",
   todayPrintsFailed: "Failed prints",
-  todayPrintsFailedHint: "A print job failed and has not been printed again: redo it or cancel it.",
+  todayPrintsFailedHint: "A print failed and has not been printed again: redo it or cancel it.",
   todayTeamPurchases: "Team purchases",
   todayTeamPurchasesHint: "Orders your team placed that have not arrived yet.",
   todayWhat: "part of today's list",

@@ -131,7 +131,7 @@ const en = {
   situation_internalUse: "Internal use",
   chipNote_qrWorks: "QR works. The chip isn't written yet.",
   chipNote_failed: "The chip write failed. Try again.",
-  actionOpenPrint: "Open print job",
+  actionOpenPrint: "Open the print",
   actionSeePrint: "See the print",
   actionViewPerformance: "See performance",
   actionReactivate: "Reactivate",
