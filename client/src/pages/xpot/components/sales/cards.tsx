@@ -15,6 +15,7 @@ import { GLASS_CLASS } from "@/components/xpot/surface";
 import { useT } from "@/i18n";
 import { salesMessages } from "@/i18n/messages/sales";
 import { salesModuleMessages } from "@/i18n/messages/salesModule";
+import { useShowProfit } from "../../hooks/useShowProfit";
 
 /** Paid green; partly paid and unpaid amber, still to collect (PAYMENT_STATUS_TONE). */
 export function paymentTone(status: string): PillTone {
@@ -136,7 +137,7 @@ export function ConsignmentCard({
         {!compact && (
           <div className="mt-3 grid grid-cols-3 gap-2 border-t border-white/[0.06] pt-2.5">
             {[
-              { label: t("statLeft"), value: c.totalDeposited },
+              { label: t("statDelivered"), value: c.totalDeposited },
               { label: t("statSold"), value: c.totalSold },
               { label: t("statBilled"), value: formatCents(c.totalSettledCents, c.currency) },
             ].map((s) => (
@@ -150,9 +151,9 @@ export function ConsignmentCard({
       </button>
 
       {!closed && (onSettle || onRestock || onReturn) && (
-        <div className="mt-3 flex gap-1.5">
+        <div className="mt-3 flex flex-wrap gap-1.5">
           {onSettle && (
-            <Button type="button" variant="money" className="min-h-10 flex-1" onClick={onSettle}>
+            <Button type="button" variant="money" className="min-h-10 min-w-[10rem] flex-1" onClick={onSettle}>
               <Handshake aria-hidden="true" /> {t("actionSettle")}
             </Button>
           )}
@@ -162,8 +163,8 @@ export function ConsignmentCard({
             </Button>
           )}
           {onReturn && (
-            <Button type="button" variant="secondary" size="icon" className="h-10 w-10" onClick={onReturn} title={t("actionTakeBack")} aria-label={t("actionTakeBack")}>
-              <Undo2 aria-hidden="true" />
+            <Button type="button" variant="secondary" className="min-h-10" onClick={onReturn}>
+              <Undo2 aria-hidden="true" /> {t("actionTakeBack")}
             </Button>
           )}
         </div>
@@ -223,6 +224,7 @@ export function MovementLedger({ movements, currency }: { movements: SalesConsig
 
 export function SaleDetail({ row }: { row: SaleWithItems }) {
   const t = useT(salesModuleMessages);
+  const showProfit = useShowProfit();
   const { sale, items, pieces } = row;
   const costCents = items.reduce((sum, item) => sum + item.quantity * item.unitCostCents, 0);
   return (
@@ -276,8 +278,8 @@ export function SaleDetail({ row }: { row: SaleWithItems }) {
         </Row>
         {sale.paymentMethod ? <Row label={t("method")}><span className="text-xs text-white/60">{t(`method_${sale.paymentMethod as PaymentMethod}`)}</span></Row> : null}
         <Row label={t("date")}><span className="text-xs text-white/60">{formatDateTime(sale.soldAt)}</span></Row>
-        {pieces.length > 0 && <Row label={t("costOfGoods")}><Money cents={costCents} currency={sale.currency} className={MONEY_CHART.cost.text} /></Row>}
-        {pieces.length > 0 && <Row label={t("grossProfit")}><Money cents={sale.totalCents - costCents} currency={sale.currency} /></Row>}
+        {showProfit && pieces.length > 0 && <Row label={t("costOfGoods")}><Money cents={costCents} currency={sale.currency} className={MONEY_CHART.cost.text} /></Row>}
+        {showProfit && pieces.length > 0 && <Row label={t("grossProfit")}><Money cents={sale.totalCents - costCents} currency={sale.currency} /></Row>}
       </div>
 
       {sale.notes ? (

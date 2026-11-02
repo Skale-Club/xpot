@@ -7,6 +7,7 @@
 
 import { and, asc, desc, eq, gte, inArray, sql } from "drizzle-orm";
 import { db } from "./db.js";
+import { calendarDayKeys, windowStart } from "#shared/dayKeys.js";
 import {
   salesLeads,
   salesProducts,
@@ -248,14 +249,22 @@ export async function getSale(id: number): Promise<SaleWithItems | undefined> {
 /** Transaction and physical-piece totals shown beside completed visits. */
 export async function visitSalesBatch(visitIds: number[]) {
   const uniqueIds = Array.from(new Set(visitIds));
-  const result = new Map<number, { transactions: number; pieces: number; totalCents: number }>();
+  const result = new Map<number, { transactions: number; pieces: number; items: number; totalCents: number }>();
   if (!uniqueIds.length) return result;
-  const [saleRows, pieceRows] = await Promise.all([
+  const [saleRows, itemRows, pieceRows] = await Promise.all([
     db.select({
       visitId: salesSales.visitId,
       transactions: sql<number>`count(*)::int`,
       totalCents: sql<number>`coalesce(sum(${salesSales.totalCents}), 0)::int`,
     }).from(salesSales)
+      .where(and(inArray(salesSales.visitId, uniqueIds), eq(salesSales.status, "completed")))
+      .groupBy(salesSales.visitId),
+    // Items sold: the quantity of every line, tagged piece or catalog product alike.
+    db.select({
+      visitId: salesSales.visitId,
+      items: sql<number>`coalesce(sum(${salesSaleItems.quantity}), 0)::int`,
+    }).from(salesSaleItems)
+      .innerJoin(salesSales, eq(salesSaleItems.saleId, salesSales.id))
       .where(and(inArray(salesSales.visitId, uniqueIds), eq(salesSales.status, "completed")))
       .groupBy(salesSales.visitId),
     db.select({
@@ -268,11 +277,16 @@ export async function visitSalesBatch(visitIds: number[]) {
   ]);
   for (const row of saleRows) {
     if (row.visitId == null) continue;
-    result.set(row.visitId, { transactions: row.transactions, pieces: 0, totalCents: row.totalCents });
+    result.set(row.visitId, { transactions: row.transactions, pieces: 0, items: 0, totalCents: row.totalCents });
+  }
+  for (const row of itemRows) {
+    if (row.visitId == null) continue;
+    const current = result.get(row.visitId);
+    if (current) current.items = row.items;
   }
   for (const row of pieceRows) {
     if (row.visitId == null) continue;
-    const current = result.get(row.visitId) ?? { transactions: 0, pieces: 0, totalCents: 0 };
+    const current = result.get(row.visitId) ?? { transactions: 0, pieces: 0, items: 0, totalCents: 0 };
     current.pieces = row.pieces;
     result.set(row.visitId, current);
   }
@@ -760,7 +774,7 @@ function startOfDay(d: Date): Date {
 export async function salesSummary(filters: { repId?: number; organizationIds?: number[]; days?: number } = {}): Promise<SalesSummary> {
   const days = Math.min(Math.max(filters.days ?? 30, 1), 365);
   const now = new Date();
-  const from = startOfDay(new Date(now.getTime() - (days - 1) * 24 * 60 * 60 * 1000));
+  const from = windowStart(now, days);
   const today = startOfDay(now);
   const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
 
@@ -861,9 +875,7 @@ export async function salesSummary(filters: { repId?: number; organizationIds?: 
   // Fill every day in the window so the chart never has gaps.
   const dailyMap = new Map(dailyRows.map((r) => [r.date, r]));
   const daily: SalesSummary["daily"] = [];
-  for (let i = 0; i < days; i++) {
-    const d = new Date(from.getTime() + i * 24 * 60 * 60 * 1000);
-    const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  for (const key of calendarDayKeys(from, days)) {
     const row = dailyMap.get(key);
     daily.push({
       date: key,

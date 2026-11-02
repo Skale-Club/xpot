@@ -26,6 +26,7 @@ import { DialogFooter } from "@/components/ui/dialog";
 import { Input, Textarea } from "@/components/xpot/Field";
 import { InlineAlert } from "@/components/xpot/InlineAlert";
 import { EYEBROW, GLASS_CLASS } from "@/components/xpot/surface";
+import { useShowProfit } from "../../hooks/useShowProfit";
 
 type Line = {
   key: string;
@@ -71,6 +72,7 @@ export function SaleDialog({
   const tc = useT(commonMessages);
   const { statusOptions, methodOptions } = usePaymentOptions();
   const productsQuery = useProducts({ enabled: open });
+  const showProfit = useShowProfit();
   const { createSale } = useSalesMutations();
 
   const [lines, setLines] = useState<Line[]>([newLine()]);
@@ -225,10 +227,12 @@ export function SaleDialog({
             <span className="text-sm font-semibold text-white">{t("total")}</span>
             <Money cents={totals.totalCents} className="text-lg font-bold text-emerald-300" />
           </div>
-          <div className="flex items-center justify-between text-xs text-white/40">
-            <span>{t("youKeep")}</span>
-            <span className="tabular-nums">{formatCents(totals.profitCents)}</span>
-          </div>
+          {showProfit ? (
+            <div className="flex items-center justify-between text-xs text-white/40">
+              <span>{t("youKeep")}</span>
+              <span className="tabular-nums">{formatCents(totals.profitCents)}</span>
+            </div>
+          ) : null}
         </div>
 
         {/* Payment */}
