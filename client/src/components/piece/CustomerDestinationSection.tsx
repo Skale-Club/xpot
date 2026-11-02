@@ -291,17 +291,7 @@ export function CustomerDestinationSection({ commands }: {
   return (
     <section className={bare ? "contents" : `${CARD_ACCENT} p-4`} data-testid="destination-hero">
       {bare ? null : (<>
-      <div className="flex items-center justify-between gap-2">
-        <p className={EYEBROW}>{t("setupTitle")}</p>
-        <div className="flex items-center gap-1">
-          {dest && !retired && (
-            <Button type="button" variant="outline" size="sm" onClick={() => openEditor(false)} data-testid="button-change-destination">
-              <Pencil />
-              {t("changeDestination")}
-            </Button>
-          )}
-        </div>
-      </div>
+      <p className={EYEBROW}>{t("setupTitle")}</p>
 
       {tag.leadId ? null : dest ? (
         // Set up without a customer (made before the picker was required): Change customer links one.
@@ -320,6 +310,7 @@ export function CustomerDestinationSection({ commands }: {
             </span>
           )}
           <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-1">
             {destKind === "vcard" ? (
               <p className="truncate text-lg font-bold text-white">{destDisplay}</p>
             ) : (
@@ -328,7 +319,9 @@ export function CustomerDestinationSection({ commands }: {
                 <ExternalLink className="h-4 w-4 shrink-0 text-violet-300" />
               </a>
             )}
-            {destType && <p className="truncate text-xs text-white/50">{destType}{manage && tag.utmEnabled && destKind === "url" ? " · UTM" : ""}</p>}
+            {!retired && <EditPencil label={t("changeDestination")} onClick={() => openEditor(false)} testId="button-change-destination" />}
+            </div>
+            {(destType || (manage && tag.utmEnabled && destKind === "url")) && <p className="truncate text-xs text-white/50">{[destType, manage && tag.utmEnabled && destKind === "url" ? "UTM" : ""].filter(Boolean).join(" · ")}</p>}
           </div>
           {destKind !== "vcard" && <CopyButton text={dest} label={t("copyLink")} />}
         </div>
@@ -362,7 +355,6 @@ export function CustomerDestinationSection({ commands }: {
             </Button>
           )}
           {tag.leadId ? (
-      {tag.leadId && tag.saleId !== null ? <p className="mt-2 text-xs text-white/40" data-testid="admin-piece-clear-customer-sold">{tm("clearCustomerSold")}</p> : null}
             <div className="flex min-w-0 flex-1 items-center gap-1">
               <span className="min-w-0 break-words text-sm font-semibold text-white/85" data-testid="text-tag-lead">{tag.leadName ?? tm("customerNumber", { id: tag.leadId })}</span>
               {canChangeCustomer && <EditPencil label={t("changeCustomerShort")} onClick={() => openEditor(true)} testId="button-change-customer" />}
@@ -370,6 +362,7 @@ export function CustomerDestinationSection({ commands }: {
           ) : null}
         </div>
       )}
+      {tag.leadId && tag.saleId !== null ? <p className="mt-2 text-xs text-white/40" data-testid="admin-piece-clear-customer-sold">{tm("clearCustomerSold")}</p> : null}
       {tag.leadId && !retired ? (
         <details className="group mt-2 text-sm" data-testid="customer-more-details">
           <summary className="flex min-h-9 cursor-pointer list-none items-center gap-1.5 text-white/50 hover:text-white [&::-webkit-details-marker]:hidden">
@@ -406,7 +399,6 @@ export function CustomerDestinationSection({ commands }: {
           </div>
         </details>
       ) : null}
-      {live && <p className="mt-2 text-xs text-emerald-400/90">{tm("liveExplain")}</p>}
       {!live && !retired && tag.status !== "inventory" && !activatePlan.ok && tag.status !== "disabled" ? (
         <p className="mt-2 text-xs text-white/40">{tm(!tag.leadId ? "activateNeedsCustomer" : !tag.destinationUrl ? "activateNeedsUrl" : "activateNeedsType")}</p>
       ) : null}
