@@ -63,16 +63,21 @@ export function TagsTodo() {
             </ul>
           )}
         </section>
+      ) : data ? (
+        // Nothing in hand yet (a new reseller): say so once, and there are no results to see.
+        <p className="px-1 text-sm text-white/50" data-testid="todo-empty">{t("todoEmpty")}</p>
       ) : null}
-      <button
-        type="button"
-        onClick={() => navigate(`${APP_BASE}/results`)}
-        className="flex min-h-11 w-full items-center justify-center gap-2 rounded-xl text-sm font-semibold text-white/60 active:bg-white/10"
-        data-testid="see-results"
-      >
-        <BarChart3 className="h-4 w-4" />
-        {t("seeResults")}
-      </button>
+      {data && data.length > 0 && (
+        <button
+          type="button"
+          onClick={() => navigate(`${APP_BASE}/results`)}
+          className="flex min-h-11 w-full items-center justify-center gap-2 rounded-xl text-sm font-semibold text-white/60 active:bg-white/10"
+          data-testid="see-results"
+        >
+          <BarChart3 className="h-4 w-4" />
+          {t("seeResults")}
+        </button>
+      )}
     </div>
   );
 }
