@@ -105,16 +105,23 @@ export function CodeCheckList({
         {codes.map((code, index) => ({ code, index, item: answered[index] })).reverse().map(({ code, index, item }) => {
           const key = item ? reasonKey(kind, item.reason) : null;
           const where = item?.repName ? [item.repName, item.kitCode].filter(Boolean).join(" · ") : null;
+          // Taking a piece back is by who has it and what it is: the batch and kit codes are not what anyone returns it by.
+          const product = item?.productType ? labels.product(item.productType) : null;
+          const takeBackLine = [item?.repName, product].filter(Boolean).join(" · ");
           return (
             <li key={code} className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1 px-3 py-2" data-testid={`code-row-${code}`}>
               <span className="w-6 shrink-0 text-right text-xs tabular-nums text-white/30">{index + 1}</span>
               <div className="min-w-0 flex-1">
                 <p className="truncate font-mono text-sm text-white">{code}</p>
-                <p className="truncate text-xs text-white/40">
-                  {item?.batchCode ? `${item.batchCode}${item.serialNumber ? ` #${item.serialNumber}` : ""}` : null}
-                  {item?.productType ? ` · ${labels.product(item.productType)}` : null}
-                  {where ? ` · ${where}` : null}
-                </p>
+                {kind === "takeBack" ? (
+                  <p className="truncate text-xs text-white/40">{takeBackLine}</p>
+                ) : (
+                  <p className="truncate text-xs text-white/40">
+                    {item?.batchCode ? `${item.batchCode}${item.serialNumber ? ` #${item.serialNumber}` : ""}` : null}
+                    {item?.productType ? ` · ${labels.product(item.productType)}` : null}
+                    {where ? ` · ${where}` : null}
+                  </p>
+                )}
               </div>
               {/* On phones the answer takes its own line under the code, so a long reason never overflows. */}
               <span className="order-last w-full pl-9 sm:order-none sm:w-auto sm:pl-0">

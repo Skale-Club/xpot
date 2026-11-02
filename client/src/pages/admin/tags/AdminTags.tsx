@@ -83,7 +83,7 @@ export function CodeLookup({ onFound, fill = false }: { onFound: (id: string) =>
       />
       <Button type="submit" variant="brand" accent="tags" className="min-h-10 shrink-0" disabled={!code.trim()} loading={busy}>
         <ScanLine className="h-4 w-4" />
-        {t("open")}
+        {t("openPiece")}
       </Button>
     </form>
   );

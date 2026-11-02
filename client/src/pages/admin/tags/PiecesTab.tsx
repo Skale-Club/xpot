@@ -16,7 +16,7 @@ import { EmptyState } from "@/components/xpot/EmptyState";
 import { Field, Input, Select } from "@/components/xpot/Field";
 import { ADMIN_TAGS_KEY, errorMessage, getJson, invalidateAdminTags, sendJson, STALE_MS, withQuery } from "./api";
 import { Loading, LoadError, organizationFilterOptions, uniqueOptions, useBatchOptions, useLeads, useOrganizations, useReps } from "./pieces-shared";
-import { useViewerAccess } from "@/lib/adminMode";
+import { ownedOrganizations, useViewerAccess } from "@/lib/adminMode";
 import { catalogOptions, useTagCatalog } from "./batches-shared";
 import { PieceTable, type PieceColumn } from "./piece-table";
 import { PieceDetail } from "./PieceDetail";
@@ -161,8 +161,10 @@ export function PiecesTab({ go }: { go: (path: string) => void }) {
   const { data: leads = [] } = useLeads();
   const { data: batches = [] } = useBatchOptions();
   // The organization filter is platform management's (?org=, also the Organizations page's "See all in Inventory").
-  const { canManage } = useViewerAccess();
-  const { data: organizations = [] } = useOrganizations(canManage);
+  const { canManage, me } = useViewerAccess();
+  // Whoever runs several organizations gets the filter and the organization of each piece too, not only the platform.
+  const spansOrganizations = canManage || ownedOrganizations(me?.organizations).length > 1;
+  const { data: organizations = [] } = useOrganizations(spansOrganizations);
   // On a computer a piece opens in a pop-up over the list (?piece=<id>, so the link is shareable); its own page,
   // /admin/tags/pieces/:id, stays for phones and "Open full page". Moving between pieces and closing
   // replace history; only the first open pushes.
@@ -282,6 +284,8 @@ export function PiecesTab({ go }: { go: (path: string) => void }) {
         pieces={tags}
         onOpen={openPiece}
         columns={ALL_COLUMNS}
+        // Someone who runs several organizations (or the platform with "All organizations") sees whose piece each is.
+        showOrganization={spansOrganizations && !filters.org && orgOptions.length > 1}
         selectedId={paneId}
         testId="admin-pieces-table"
         headTop={isDesktop ? stickyHeight : undefined}
@@ -325,7 +329,7 @@ export function PiecesTab({ go }: { go: (path: string) => void }) {
         secondary={
           moreOpen ? (
             <div className="flex flex-wrap items-center gap-2" data-testid="admin-pieces-more-filters">
-              {canManage ? (
+              {spansOrganizations ? (
                 <FilterSelect value={filters.org} onChange={(org) => set({ org })} placeholder={tg("allOrganizations")} options={orgOptions} icon={Network} testId="admin-pieces-org" />
               ) : null}
               <FilterSelect value={filters.rep} onChange={(rep) => set({ rep })} placeholder={tg("allResellers")} options={repOptions} icon={Users} testId="admin-pieces-rep" />

@@ -156,6 +156,8 @@ type TagRow = {
   lead_name: string | null;
   rep_id: number | null;
   rep_name: string | null;
+  organization_id: number;
+  organization_name: string | null;
   kit_id: string | null;
   kit_number: number | null;
   batch_id: string | null;
@@ -199,6 +201,8 @@ function toListItem(r: TagRow): TagListItem {
     leadName: r.lead_name,
     repId: r.rep_id,
     repName: r.rep_name,
+    organizationId: r.organization_id,
+    organizationName: r.organization_name,
     kitId: r.kit_id,
     kitCode: r.kit_number == null ? null : kitCode(Number(r.kit_number)),
     batchId: r.batch_id,
@@ -223,6 +227,7 @@ function tagListQuery(where: SQL, limit: number, offset = 0, opts: { inventorySc
            t.face, b.face AS batch_face, t.status, t.stock_status, t.ownership_type, t.custodian_rep_id,
            t.internal_use_note, t.nfc_provisioning_status, t.label,
            t.destination_type, t.destination_url, t.lead_id, l.name AS lead_name, t.rep_id, r.display_name AS rep_name,
+           t.organization_id, org.name AS organization_name,
            t.kit_id, k.kit_number, t.batch_id, b.batch_code, t.activated_at, t.sold_at, t.created_at,
            sold.sale_id, sold.net_total_cents AS sold_price_cents, acquired.acquisition_cost_cents,
            pj.status AS print_job_status, ${opts.inventoryScan ? sql`scan.inventory_scan_at` : sql`NULL::timestamptz`} AS inventory_scan_at,
@@ -230,6 +235,7 @@ function tagListQuery(where: SQL, limit: number, offset = 0, opts: { inventorySc
     FROM tags t
     LEFT JOIN sales_leads l ON l.id = t.lead_id
     LEFT JOIN sales_reps r ON r.id = t.rep_id
+    LEFT JOIN organizations org ON org.id = t.organization_id
     LEFT JOIN tag_batches b ON b.id = t.batch_id
     LEFT JOIN print_jobs pj ON pj.id = b.print_job_id
     LEFT JOIN tag_kits k ON k.id = t.kit_id

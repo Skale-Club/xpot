@@ -11,6 +11,7 @@ const en = {
   // Code lookup (top bar / phone strip)
   codePlaceholder: "Code or scanned link",
   open: "Open",
+  openPiece: "Open piece",
   invalidCode: "Invalid code",
   invalidCodeHint: "Type the 8-character code (e.g. A7K3P9X2) or paste the piece's link, e.g. https://xpot.place/q/A7K3P9X2.",
   pieceNotFound: "Piece not found",
@@ -326,6 +327,7 @@ export const manageTagsMessages: Dictionary<typeof en> = {
   pt: {
     codePlaceholder: "Código ou link lido",
     open: "Abrir",
+    openPiece: "Abrir peça",
     invalidCode: "Código inválido",
     invalidCodeHint: "Digite o código de 8 caracteres (ex.: A7K3P9X2) ou cole o link da peça, ex.: https://xpot.place/q/A7K3P9X2.",
     pieceNotFound: "Peça não encontrada",
@@ -624,6 +626,7 @@ export const manageTagsMessages: Dictionary<typeof en> = {
   es: {
     codePlaceholder: "Código o enlace leído",
     open: "Abrir",
+    openPiece: "Abrir pieza",
     invalidCode: "Código no válido",
     invalidCodeHint: "Escribe el código de 8 caracteres (p. ej. A7K3P9X2) o pega el enlace de la pieza, p. ej. https://xpot.place/q/A7K3P9X2.",
     pieceNotFound: "Pieza no encontrada",
