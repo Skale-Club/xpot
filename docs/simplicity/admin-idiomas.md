@@ -218,6 +218,7 @@ Problema: o botão da fila diz "Fatiado" (pt) e "Laminado" (es), que em espanhol
 Mudança: `downloadSliced`: en "Download", pt "Baixar", es "Descargar". O ícone já é de download, e a linha é curta.
 Arquivos: i18n/messages/production.ts:88,345,594; pages/admin/tags/production-orders.tsx:94
 Risco: nenhum; é o único arquivo oferecido ali.
+Status: feito
 
 ### ID-03 [S2] CHAPA, DISPLAY e SOPORTE: um produto com vários nomes
 Telas: platform/pt-desktop/piece-popup-live, panel-stock, production-queue; platform/es-desktop/piece-popup-houseAvailable, panel-stock; reseller/pt-desktop/tags-pieces; reseller/es-desktop/tags-pieces
@@ -225,6 +226,7 @@ Problema: a peça "Large Plate" tem o selo "CHAPA", e o texto em volta diz "plac
 Mudança: selos iguais aos nomes dos produtos, nos três idiomas: "Plate", "Stand", e "Sign" para o terceiro.
 Arquivos: i18n/messages/tags.ts:147-149,610-612,1056-1058
 Risco: depende do dono se prefere nomes traduzidos nos produtos também. Recomendo manter em inglês, como os nomes já estão.
+Status: feito (selos Plate, Stand e Sign nos três idiomas)
 
 ### ID-04 [S2] Instrução física de pausa em inglês
 Telas: platform/pt-desktop/production-job-ready, platform/es-desktop/production-job-ready
@@ -232,6 +234,7 @@ Problema: a caixa amarela, a mais chamativa da tela, começa em português, "Pau
 Mudança: texto de pausa por idioma no modelo, com fallback para inglês e o aviso en "(in English)", pt "(em inglês)", es "(en inglés)".
 Arquivos: pages/admin/tags/production-job.tsx:246-250; campo `bed.pause.text` da versão do modelo
 Risco: precisa de campo novo no modelo. Alternativa mais barata: traduzir ao salvar, com a tradução revisada por quem cria o modelo.
+Status: feito em parte (aviso "(em inglês)" e a instrução continua exata; o texto por idioma é dado da versão do modelo, decisão do dono)
 
 ### ID-05 [S2] Nomes de modelo em inglês e na ordem invertida
 Telas: platform/pt-desktop/production-queue, production-board, production-job-ready; platform/es-desktop/production-job-ready, org-harbor-settings; platform/en-desktop/organizations-new-dialog
@@ -239,6 +242,7 @@ Problema: "Stand Small · Google Review · White" fica logo acima de "Avaliaçã
 Mudança: montar o nome pelos dados: produto, face e cor traduzidos ("Small Stand · Avaliação Google · Branca"). Modelos sem produto mantêm o título digitado, sem o texto entre parênteses.
 Arquivos: pages/admin/tags/production-identity.tsx:31; pages/xpot/components/ReleasedModelsField.tsx:44
 Risco: nenhum na regra.
+Status: feito (nome montado de produto, face e cor no idioma em uso; ReleasedModelsField, em pages/xpot, não foi tocado)
 
 ### ID-06 [S2] Cor aparece como valor cru
 Telas: platform/pt-desktop/production-queue, production-job-ready; platform/es-desktop/production-queue, production-job-ready
@@ -281,6 +285,7 @@ Problema: "print requests, plates, batches", pt "pedidos de impressão, placas, 
 Mudança: en "print requests, print jobs, batches", pt "pedidos de impressão, impressões, lotes", es "pedidos de impresión, impresiones, lotes".
 Arquivos: i18n/messages/peopleWorkspace.ts:72,171,265
 Risco: nenhum.
+Status: feito
 
 ### ID-14 [S2] Dica do telefone de acesso diz coisas diferentes por idioma
 Telas: platform/en-desktop/settings-signin, reseller/pt-desktop/settings-profile, reseller/es-desktop/settings-profile, platform/pt-desktop/settings-profile

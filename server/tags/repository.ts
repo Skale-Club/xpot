@@ -1900,7 +1900,8 @@ interface BatchRow {
   face: string | null; vendor: string | null; quantity: number; status: string; code_source: string; print_job_id: string | null;
   notes: string | null; created_at: Date; tag_count: number; pending_count: number; house_count: number; hand_out_count: number;
   with_resellers_count: number; sold_count: number; damaged_count: number; active_count: number; nfc_verified_count: number;
-  last_production_action: string | null; organization_id: number;
+  last_production_action: string | null; organization_id: number; organization_name: string | null;
+  print_job_status: string | null; print_job_error: string | null;
 }
 
 const BATCH_SELECT = sql`
@@ -1915,7 +1916,10 @@ const BATCH_SELECT = sql`
     ${countMetricSql("damaged")} AS damaged_count,
     ${countMetricSql("live")} AS active_count,
     count(t.id) FILTER (WHERE t.nfc_provisioning_status IN ('verified', 'locked'))::int AS nfc_verified_count,
-    ${PRODUCTION_STEP_SQL} AS last_production_action
+    ${PRODUCTION_STEP_SQL} AS last_production_action,
+    (SELECT o.name FROM organizations o WHERE o.id = b.organization_id) AS organization_name,
+    (SELECT pj.status FROM print_jobs pj WHERE pj.id = b.print_job_id) AS print_job_status,
+    (SELECT pj.error_message FROM print_jobs pj WHERE pj.id = b.print_job_id) AS print_job_error
   FROM tag_batches b
   LEFT JOIN tags t ON t.batch_id = b.id`;
 
@@ -1930,11 +1934,15 @@ function batchItem(b: BatchRow): TagBatchItem {
     salesProductId: b.sales_product_id,
     face: resolveTagFace({ batchFace: b.face, productType: b.product_type }),
     ownFace: b.face,
-    vendor: b.vendor,
+    // A print batch's maker is whoever prints it; older ones were all filed under "Skale Club".
+    vendor: b.print_job_id && b.vendor === "Skale Club" && b.organization_name ? b.organization_name : b.vendor,
     quantity: Number(b.quantity),
     status: b.status,
     codeSource: b.code_source,
     printJobId: b.print_job_id,
+    printJobStatus: b.print_job_status,
+    printJobError: b.print_job_error,
+    organizationName: b.organization_name,
     organizationId: Number(b.organization_id),
     stage: batchStage({ status: b.status, codeSource: b.code_source, tagCount, pendingCount, lastProductionAction: b.last_production_action }),
     lastProductionAction: b.last_production_action,
@@ -2182,7 +2190,8 @@ export async function getOverview(now: Date = new Date(), timezoneOffsetMinutes 
   const [queueRow] = await rows<{ stuscle_orders: number; batches_not_received: number }>(sql`
     SELECT (SELECT count(*)::int FROM tag_acquisitions a WHERE a.status = 'pending' AND ${inOrganizations(sql`a.organization_id`, scope)}) AS stuscle_orders,
            (SELECT count(DISTINCT b.id)::int FROM tag_batches b JOIN tags t ON t.batch_id = b.id
-             WHERE b.status <> 'cancelled' AND ${stockMetricSql("notReceived")} AND ${inOrganizations(sql`b.organization_id`, scope)}) AS batches_not_received
+             WHERE b.status <> 'cancelled' AND ${stockMetricSql("notReceived")}
+               AND NOT EXISTS (SELECT 1 FROM print_jobs pj WHERE pj.id = b.print_job_id AND pj.status = 'cancelled') AND ${inOrganizations(sql`b.organization_id`, scope)}) AS batches_not_received
   `);
   const counts: TagOverview["counts"] = { total: 0, inventory: 0, assigned: 0, active: 0, disabled: 0, retired: 0, damaged: Number(stockRow?.damaged ?? 0) };
   const stock = { house: Number(stockRow?.house ?? 0), withResellers: Number(stockRow?.with_resellers ?? 0) };

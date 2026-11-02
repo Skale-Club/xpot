@@ -29,7 +29,7 @@ const SIZES = {
     standCorners: "rounded-t-[5px] rounded-b-[2px]",
     mark: "h-2 w-2",
     face: "xs",
-    base: "h-[5px] w-[34px] rounded-b-[3px] rounded-t-[1px]",
+    base: "h-[5px] w-7 rounded-b-[3px] rounded-t-[1px]",
   },
   md: {
     body: "w-11 gap-1.5 p-1.5 pb-2",
@@ -40,7 +40,7 @@ const SIZES = {
     standCorners: "rounded-t-[8px] rounded-b-[3px]",
     mark: "h-3 w-3",
     face: "sm",
-    base: "h-2 w-12 rounded-b-[4px] rounded-t-[1px]",
+    base: "h-2 w-11 rounded-b-[4px] rounded-t-[1px]",
   },
   lg: {
     body: "h-32 w-24 justify-between p-3 pb-4",
@@ -51,7 +51,7 @@ const SIZES = {
     standCorners: "rounded-t-xl rounded-b-[4px]",
     mark: "h-6 w-6",
     face: "lg",
-    base: "h-3 w-28 rounded-b-md rounded-t-[2px]",
+    base: "h-3 w-24 rounded-b-md rounded-t-[2px]",
   },
 } as const;
 

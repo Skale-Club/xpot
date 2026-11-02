@@ -167,7 +167,6 @@ const en = {
   sellNoWholesaleCode: "No wholesale code",
 
   // Batches
-  piecesReceivedOf: "{received} of {total} pieces received",
   tabSummary: "Summary",
   tabPrint: "Print",
   tabReceive: "Receive",
@@ -190,8 +189,6 @@ const en = {
   downloadFailed: "Could not download the file",
   handOutAction: "Hand out",
   seePiecesInInventory: "See pieces in Stock",
-  printOrderLine: "This batch comes from a print order: its stage, files and Mark printed live on the order page.",
-  openPrintOrder: "Open print order",
 
   // Receive station
   receiveTitle: "Receive {code}",
@@ -213,6 +210,16 @@ const en = {
   readClosed: "Batch closed",
   readError: "Not added",
   readUndone: "Undone",
+  goodAndDamaged_one: "{count} damaged",
+  goodAndDamaged_other: "{count} damaged",
+  printJobCard: "Print job",
+  openPrintJob: "Open print job",
+  fileCodesCsv: "List of codes (CSV)",
+  fileQrSvg: "QR images (SVG)",
+  fileQrSvgPng: "QR images (SVG + PNG)",
+  chipRuleTitle: "How to write the chips",
+  chipRule: "Write each chip with the link in its row of the list, and lock it only after its QR and its chip both work when tested with a phone.",
+  scanFirstPiece: "Scan at least one piece first.",
 };
 
 export const adminTagsFlowMessages: Dictionary<typeof en> = {
@@ -371,7 +378,6 @@ export const adminTagsFlowMessages: Dictionary<typeof en> = {
     sellNoCostRule: "Regra de custo não definida",
     sellNoWholesaleCode: "Sem código de atacado",
 
-    piecesReceivedOf: "{received} de {total} peças recebidas",
     tabSummary: "Resumo",
     tabPrint: "Impressão",
     tabReceive: "Receber",
@@ -394,8 +400,6 @@ export const adminTagsFlowMessages: Dictionary<typeof en> = {
     downloadFailed: "Não foi possível baixar o arquivo",
     handOutAction: "Entregar",
     seePiecesInInventory: "Ver peças no Estoque",
-    printOrderLine: "Este lote vem de um pedido de impressão: etapa, arquivos e Marcar impresso ficam na página do pedido.",
-    openPrintOrder: "Abrir pedido de impressão",
 
     receiveTitle: "Receber {code}",
     receiveClosed: "Este lote está fechado: reabra para receber peças.",
@@ -416,6 +420,16 @@ export const adminTagsFlowMessages: Dictionary<typeof en> = {
     readClosed: "Lote fechado",
     readError: "Não entrou",
     readUndone: "Desfeita",
+    goodAndDamaged_one: "{count} danificada",
+    goodAndDamaged_other: "{count} danificadas",
+    printJobCard: "Impressão",
+    openPrintJob: "Abrir a impressão",
+    fileCodesCsv: "Lista de códigos (CSV)",
+    fileQrSvg: "Imagens de QR (SVG)",
+    fileQrSvgPng: "Imagens de QR (SVG + PNG)",
+    chipRuleTitle: "Como gravar os chips",
+    chipRule: "Grave cada chip com o link da linha dele na lista e só trave o chip depois que o QR e o chip funcionarem no teste com um celular.",
+    scanFirstPiece: "Leia pelo menos uma peça primeiro.",
   },
   es: {
     cameraOn: "Usar cámara",
@@ -571,7 +585,6 @@ export const adminTagsFlowMessages: Dictionary<typeof en> = {
     sellNoCostRule: "Regla de costo sin definir",
     sellNoWholesaleCode: "Sin código mayorista",
 
-    piecesReceivedOf: "{received} de {total} piezas recibidas",
     tabSummary: "Resumen",
     tabPrint: "Impresión",
     tabReceive: "Recibir",
@@ -594,8 +607,6 @@ export const adminTagsFlowMessages: Dictionary<typeof en> = {
     downloadFailed: "No se pudo descargar el archivo",
     handOutAction: "Entregar",
     seePiecesInInventory: "Ver piezas en Stock",
-    printOrderLine: "Este lote viene de un pedido de impresión: etapa, archivos y Marcar impreso están en la página del pedido.",
-    openPrintOrder: "Abrir pedido de impresión",
 
     receiveTitle: "Recibir {code}",
     receiveClosed: "Este lote está cerrado: reábrelo para recibir piezas.",
@@ -616,5 +627,15 @@ export const adminTagsFlowMessages: Dictionary<typeof en> = {
     readClosed: "Lote cerrado",
     readError: "No entró",
     readUndone: "Deshecha",
+    goodAndDamaged_one: "{count} dañada",
+    goodAndDamaged_other: "{count} dañadas",
+    printJobCard: "Impresión",
+    openPrintJob: "Abrir la impresión",
+    fileCodesCsv: "Lista de códigos (CSV)",
+    fileQrSvg: "Imágenes QR (SVG)",
+    fileQrSvgPng: "Imágenes QR (SVG + PNG)",
+    chipRuleTitle: "Cómo grabar los chips",
+    chipRule: "Graba cada chip con el enlace de su fila en la lista y bloquéalo solo cuando su QR y su chip funcionen en la prueba con un celular.",
+    scanFirstPiece: "Lee al menos una pieza primero.",
   },
 };

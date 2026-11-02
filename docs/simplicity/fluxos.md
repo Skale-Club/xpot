@@ -78,6 +78,7 @@ Problema: depois de marcar 2 de 4 como ruins, a pagina do pedido diz "All pieces
 Mudanca: no pedido, quando houver danificadas: en "2 pieces are in stock. 2 were marked damaged." / pt "2 pecas estao no estoque. 2 foram marcadas como danificadas." / es "2 piezas estan en el stock. 2 se marcaron como danadas." No lote: "RECEIVED" deve contar so as boas, ou o subtitulo "Every piece is in" deve virar "2 good, 2 damaged".
 Arquivos: `client/src/pages/admin/tags/production-job.tsx:201` (usa `receivedHint` quando `pending == 0`, ignora `damaged`), `client/src/i18n/messages/workspaces.ts:51`, cartao RECEIVED em `client/src/pages/admin/tags/BatchDetail.tsx` (texto "Every piece is in" em `client/src/i18n/messages/adminTagsFlow.ts`).
 Risco: nenhum.
+Status: feito
 
 ### FLX-5 [S2] Depois de "Some came out bad" nao ha como refazer so as ruins
 Telas: platform/en-desktop/pedido Printed e peca Damaged (`p1-18`, `p1-33-damaged-piece`)
@@ -85,6 +86,7 @@ Problema: o pedido vira "Printed" com "Mark assembled" e "Check QR codes". As 2 
 Mudanca: no pedido Printed com danificadas, botao "Print the 2 damaged again" (en) / "Imprimir de novo as 2 danificadas" (pt) / "Imprimir otra vez las 2 danadas" (es). Cria novo pedido do mesmo modelo/versao com quantidade = danificadas e abre a pagina dele.
 Arquivos: `client/src/pages/admin/tags/production-job.tsx:201-210`, `server` rota `.../print-jobs/:id/redo` (`production.ts`).
 Risco: serial novo para as repostas (as ruins ja saiu do estoque); sugestao e manter assim.
+Status: feito (botão "Print the N damaged again": cria um pedido novo do mesmo modelo, com quantidade igual às danificadas, e abre a impressão dele)
 
 ### FLX-6 [S2] Pedido que ainda nao tem arquivo pode ser marcado como impresso, e o botao muda de lugar
 Telas: platform/en-desktop/Production, pagina do pedido "Waiting for the file" (`p1-08-job-open`, `p1-21-job011-other`, `p1-26-allgood`)
@@ -92,6 +94,7 @@ Problema: na lista o cartao "Waiting for the file" tem "Mark printed"; dentro do
 Mudanca: sem arquivo, esconder "Mark printed" e deixar so "Cancel order". Se for necessario imprimir fora do sistema, texto: en "No file yet. Mark printed only if you printed it another way." com confirmacao. Manter o botao no mesmo lugar nos dois estados.
 Arquivos: `client/src/pages/admin/tags/production-job.tsx:171` (menu), `:206` (so `journeyStep === 1`), `client/src/pages/admin/tags/production-orders.tsx` (cartao).
 Risco: regra de negocio (impressao manual existe? "builder" bench/hand em `requestedBodyHand`). Recomendo confirmar com o dono e manter a confirmacao.
+Status: feito (sem arquivo a linha só oferece Upload file; "Printed without a file here" fica em Other actions, com confirmação)
 
 ### FLX-7 [S2] "Download to print" abre aba nova com JSON cru quando falha
 Telas: platform/en-desktop/pedido Ready to print (`p1-13-ready-job`, `p1-14-after-download`)
@@ -99,6 +102,7 @@ Problema: o botao e um `<a target="_blank">` direto para `/api/xpot/admin/print-
 Mudanca: baixar com `fetch` e `blob` (ou testar com HEAD antes) e, em erro, toast: en "We couldn't get the file. Try again; if it keeps failing, upload it again." / pt "Nao foi possivel baixar o arquivo. Tente de novo; se continuar, envie o arquivo outra vez." / es "No se pudo descargar el archivo. Intenta de nuevo; si sigue fallando, sube el archivo otra vez."
 Arquivos: `client/src/pages/admin/tags/production-job.tsx:205` e `:303`, `production-orders.tsx:110`.
 Risco: nenhum.
+Status: feito (a página checa o arquivo antes e mostra "We couldn't get the file"; nada de aba com JSON)
 
 ### FLX-8 [S2] Gerar pecas: o resultado cai fora da tela
 Telas: platform/en-desktop/Production (`p1-07-generated`)
@@ -106,6 +110,7 @@ Problema: depois de "Generate 3 pieces" o dialogo fecha e a pessoa continua em c
 Mudanca: depois do 201 abrir direto a pagina do pedido (`/admin/tags/production/jobs/<id>`, o `id` vem na resposta) com o toast. Se preferir ficar na lista, rolar ate o cartao novo e destaca-lo.
 Arquivos: `client/src/pages/admin/tags/production-generate.tsx` (onSuccess), `production-board.tsx`.
 Risco: nenhum.
+Status: feito (uma impressão só: abre a página dela; várias: o quadro, com a fila no topo)
 
 ### FLX-9 [S2] Colocar uma placa no ar leva 8 passos e o chip some do fluxo
 Telas: reseller/en-phone/Read a piece > Set up > pagina da peca (`p4-02` a `p4-08`)
@@ -169,6 +174,7 @@ Problema: "plate-large · 10", "stand-large · 5", "plate-small · 8", "stand-sm
 Mudanca: usar o nome do produto/peca ("Large Plate", "Google G token (flush)", "NFC sticker 10 x 20 mm"). Resolver por `sales_products.name` e `print_models.title`/parte.
 Arquivos: `client/src/pages/admin/tags/kits-*.tsx` (Wholesale orders), `production-materials.tsx`/`production-job.tsx` (dialogo de montagem).
 Risco: nenhum.
+Status: feito em parte (o diálogo de montagem usa o nome da peça; a lista de pedidos de atacado é da frente F4)
 
 ### FLX-18 [S3] Assistente "Generate": botao "Continue" morto nos passos 1 e 2
 Telas: platform/en-desktop/Generate Large Plate (`p1-04-wizard2`)

@@ -1,4 +1,4 @@
-import { PRINT_MAX_PLATES, splitIntoPlates, type PrintJobItem, type PrintModelItem, type PrintRequestItem } from "@shared/printProduction";
+import { PRINT_MAX_PLATES, planRedoCodes, splitIntoPlates, type PrintJobItem, type PrintModelItem, type PrintRedoCodes, type PrintRequestItem } from "@shared/printProduction";
 
 export interface ExistingProductionBatch {
   id: string;
@@ -52,25 +52,134 @@ const OPEN_STATUSES: readonly string[] = ["requested", "building", "ready", "pri
  * puts its pieces in stock). A failed plate does too: its pieces are still pending until it is printed again or
  * cancelled. A plate printed again keeps its failed attempt in the list, which no longer counts.
  */
-export function productionNeedsAction(request: Pick<PrintRequestItem, "open" | "plates">): boolean {
+export function productionNeedsAction(request: Pick<PrintRequestItem, "open"> & { plates: Array<Pick<PrintJobItem, "plateNumber" | "status" | "createdAt">> }): boolean {
   if (request.open) return true;
-  const latest = new Map<number, Pick<PrintJobItem, "status" | "createdAt">>();
-  for (const plate of request.plates) {
-    const seen = latest.get(plate.plateNumber);
-    if (!seen || plate.createdAt >= seen.createdAt) latest.set(plate.plateNumber, plate);
-  }
-  return Array.from(latest.values()).some((plate) => OPEN_STATUSES.includes(plate.status) || plate.status === "failed");
+  return latestPlates(request).some((plate) => OPEN_STATUSES.includes(plate.status) || plate.status === "failed");
 }
 
-/** The next operation, independent of which screen opened the order: 0 prepare, 1 print, 2 done. */
-export function productionJourneyStep(job: Pick<PrintJobItem, "status">): 0 | 1 | 2 {
-  if (job.status === "ready" || job.status === "printing") return 1;
-  return job.status === "printed" ? 2 : 0;
+/**
+ * Where a print job is on its way: 0 the file, 1 the printer, 2 into stock (a printed job whose pieces are not in stock
+ * yet), 3 all done. A failed or cancelled job is not on the way anywhere: null, and the screen shows no steps.
+ */
+export function journeyProgress(job: Pick<PrintJobItem, "status" | "batchId" | "pendingCount">): 0 | 1 | 2 | 3 | null {
+  switch (job.status) {
+    case "requested":
+    case "building":
+      return 0;
+    case "ready":
+    case "printing":
+      return 1;
+    case "printed":
+      return pendingPieces(job) ? 2 : 3;
+    default:
+      return null;
+  }
 }
 
 /** Pieces of a printed plate's batch that are still pending (plates printed before stock followed "printed"). */
 export function pendingPieces(job: Pick<PrintJobItem, "status" | "batchId" | "pendingCount">): number {
   return job.status === "printed" && job.batchId ? job.pendingCount ?? 0 : 0;
+}
+
+/**
+ * What a printed job says about its pieces, in the order that matters: some are not in stock yet, some came out
+ * damaged, all are in stock, or it was a part (no pieces, only a count).
+ */
+export type PrintedOutcome = "pending" | "damaged" | "inStock" | "count";
+
+export function printedOutcome(job: Pick<PrintJobItem, "batchId" | "pendingCount" | "damagedCount">): PrintedOutcome {
+  if (!job.batchId) return "count";
+  if (job.pendingCount) return "pending";
+  return job.damagedCount ? "damaged" : "inStock";
+}
+
+/** Assembling takes the parts off the count, so it waits until every piece is in stock. */
+export function canAssembleJob(job: Pick<PrintJobItem, "status" | "batchId" | "pendingCount">, consumes: number, assembledAt: string | null): boolean {
+  return job.status === "printed" && Boolean(job.batchId) && consumes > 0 && !assembledAt && !pendingPieces(job);
+}
+
+// ─── The board: what to print now ─────────────────────────────────────────────────────────────────────────────
+
+/** The groups of "To print", in the order the operator needs them: what is broken, what is on the printer, what can go on it, what waits. */
+export const BOARD_GROUPS = ["attention", "printing", "ready", "waiting"] as const;
+export type BoardGroup = (typeof BOARD_GROUPS)[number];
+
+export function boardGroupOf(status: string): BoardGroup | null {
+  if (status === "failed") return "attention";
+  if (status === "printing") return "printing";
+  if (status === "ready") return "ready";
+  return status === "requested" || status === "building" ? "waiting" : null;
+}
+
+/** The last attempt of each plate, in plate order: a failed plate printed again leaves only its new attempt. */
+export function latestPlates<P extends Pick<PrintJobItem, "plateNumber" | "createdAt">>(request: { plates: P[] }): P[] {
+  const latest = new Map<number, P>();
+  for (const plate of request.plates) {
+    const seen = latest.get(plate.plateNumber);
+    if (!seen || plate.createdAt >= seen.createdAt) latest.set(plate.plateNumber, plate);
+  }
+  return Array.from(latest.values()).sort((a, b) => a.plateNumber - b.plateNumber);
+}
+
+export interface BoardRequest {
+  request: PrintRequestItem;
+  plates: PrintJobItem[];
+}
+
+/** Open and failed plates by group; a request with plates in two groups shows in both, each with its own plates. Empty groups are left out. */
+export function boardGroups(requests: readonly PrintRequestItem[]): Array<{ group: BoardGroup; requests: BoardRequest[] }> {
+  return BOARD_GROUPS.flatMap((group) => {
+    const inGroup = requests
+      .map((request) => ({ request, plates: latestPlates(request).filter((plate) => boardGroupOf(plate.status) === group) }))
+      .filter((entry) => entry.plates.length > 0);
+    return inGroup.length ? [{ group, requests: inGroup }] : [];
+  });
+}
+
+/** What a plate's row lets the operator do, left to right; the first is the main one. */
+export type PlateAction = "uploadFile" | "download" | "start" | "markPrinted" | "printAgain";
+
+/**
+ * Marking printed comes only after the job is on the printer (started), so it is never offered for a job without a
+ * file or before the file was taken. A job with no file yet offers the upload; a failed one, printing again.
+ */
+export function plateActions(job: Pick<PrintJobItem, "status" | "downloads" | "redoneBy">): PlateAction[] {
+  const hasFile = job.downloads.length > 0;
+  switch (job.status) {
+    case "requested":
+      return ["uploadFile"];
+    case "ready":
+      return hasFile ? ["download", "start"] : ["uploadFile"];
+    case "printing":
+      return hasFile ? ["markPrinted", "download"] : ["markPrinted"];
+    case "failed":
+      return job.redoneBy ? [] : ["printAgain"];
+    default:
+      return [];
+  }
+}
+
+/** A print computer as the operator sees it: on while it was heard from lately. */
+export const PRINT_COMPUTER_ON_MS = 10 * 60_000;
+
+export interface PrintComputer {
+  name: string;
+  on: boolean;
+  lastSeenAt: string | null;
+}
+
+/** The paired computers that make print files (device capability `print`), on or off. */
+export function printComputers(
+  devices: ReadonlyArray<{ deviceName: string; status: string; capabilities: string[]; lastSeenAt: string | null }>,
+  now: number,
+): PrintComputer[] {
+  return devices
+    .filter((device) => device.status === "active" && device.capabilities.includes("print"))
+    .map((device) => ({
+      name: device.deviceName,
+      lastSeenAt: device.lastSeenAt,
+      on: device.lastSeenAt !== null && now - new Date(device.lastSeenAt).getTime() <= PRINT_COMPUTER_ON_MS,
+    }));
 }
 
 /** "Plate 1 of 1" says nothing: only name the plate when the request has several. */
@@ -102,4 +211,65 @@ export function batchPrefixFromTitle(title: string): string {
   }
   prefix = prefix.replace(/^[0-9]+/, "").slice(0, 12);
   return prefix.length >= 2 ? prefix : "";
+}
+
+// ─── A failed job ─────────────────────────────────────────────────────────────────────────────────────────────
+
+/** The codes the print computer's QR check could not read (`report.qr_failed_codes`). */
+export function qrFailedCodes(report: Record<string, unknown> | null | undefined): string[] {
+  const codes = report?.qr_failed_codes;
+  return Array.isArray(codes) ? codes.map(String) : [];
+}
+
+/** What printing a failed or cancelled job again does with its pieces' codes; a part has none. */
+export type RedoEffect = "part" | PrintRedoCodes;
+
+export function redoEffect(job: Pick<PrintJobItem, "modelKind" | "batchId" | "errorCode" | "receivedCount">): RedoEffect {
+  if (job.modelKind === "part" || !job.batchId) return "part";
+  return planRedoCodes({ errorCode: job.errorCode, anyReceived: Boolean(job.receivedCount) });
+}
+
+/** The printer's pause asks for a chip that is already written ("programmed"), not a blank sticker: the chips must be written first. */
+export function pauseNeedsChips(text: string | null | undefined): boolean {
+  return /\bprogrammed\b/i.test(text ?? "");
+}
+
+/** The chips written out of a job's pieces, for "0 of 4 written". */
+export function chipsWritten(pieces: ReadonlyArray<{ chipWritten: boolean }>): { done: number; total: number } {
+  return { done: pieces.filter((piece) => piece.chipWritten).length, total: pieces.length };
+}
+
+/** A title as the catalog typed it, without the note in parentheses ("Google G token · Large Stand (rounded relief v2)"). */
+export function plainTitle(title: string): string {
+  return title.replace(/\s*\([^)]*\)\s*$/, "").trim() || title;
+}
+
+/** Where to go once pieces were ordered: the one print job that came out of it, or the board when there are several. */
+export function orderedPath(request: Pick<PrintRequestItem, "plates">): string {
+  return request.plates.length === 1 ? `/production/jobs/${request.plates[0].id}` : "/production";
+}
+
+/** The filament colours of the model's first bed ("White PLA"). */
+export function filamentColours(model: Pick<PrintModelItem, "currentVersion"> | undefined): string[] {
+  return (model?.currentVersion?.beds[0]?.ams ?? []).map((slot) => slot.colour);
+}
+
+/** What one piece takes off the counts when assembled, by name ("1 Stand base · Large"), when the part is a model of the catalog. */
+export function assemblyParts(model: Pick<PrintModelItem, "currentVersion"> | undefined, models: ReadonlyMap<string, Pick<PrintModelItem, "title">>): string[] {
+  return (model?.currentVersion?.consumes ?? []).map((c) => `${c.perPiece} ${plainTitle(models.get(c.part)?.title ?? c.part)}`);
+}
+
+// ─── History ──────────────────────────────────────────────────────────────────────────────────────────────────
+
+/** "Tag 0XBAXB57 created" is written by the server in English; the object is a piece (the glossary never calls it a tag). */
+export function journeyTitle(title: string): string {
+  return title.replace(/^Tag (?=[A-Z0-9]{6,}\b)/, "Piece ");
+}
+
+/** A person's name for the log: the name they have, else what their e-mail says before the "@" ("jessica.alvarez@x" → "Jessica Alvarez"). Never the address itself. */
+export function personName(name: string | null | undefined, email: string | null | undefined): string | null {
+  if (name?.trim()) return name.trim();
+  const local = email?.split("@")[0]?.trim();
+  if (!local) return null;
+  return local.split(/[._\-+]+/).filter(Boolean).map((word) => word[0].toUpperCase() + word.slice(1)).join(" ") || null;
 }

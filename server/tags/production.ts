@@ -642,7 +642,7 @@ export async function currentPreview(modelRef: string): Promise<{ body: Uint8Arr
 interface JobRow {
   id: string; model_id: string; model_slug: string; model_title: string; model_kind: string; version_id: string;
   version_number: number; bed_label: string; plates: number; quantity: number; status: string; batch_id: string | null;
-  batch_code: string | null; piece_count: number | null; received_count: number | null; pending_count: number | null; device_name: string | null;
+  batch_code: string | null; piece_count: number | null; received_count: number | null; pending_count: number | null; damaged_count: number | null; device_name: string | null;
   notes: string | null; error_code: string | null; error_message: string | null; report: Record<string, unknown> | null; created_at: Date | string;
   built_at: Date | string | null; printed_at: Date | string | null; updated_at: Date | string; last_event_at: Date | string | null;
   request_id: string | null; plate_number: number; plate_count: number; request_quantity: number;
@@ -665,6 +665,8 @@ const JOB_SELECT = sql`
       ELSE (SELECT count(*)::int FROM tags t WHERE t.batch_id = j.batch_id AND t.stock_status NOT IN ('pending', 'damaged')) END AS received_count,
     CASE WHEN j.batch_id IS NULL THEN NULL
       ELSE (SELECT count(*)::int FROM tags t WHERE t.batch_id = j.batch_id AND t.stock_status = 'pending') END AS pending_count,
+    CASE WHEN j.batch_id IS NULL THEN NULL
+      ELSE (SELECT count(*)::int FROM tags t WHERE t.batch_id = j.batch_id AND t.stock_status = 'damaged') END AS damaged_count,
     d.device_name, j.notes, j.error_code, j.error_message, j.report, j.created_at, j.built_at, j.printed_at, j.updated_at, j.last_event_at,
     j.request_id, COALESCE(j.plate_number, 1) AS plate_number,
     CASE WHEN j.request_id IS NULL THEN 1
@@ -701,6 +703,7 @@ function jobItem(j: JobRow, now = Date.now()): PrintJobItem {
     receivedCount: j.received_count === null ? null : Number(j.received_count),
     pendingCount: j.pending_count === null ? null : Number(j.pending_count),
     pieceCount: j.piece_count === null ? null : Number(j.piece_count),
+    damagedCount: j.damaged_count === null ? null : Number(j.damaged_count),
     deviceName: j.device_name,
     notes: j.notes,
     errorCode: j.error_code,
@@ -803,8 +806,8 @@ async function loadJob(id: string, scope: ProductionScope): Promise<PrintJobRow>
 }
 
 async function jobPieces(batchId: string, bed: PrintBed | null): Promise<PrintJobPiece[]> {
-  const list = await rows<{ serial_number: number | null; public_code: string; stock_status: string }>(sql`
-    SELECT serial_number, public_code, stock_status FROM tags WHERE batch_id = ${batchId} ORDER BY serial_number NULLS LAST, public_code`);
+  const list = await rows<{ serial_number: number | null; public_code: string; stock_status: string; nfc_provisioning_status: string }>(sql`
+    SELECT serial_number, public_code, stock_status, nfc_provisioning_status FROM tags WHERE batch_id = ${batchId} ORDER BY serial_number NULLS LAST, public_code`);
   const base = tagBaseUrl();
   return list.map((t) => {
     const urls = buildTagUrls(base, t.public_code);
@@ -815,6 +818,7 @@ async function jobPieces(batchId: string, bed: PrintBed | null): Promise<PrintJo
       qrUrl: urls.qrUrl,
       nfcUrl: urls.nfcUrl,
       stockStatus: t.stock_status,
+      chipWritten: t.nfc_provisioning_status !== "not_programmed",
     };
   });
 }
@@ -988,19 +992,21 @@ async function createSerializedPlate(model: PrintModelRow, version: Pick<Version
     throw new TagError("This model needs a product, a sales product and a batch prefix before printing", 409, "print_model_incomplete");
   }
   const year = new Date().getUTCFullYear();
-  const plate = ctx.plateCount > 1 ? ` · plate ${ctx.plateNumber}/${ctx.plateCount}` : "";
+  const plate = ctx.plateCount > 1 ? ` · print job ${ctx.plateNumber}/${ctx.plateCount}` : "";
+  // The maker named on the batch is whoever prints it: a branch's batch never reads as the company's.
+  const [maker] = await ctx.within.tx.select({ name: organizations.name }).from(organizations).where(eq(organizations.id, ctx.organizationId)).limit(1);
   for (let attempt = 1; ; attempt++) {
     // Read in the transaction: the batches of the request's earlier plates are not committed yet.
     const batchCode = nextPrintBatchCode(model.batchPrefix, year, await existingCodes(model.batchPrefix, year, ctx.within.tx));
     let jobId: string | null = null;
     try {
       await createBatch({
-        name: `${model.title} · v${version.version}${plate} · ${quantity} of ${bed.label}`,
+        name: `${model.title}${plate}`,
         batchCode,
         productType: model.productType,
         salesProductId: model.salesProductId,
         face: model.face,
-        vendor: "Skale Club",
+        vendor: maker?.name ?? "Skale Club",
         notes: ctx.notes,
         quantity,
         organizationId: ctx.organizationId,

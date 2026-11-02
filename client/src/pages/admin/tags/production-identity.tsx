@@ -3,8 +3,11 @@ import { TagFaceIcon } from "@/components/xpot/TagFaceIcon";
 import { TagModelChips, TagPieceVisual } from "@/components/xpot/TagProductThumbnail";
 import { useT } from "@/i18n";
 import { productionMessages } from "@/i18n/messages/production";
+import { productionBoardMessages } from "@/i18n/messages/productionBoard";
 import { unifiedProductionMessages } from "@/i18n/messages/unifiedProduction";
 import { useTagLabels } from "./labels";
+import { PRINT_THEMES } from "./production-shared";
+import { plainTitle } from "./production-workflow";
 
 export interface ProductionIdentityData {
   /** The catalog model's slug, when this is one (it picks the 3D picture; a new-batch form has none). */
@@ -17,10 +20,28 @@ export interface ProductionIdentityData {
   theme?: string | null;
 }
 
+/**
+ * One name for a piece everywhere: "Large Stand · Google Review · White", put together from what it is (product, face,
+ * colour) in the language in use. A model with no product (a part) keeps the title it was given, minus its parenthesis.
+ */
+export function useModelName() {
+  const labels = useTagLabels();
+  const b = useT(productionBoardMessages);
+  return (model: Pick<ProductionIdentityData, "title" | "productType" | "face" | "theme">): string => {
+    if (!model.productType) return plainTitle(model.title);
+    const theme = model.theme?.trim().toLowerCase();
+    const themeLabel = theme ? (theme === "mixed" ? b("themeName_mixed") : (PRINT_THEMES as readonly string[]).includes(theme) ? b(`theme_${theme}` as "theme_white") : model.theme!) : null;
+    const face = model.face && model.face !== "custom" ? labels.face(model.face) : null;
+    return [labels.product(model.productType), face, themeLabel].filter(Boolean).join(" · ") || plainTitle(model.title);
+  };
+}
+
 /** The physical piece and its printed brand stay together throughout production. */
 export function ProductionIdentity({ model, hero = false }: { model: ProductionIdentityData; hero?: boolean }) {
   const u = useT(unifiedProductionMessages);
   const labels = useTagLabels();
+  const nameOf = useModelName();
+  const name = nameOf(model);
   const artwork = model.productType
     ? <TagPieceVisual productType={model.productType} face={model.face} theme={model.theme} modelSlug={model.slug} batchCode={model.batchCode} size={hero ? "lg" : "md"} />
     : <Shapes className={hero ? "h-14 w-14 text-white/40" : "h-9 w-9 text-white/40"} aria-hidden="true" />;
@@ -28,12 +49,7 @@ export function ProductionIdentity({ model, hero = false }: { model: ProductionI
   if (!hero) return <span className="flex min-w-0 items-center gap-3" data-testid="production-identity">
     {artwork}
     <span className="min-w-0 space-y-1.5">
-      <span className="block text-sm font-semibold leading-snug text-white">{model.title}</span>
-      <span className="flex flex-wrap items-center gap-1.5 text-xs text-white/55">
-        {model.face ? <><TagFaceIcon face={model.face} size="xs" /><span>{labels.face(model.face)}</span></> : null}
-        {model.theme ? <span className="rounded-md border border-white/10 px-1.5 py-0.5 text-[11px]">{model.theme}</span> : null}
-        {model.productType ? <TagModelChips productType={model.productType} face={model.face} /> : null}
-      </span>
+      <span className="block text-sm font-semibold leading-snug text-white">{name}</span>
     </span>
   </span>;
 
@@ -44,7 +60,7 @@ export function ProductionIdentity({ model, hero = false }: { model: ProductionI
     <div className="min-w-0 space-y-3 py-4 pr-4">
       <div className="space-y-2">
         {model.productType ? <TagModelChips productType={model.productType} face={model.face} /> : null}
-        <p className="break-words text-base font-semibold leading-snug text-white">{model.title}</p>
+        <p className="break-words text-base font-semibold leading-snug text-white">{name}</p>
       </div>
       {model.face ? <div className="flex items-center gap-2.5">
         <TagFaceIcon face={model.face} size="md" />

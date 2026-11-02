@@ -1,11 +1,11 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { Check, Download, Factory, Layers, LockKeyhole, PackagePlus, Pencil, Printer, RotateCcw } from "lucide-react";
+import { Check, Download, Factory, FileText, Layers, LockKeyhole, PackagePlus, Pencil, Printer, RotateCcw, ScanLine } from "lucide-react";
 import { useUrlFilters } from "@/hooks/use-url-filters";
 import type { TagListItem } from "@shared/tagsApi";
 import { resolveTagFace } from "@shared/tagFace";
 import { TagFaceIcon } from "@/components/xpot/TagFaceIcon";
-import { CODE_HEADING, TagModelChips, TagPieceVisual } from "@/components/xpot/TagProductThumbnail";
+import { TagPieceVisual } from "@/components/xpot/TagProductThumbnail";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/xpot/ConfirmDialog";
@@ -14,16 +14,17 @@ import { EmptyState } from "@/components/xpot/EmptyState";
 import { Field, Input, Select, Textarea } from "@/components/xpot/Field";
 import { InlineAlert } from "@/components/xpot/InlineAlert";
 import { BackLink } from "@/components/xpot/PageHeader";
+import { Pill } from "@/components/xpot/StatusPill";
 import { Stat } from "@/components/xpot/Stat";
 import { Tabs } from "@/components/xpot/Tabs";
 import { GLASS_CLASS } from "@/components/xpot/surface";
 import { AdminHttpError, ADMIN_TAGS_KEY, STALE_MS, errorMessage, formatDate, formatShare, getJson, invalidateAdminTags, sendJson } from "./api";
 import { countStockMetric } from "@shared/tagMetrics";
-import { BatchStagePill, BatchStatusPill, catalogOptions, useTagCatalog } from "./batches-shared";
+import { BatchProgressPill, catalogOptions, useTagCatalog } from "./batches-shared";
 import { Loading, LoadError } from "./pieces-shared";
 import { useTagLabels } from "./labels";
 import { BatchReceiveStation } from "./batch-receive";
-import { batchTabsFor, canMarkStep, stageSteps, type StageStep } from "./batches-model";
+import { batchTabsFor, canMarkStep, parseBatchName, stageSteps, type StageStep } from "./batches-model";
 import { handOutHref } from "./distribution-model";
 import { useT } from "@/i18n";
 import { commonMessages } from "@/i18n/messages/common";
@@ -31,8 +32,9 @@ import { manageTagsBatchesMessages } from "@/i18n/messages/manageTagsBatches";
 import { adminTagsFlowMessages } from "@/i18n/messages/adminTagsFlow";
 import { unifiedProductionMessages } from "@/i18n/messages/unifiedProduction";
 import { ProductionWizard } from "./production-wizard";
-import { useProductionAccess } from "./production-shared";
-import { ProductionIdentity } from "./production-identity";
+import { productionMessages } from "@/i18n/messages/production";
+import { PRINT_THEMES, useProductionAccess } from "./production-shared";
+import { useModelName } from "./production-identity";
 
 interface BatchDetailData {
   id: string;
@@ -48,6 +50,8 @@ interface BatchDetailData {
   codeSource: string;
   /** The Tags › Production print order that issued it. */
   printJobId: string | null;
+  printJobStatus: string | null;
+  printJobError: string | null;
   stage: string;
   tagCount: number;
   pendingCount: number;
@@ -186,7 +190,7 @@ function StageStepper({ batch }: { batch: BatchDetailData }) {
           <span className="text-xs text-white/45">
             {t(step.state === "done" ? "stepDone" : step.state === "current" ? (step.stage === batch.stage ? "stepInProgress" : "stepCurrent") : "stepTodo")}
           </span>
-          {canMarkStep(step, batch.stage) ? (
+          {step.state === "current" && canMarkStep(step, batch.stage) ? (
             <Button type="button" variant="secondary" size="sm" loading={mark.isPending && mark.variables?.stage === step.stage} disabled={mark.isPending} onClick={() => mark.mutate(step)} data-testid={`batch-mark-${step.stage}`}>
               {t("markDone")}
             </Button>
@@ -242,7 +246,9 @@ export function BatchDetail({ id, go }: { id: string; go: (path: string) => void
   const t = useT(manageTagsBatchesMessages);
   const tf = useT(adminTagsFlowMessages);
   const u = useT(unifiedProductionMessages);
+  const tp = useT(productionMessages);
   const labels = useTagLabels();
+  const nameOf = useModelName();
   const { toast } = useToast();
   // A printing branch's Rep Admin checks its own batches here (summary, files, QR check); handing out, closing and
   // editing a batch stay the admin's.
@@ -282,10 +288,18 @@ export function BatchDetail({ id, go }: { id: string; go: (path: string) => void
   const exportBase = `/api/xpot/admin/tag-batches/${encodeURIComponent(batch.id)}`;
   const face = resolveTagFace({ batchFace: batch.face, productType: batch.productType });
   const fileBase = batch.batchCode.replace(/[^A-Za-z0-9._-]/g, "_");
-  // Only a supplier batch has Print and Receive; a house print's files and stock live on its print order. A stale ?tab= falls back to Summary.
+  const fromPrint = Boolean(batch.printJobId);
+  // Only a supplier batch has Print and Receive; a house print's files and stock live on its print job. A stale ?tab= falls back to Summary.
   const tabs = batchTabsFor(batch);
   const tab: BatchTab = tabs.find((id) => id === url.values.tab) ?? "summary";
-  const canPrepare = !batch.printJobId && batch.codeSource === "issued" && batch.tagCount > 0 && ["issued", "built"].includes(batch.stage) && batch.status !== "cancelled";
+  const canPrepare = !fromPrint && batch.codeSource === "issued" && batch.tagCount > 0 && ["issued", "built"].includes(batch.stage) && batch.status !== "cancelled";
+  // A batch from a print job is named after the piece and its place in the request: the name it was filed under says how it was ordered.
+  const parsed = parseBatchName(batch.name);
+  const colour = parsed.title.split(" · ").pop()?.trim().toLowerCase() ?? "";
+  const title = fromPrint ? nameOf({ title: parsed.title, productType: batch.productType, face, theme: (PRINT_THEMES as readonly string[]).includes(colour) ? colour : null }) : batch.name;
+  const good = Math.max(batch.receivedCount - damaged, 0);
+  const receivedDetail = !total ? t("noPiecesYet") : batch.pendingCount ? tf.plural("stillToReceive", batch.pendingCount) : damaged ? tf.plural("goodAndDamaged", damaged) : tf("allReceived");
+  const needsReceiving = !fromPrint && batch.status === "open" && (batch.pendingCount > 0 || total === 0);
 
   const closing = batch.status === "open";
   const changeState = async (reopenReason: string) => {
@@ -318,30 +332,29 @@ export function BatchDetail({ id, go }: { id: string; go: (path: string) => void
           <div className="flex min-w-0 items-start gap-3">
             <TagPieceVisual productType={batch.productType} face={face} batchCode={batch.batchCode} size="md" />
             <div className="min-w-0">
-              <div className="flex flex-wrap items-center gap-2">
-                <h2 className={CODE_HEADING}>{batch.batchCode}</h2>
-                <BatchStagePill stage={batch.stage} />
-                <BatchStatusPill status={batch.status} />
-                <TagModelChips productType={batch.productType} face={face} batchCode={batch.batchCode} />
-              </div>
-              <p className="mt-0.5 text-sm text-white/70">{batch.name}</p>
-              <p className="text-xs text-white/40">
-                {labels.product(batch.productType)} · {labels.face(face)} · {batch.vendor || t("noVendor")} ·{" "}
-                {tf("piecesReceivedOf", { received: batch.receivedCount, total: batch.tagCount })} · {t("createdOn", { date: formatDate(batch.createdAt) })}
+              <h2 className="break-words text-lg font-semibold leading-snug text-white">
+                {title} <span className="ml-1 whitespace-nowrap font-mono text-xs font-normal text-white/45">{batch.batchCode}</span>
+              </h2>
+              <p className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-white/50">
+                <BatchProgressPill batch={batch} />
+                {!fromPrint && batch.status !== "open" ? <Pill tone="muted">{labels.batchStatus(batch.status)}</Pill> : null}
+                {fromPrint && parsed.plate ? <span className="whitespace-nowrap">{tp("plateOf", { number: parsed.plate.number, total: parsed.plate.total })}</span> : null}
+                <span>{batch.vendor || t("noVendor")} · {t("createdOn", { date: formatDate(batch.createdAt) })}</span>
               </p>
               {batch.notes && !editing && <p className="mt-2 whitespace-pre-wrap text-sm text-white/60">{batch.notes}</p>}
             </div>
           </div>
           {!editing && (
             <div className="flex flex-wrap gap-2">
-              {canPrepare ? <Button type="button" variant="brand" accent="tags" onClick={() => setPreparing(true)} data-testid="batch-prepare-print"><Printer className="h-4 w-4" />{u("requestFiles")}</Button> : null}
+              {needsReceiving && tab !== "receive" ? <Button type="button" variant="brand" accent="tags" onClick={() => url.set({ tab: "receive" })} data-testid="batch-receive-now"><ScanLine className="h-4 w-4" />{u("receivePieces")}</Button> : null}
               {isAdmin ? <>
                 {handOut > 0 ? <Button type="button" variant="secondary" onClick={() => go(handOutHref(batch.id))} data-testid="batch-hand-out"><PackagePlus className="h-4 w-4" />{tf("handOutAction")}</Button> : null}
-                <Button type="button" variant="secondary" onClick={() => setStateDialog(true)} data-testid="admin-batch-state">
-                  {batch.status === "open" ? <LockKeyhole className="h-4 w-4" /> : <RotateCcw className="h-4 w-4" />}
-                  {batch.status === "open" ? t("closeBatch") : t("reopenBatch")}
-                </Button>
-                <Button type="button" variant="secondary" onClick={() => setEditing(true)}>
+                {/* A batch from a print job closes itself when its print job is done; the Receive tab has its own Close batch. */}
+                {!fromPrint && tab !== "receive" && (!closing || total > 0) ? <Button type="button" variant="ghost" onClick={() => setStateDialog(true)} data-testid="admin-batch-state">
+                  {closing ? <LockKeyhole className="h-4 w-4" /> : <RotateCcw className="h-4 w-4" />}
+                  {closing ? t("closeBatch") : t("reopenBatch")}
+                </Button> : null}
+                <Button type="button" variant="ghost" onClick={() => setEditing(true)}>
                   <Pencil className="h-4 w-4" />
                   {t("edit")}
                 </Button>
@@ -382,49 +395,55 @@ export function BatchDetail({ id, go }: { id: string; go: (path: string) => void
 
       {tab === "summary" && (
         <div className="space-y-4" role="tabpanel" aria-labelledby="batch-tab-summary">
-          <SectionCard accent="tags" icon={Factory} title={tf("productionStage")}>
-            {batch.printJobId ? (
+          {fromPrint ? (
+            <SectionCard accent="tags" icon={Printer} title={tf("printJobCard")}>
               <div className="flex flex-wrap items-center justify-between gap-3" data-testid="batch-print-order-link">
-                <p className="text-sm text-white/60">{tf("printOrderLine")}</p>
-                <Button type="button" variant="secondary" onClick={() => go(`/production/jobs/${batch.printJobId}`)}>{tf("openPrintOrder")}</Button>
+                <div className="min-w-0 space-y-1.5">
+                  <BatchProgressPill batch={batch} />
+                  {batch.printJobStatus === "failed" ? <p className="text-sm text-red-200/80">{batch.printJobError || tp("failedNoReason")}</p> : null}
+                </div>
+                <Button type="button" variant="secondary" onClick={() => go(`/production/jobs/${batch.printJobId}`)}>{tf("openPrintJob")}</Button>
               </div>
-            ) : (
-              <>
-                <StageStepper batch={batch} />
-                <p className="mt-3 text-xs text-white/40">{tf(batch.codeSource === "scanned" ? "stageScannedHint" : "stageIssuedHint")}</p>
-              </>
-            )}
-          </SectionCard>
-          <div className="grid grid-cols-2 gap-3 lg:grid-cols-3 xl:grid-cols-6">
-            <Stat card label={tf("statReceived")} value={`${batch.receivedCount}/${batch.tagCount}`} detail={batch.pendingCount ? tf.plural("stillToReceive", batch.pendingCount) : tf("allReceived")} />
-            <Stat card label={t("houseStock")} value={house} detail={t.plural("houseShare", total, { percent: formatShare(house, total) })} />
+            </SectionCard>
+          ) : (
+            <SectionCard accent="tags" icon={Factory} title={tf("productionStage")}>
+              <StageStepper batch={batch} />
+              {batch.stage !== "received" ? <p className="mt-3 text-xs text-white/40">{tf(batch.codeSource === "scanned" ? "stageScannedHint" : "stageIssuedHint")}</p> : null}
+            </SectionCard>
+          )}
+          <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+            <Stat card label={tf("statReceived")} value={`${good}/${batch.tagCount}`} detail={receivedDetail} />
+            <Stat card label={t("houseStock")} value={house} detail={total ? t.plural("houseShare", total, { percent: formatShare(house, total) }) : undefined} />
             <Stat card label={t("withResellers")} value={withResellers} detail={t("withResellersKitHint")} />
-            <Stat card label={t("sold")} value={sold} detail={t.plural("liveCount", live)} />
-            <Stat card label={t("damaged")} value={damaged} detail={t("qualityControlSample")} />
-            <Stat card label={t("nfcVerified")} value={chipsVerified} detail={t("chipsShare", { percent: formatShare(chipsVerified, total) })} />
+            <Stat card label={t("sold")} value={sold} detail={live ? t.plural("liveCount", live) : undefined} />
+            {damaged > 0 ? <Stat card label={t("damaged")} value={damaged} /> : null}
+            {chipsVerified > 0 ? <Stat card label={t("nfcVerified")} value={chipsVerified} detail={t("chipsShare", { percent: formatShare(chipsVerified, total) })} /> : null}
           </div>
           {/* Inventory reads ?batch=<id> (PiecesTab PIECE_FILTERS): the piece list lives there, not here. */}
-          {isAdmin ? <Button type="button" variant="secondary" onClick={() => go(`/pieces?batch=${encodeURIComponent(batch.id)}`)} data-testid="batch-see-pieces"><Layers className="h-4 w-4" />{tf("seePiecesInInventory")}</Button> : null}
+          {isAdmin && total ? <Button type="button" variant="secondary" onClick={() => go(`/pieces?batch=${encodeURIComponent(batch.id)}`)} data-testid="batch-see-pieces"><Layers className="h-4 w-4" />{tf("seePiecesInInventory")}</Button> : null}
         </div>
       )}
 
       {tab === "print" && (
         <div className="space-y-4">
-        {canPrepare ? <SectionCard accent="tags" icon={Printer} title={u("output")}><p className="mb-3 text-sm text-white/55">{u("reuseCodesHint")}</p><Button variant="brand" accent="tags" onClick={() => setPreparing(true)}>{u("requestFiles")}</Button></SectionCard> : null}
-        <SectionCard accent="tags" icon={Factory} title={u("supplierFiles")}>
-          <p className="mb-3 text-xs text-white/40">{t("manufacturingIntro")}</p>
+        <SectionCard accent="tags" icon={FileText} title={u("supplierFiles")}>
+          <p className="mb-3 text-sm text-white/55">{t("manufacturingIntro")}</p>
           {batch.codeSource === "scanned" ? <InlineAlert tone="info">{tf("printScannedNote")}</InlineAlert> : null}
           <div className="mt-3 flex flex-wrap gap-2" data-testid="batch-print-downloads">
-            <DownloadButton href={`${exportBase}/export.csv`} filename={`${fileBase}.csv`}>CSV</DownloadButton>
-            <DownloadButton href={`${exportBase}/qr-assets.zip`} filename={`${fileBase}-qr.zip`}>QR ZIP (SVG)</DownloadButton>
-            <DownloadButton href={`${exportBase}/qr-assets.zip?png=1`} filename={`${fileBase}-qr.zip`}>QR ZIP (SVG + PNG)</DownloadButton>
+            <DownloadButton href={`${exportBase}/export.csv`} filename={`${fileBase}.csv`}>{tf("fileCodesCsv")}</DownloadButton>
+            <DownloadButton href={`${exportBase}/qr-assets.zip`} filename={`${fileBase}-qr.zip`}>{tf("fileQrSvg")}</DownloadButton>
+            <DownloadButton href={`${exportBase}/qr-assets.zip?png=1`} filename={`${fileBase}-qr.zip`}>{tf("fileQrSvgPng")}</DownloadButton>
           </div>
+          <details className="mt-4 text-xs text-white/50">
+            <summary className="cursor-pointer select-none">{tf("chipRuleTitle")}</summary>
+            <p className="mt-2 leading-relaxed">{tf("chipRule")}</p>
+          </details>
         </SectionCard>
+        {canPrepare ? <SectionCard accent="tags" icon={Printer} title={u("printHere")}><p className="mb-3 text-sm text-white/55">{u("reuseCodesHint")}</p><Button variant="secondary" onClick={() => setPreparing(true)} data-testid="batch-prepare-print">{u("printHere")}</Button></SectionCard> : null}
         </div>
       )}
 
-      {tab === "receive" && <><ProductionIdentity model={{ title: batch.name, productType: batch.productType, face, batchCode: batch.batchCode }} hero /><BatchReceiveStation batch={batch} onRequestClose={isAdmin ? () => setStateDialog(true) : undefined} /></>}
+      {tab === "receive" && <BatchReceiveStation batch={batch} onRequestClose={isAdmin && total > 0 ? () => setStateDialog(true) : undefined} />}
     </div>
   );
 }
-

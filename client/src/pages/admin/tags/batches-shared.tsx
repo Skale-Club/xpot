@@ -7,6 +7,7 @@ import { ADMIN_TAGS_KEY, STALE_MS, getJson, withQuery } from "./api";
 import { useTagLabels } from "./labels";
 import { useT } from "@/i18n";
 import { manageTagsMessages } from "@/i18n/messages/manageTags";
+import { JobStatusPill } from "./production-shared";
 
 // Shared bits for the Batches and Kits screens (and their helpers). The pieces table is piece-table.tsx.
 
@@ -22,6 +23,14 @@ export function BatchStatusPill({ status }: { status: string }) {
 export function BatchStagePill({ stage }: { stage: string }) {
   const labels = useTagLabels();
   return <Pill tone={toneOf(BATCH_STAGE_TONE, stage)}>{labels.batchStage(stage)}</Pill>;
+}
+
+/**
+ * Where a batch is, in one pill: a batch from a print job is whatever its print job is (the batch has no stage of its
+ * own then); a supplier or scanned one has its stage.
+ */
+export function BatchProgressPill({ batch }: { batch: Pick<TagBatchItem, "printJobId" | "printJobStatus" | "stage"> }) {
+  return batch.printJobId && batch.printJobStatus ? <JobStatusPill status={batch.printJobStatus} /> : <BatchStagePill stage={batch.stage} />;
 }
 
 // ─── Queries ──────────────────────────────────────────────────────────────────
