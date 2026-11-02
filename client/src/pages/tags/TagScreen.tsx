@@ -183,10 +183,10 @@ export default function TagScreen({ code, onClose }: {
         back={back}
         onBack={back ? goBack : undefined}
         right={closeButton}
-        hero={<TagPieceVisual productType={tag.productType} face={tag.face} batchCode={tag.batchCode} size="hero" title={t(`face_${tag.face ?? "none"}` as "face_none")} />}
+        picture={<TagPieceVisual productType={tag.productType} face={tag.face} batchCode={tag.batchCode} size="hero" title={t(`face_${tag.face ?? "none"}` as "face_none")} />}
         sub={<PieceModelLine tag={tag} />}
       />
-      <div className="-mt-1 mb-3 flex flex-col items-center space-y-2" data-testid="piece-header">
+      <div className="-mt-1 mb-3 space-y-2" data-testid="piece-header">
         <PieceSituationPill />
         <PieceFacts tag={tag} />
       </div>
