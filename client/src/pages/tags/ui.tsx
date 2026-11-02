@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 import { Link } from "wouter";
 import { ArrowLeft, ArrowRight, Check, ChevronDown, ClipboardPaste, Copy, Link2, Nfc, X, type LucideIcon } from "lucide-react";
 import { chipNeedsWriting, formatPhoneMask, isSocialNetwork, looksLikeLink, normalizeUrlInput, SOCIAL_NETWORKS, socialHandleOf, socialNetworkOf, socialUrl, type SocialNetwork } from "@shared/tagApp";
@@ -517,6 +518,8 @@ const FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]), selec
 
 /**
  * A pop-up, centered on phone and desktop. (Named for when it slid up from the bottom.)
+ * It is a portal on the page: inside a pane that is itself a pop-up (the piece on a computer) a `fixed`
+ * element is measured by that pane, not the screen, and its content would be cut off.
  * The kit's modal shell: SURFACE_MODAL, OVERLAY_CLASS and the sheet radius (rounded-3xl).
  * With a `title` it draws the title row and its X; `banner` repeats the screen's
  * message inside, since the page banner sits behind the pop-up. Escape closes it,
@@ -576,7 +579,7 @@ export function BottomSheet({ open, onClose, children, title, icon, banner, clos
     };
   }, [open]);
   if (!open) return null;
-  return (
+  return createPortal(
     // Centered on every screen (the owner found bottom sheets awkward on the phone),
     // in the part the keyboard leaves visible (xpot-visible-area, index.css).
     <div
@@ -614,7 +617,8 @@ export function BottomSheet({ open, onClose, children, title, icon, banner, clos
         {banner ? <Banner banner={banner} /> : null}
         {children}
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
 

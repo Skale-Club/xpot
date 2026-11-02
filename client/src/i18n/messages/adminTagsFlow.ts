@@ -112,10 +112,10 @@ const en = {
   pieceMoved: "Moved",
 
   // Take back
-  returnsIntro: "Scan or type each piece the reseller hands back. Only pieces with a reseller, unsold and without a customer can come back.",
+  returnsIntro: "Scan each piece they hand back. Pieces already sold or set up for a customer can't come back.",
   takeBackN_one: "Take back {count} piece",
   takeBackN_other: "Take back {count} pieces",
-  takeBackNone: "Take back",
+  ordersNotYours: "Wholesale orders are handled by the platform. Yours are in Team purchases.",
   takeBackDesc: "They leave whichever reseller holds them and go back to company stock.",
 
   // Overview
@@ -153,6 +153,9 @@ const en = {
   activityActivated: "Went live",
   activityDestination: "Destination",
   activityEmpty: "No activity yet.",
+  activityScansN_one: "{count} scan",
+  activityScansN_other: "{count} scans",
+  activitySeeAll: "See all ({count})",
   activityWentLive: "Went live",
   activityLive: "Live",
   activityDestinationPill: "Destination",
@@ -316,10 +319,10 @@ export const adminTagsFlowMessages: Dictionary<typeof en> = {
     pieceReturned: "Recolhida",
     pieceMoved: "Transferida",
 
-    returnsIntro: "Leia ou digite cada peça que o revendedor devolve. Só voltam peças com revendedor, não vendidas e sem cliente.",
+    returnsIntro: "Leia cada peça devolvida. Peças vendidas ou configuradas para um cliente não voltam.",
     takeBackN_one: "Recolher {count} peça",
     takeBackN_other: "Recolher {count} peças",
-    takeBackNone: "Recolher",
+    ordersNotYours: "Os pedidos de atacado ficam com a plataforma. Os seus estão em Compras da equipe.",
     takeBackDesc: "Saem do revendedor que estiver com elas e voltam ao estoque da empresa.",
 
     queueStuscleOrders: "Pedidos de atacado",
@@ -356,6 +359,9 @@ export const adminTagsFlowMessages: Dictionary<typeof en> = {
     activityActivated: "Colocadas no ar",
     activityDestination: "Destino",
     activityEmpty: "Nenhuma atividade ainda.",
+    activityScansN_one: "{count} leitura",
+    activityScansN_other: "{count} leituras",
+    activitySeeAll: "Ver tudo ({count})",
     activityWentLive: "Foi ao ar",
     activityLive: "No ar",
     activityDestinationPill: "Destino",
@@ -457,7 +463,7 @@ export const adminTagsFlowMessages: Dictionary<typeof en> = {
     viewOrders: "Pedidos mayoristas",
     pastHandOuts: "Entregas anteriores",
     showAllHandOuts: "Ver todas ({count})",
-    viewReturns: "Devolver",
+    viewReturns: "Recoger",
 
     stepReseller: "Revendedor",
     stepOwnership: "Propiedad y costo",
@@ -513,10 +519,10 @@ export const adminTagsFlowMessages: Dictionary<typeof en> = {
     pieceReturned: "Devuelta",
     pieceMoved: "Transferida",
 
-    returnsIntro: "Lee o escribe cada pieza que devuelve el revendedor. Solo vuelven piezas con revendedor, no vendidas y sin cliente.",
-    takeBackN_one: "Devolver {count} pieza",
-    takeBackN_other: "Devolver {count} piezas",
-    takeBackNone: "Devolver",
+    returnsIntro: "Lee cada pieza devuelta. Las piezas vendidas o configuradas para un cliente no vuelven.",
+    takeBackN_one: "Recoger {count} pieza",
+    takeBackN_other: "Recoger {count} piezas",
+    ordersNotYours: "Los pedidos mayoristas los gestiona la plataforma. Los tuyos están en Compras del equipo.",
     takeBackDesc: "Salen del revendedor que las tenga y vuelven al stock de la empresa.",
 
     queueStuscleOrders: "Pedidos mayoristas",
@@ -553,6 +559,9 @@ export const adminTagsFlowMessages: Dictionary<typeof en> = {
     activityActivated: "Activadas",
     activityDestination: "Destino",
     activityEmpty: "Todavía no hay actividad.",
+    activityScansN_one: "{count} lectura",
+    activityScansN_other: "{count} lecturas",
+    activitySeeAll: "Ver todo ({count})",
     activityWentLive: "Se activó",
     activityLive: "Activa",
     activityDestinationPill: "Destino",

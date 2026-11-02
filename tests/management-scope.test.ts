@@ -1,8 +1,6 @@
-// Who has management mode, which lists a Rep Admin's mode widens
-// (moduleNav.ts organizationWideList), and the server's filters for each scope
+// Who has management mode, and the server's filters for each scope
 // (server/routes/xpot/middleware.ts recordFilters).
 import { describe, expect, it, vi } from "vitest";
-import { organizationWideList } from "../client/src/components/xpot/moduleNav";
 import { managementReach, ownedOrganizationId } from "../client/src/lib/adminMode";
 import { runsATeam } from "../shared/organizations";
 
@@ -58,16 +56,6 @@ describe("which organization an owner's or a partner's panel opens", () => {
 
   it("the platform has no single organization to open", () => {
     expect(ownedOrganizationId(me({ isAdmin: true, organizations: [{ membershipRole: "admin" }] }))).toBeNull();
-  });
-});
-
-describe("lists a Rep Admin's management mode widens", () => {
-  it("Companies, Tasks and Sales except the pipeline", () => {
-    for (const path of ["/leads", "/leads/4", "/tasks", "/sales", "/sales/sales/3", "/sales/stock"]) expect(organizationWideList(path)).toBe(true);
-  });
-
-  it("not visits, the pipeline or Tags: those stay their own", () => {
-    for (const path of ["/dashboard/history", "/sales/pipeline", "/tags", "/tags/customers"]) expect(organizationWideList(path)).toBe(false);
   });
 });
 

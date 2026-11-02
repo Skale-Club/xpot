@@ -111,6 +111,7 @@ Problema: a barra lateral tem Team, Stock, Hand out, Team purchases, Companies, 
 Mudança: tirar as abas repetidas da página do dono; a lateral manda. Item novo "Overview" no topo do grupo, que passa a se chamar en "My company", pt "Minha empresa", es "Mi empresa". Aba "Kits" passa a en "Hand out", pt "Entregar peças", es "Entregar piezas". Dono de várias empresas: item en "My companies", pt "Minhas empresas", es "Mis empresas". Celular: Overview como primeira linha do menu.
 Arquivos: pages/xpot/OrganizationsPage.tsx:123,291-316,340; components/xpot/moduleNav.ts:251,347,360; i18n/messages/organizations.ts:25,142
 Risco: muda a navegação. Recomendo manter as abas só para o admin da plataforma, que não tem a lateral da empresa.
+Status: pendente (parte). Feito: o menu do dono é só o da lateral (Settings e Back to app saíram), o grupo se chama My company e o dono de várias vê My companies. Pendente: tirar as abas repetidas da OrganizationsPage e trocar Kits por Past hand-outs (arquivo da F4).
 
 ### AD-07 [S2] Dono e parceiro aparecem como "Rep" em People
 Telas: platform/en-desktop/people, person-owner, person-partner, person-owner-multi; pt "Vendedor" e es "Vendedor" nas mesmas
@@ -202,6 +203,7 @@ Problema: o bloco muda de título entre Platform, My company e Production, e o b
 Mudança: botão com o destino: en "Open My company", pt "Abrir Minha empresa", es "Abrir Mi empresa" (ou "Open Platform", "Open Production"). Dica única: en "Production, stock and your team are managed there.", pt "A produção, o estoque e a equipe são geridos lá.", es "La producción, el stock y el equipo se gestionan allí." No celular, a linha leva direto à área. A linha "My organization" some ou vira o nome da empresa (ver ID-15).
 Arquivos: pages/xpot/XpotSettings.tsx:526; i18n/messages/workspaces.ts:22-23,74-75
 Risco: nenhum.
+Status: feito. O botão e a seção saíram: a porta é o controle My work | My company, que já nomeia o destino.
 
 ### AD-30 [S2] Dono de duas empresas vê só uma em Settings
 Telas: owner-multi/en-phone/settings-organization, settings-profile; owner-multi/en-desktop/settings-profile
@@ -293,6 +295,7 @@ Problema: o glossário troca "My organization" por "My company", e a barra later
 Mudança: en "My company", pt "Minha empresa", es "Mi empresa"; o texto abaixo troca "organização" por "empresa". Para quem é dono de várias: "My companies", "Minhas empresas", "Mis empresas".
 Arquivos: i18n/messages/addPerson.ts:22,49,73
 Risco: nenhum. Ver AD-26 sobre a palavra "empresa".
+Status: feito. My company / Minha empresa / Mi empresa em Settings; My companies para quem tem várias fica no controle de área.
 
 ## S3
 

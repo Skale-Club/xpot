@@ -59,9 +59,10 @@ describe("todayRows: platform", () => {
       ["stuscleOrders", 2, "/admin/tags/kits?view=orders"],
     ]);
     expect(blocks[1].rows.map((row) => [row.id, row.count, row.href])).toEqual([
-      ["platesToPrint", 1, "/admin/tags/production/queue"],
+      // What broke first (stuck files, failed prints), then what is next in line.
       ["filesStuck", 1, "/admin/tags/production/queue"],
       ["printsFailed", 1, "/admin/tags/production/queue"],
+      ["platesToPrint", 1, "/admin/tags/production/queue"],
       ["batchesNotReceived", 1, "/admin/tags/batches?pending=1"],
       ["chipPending", 4, "/admin/tags/overview/chipPending"],
     ]);

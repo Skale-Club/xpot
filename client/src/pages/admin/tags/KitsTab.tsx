@@ -6,6 +6,7 @@ import { useUrlFilters } from "@/hooks/use-url-filters";
 import type { TagKitItem } from "@shared/tagsApi";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/xpot/EmptyState";
+import { InlineAlert } from "@/components/xpot/InlineAlert";
 import { Textarea } from "@/components/xpot/Field";
 import { Segmented } from "@/components/xpot/Segmented";
 import { Pill } from "@/components/xpot/StatusPill";
@@ -254,10 +255,9 @@ export function KitsTab({ go }: { go: (path: string) => void }) {
 
   return (
     <div className="min-w-0 space-y-4" data-testid="admin-tags-distribution">
-      <div className="min-w-0 space-y-1">
-        <h1 className="text-lg font-semibold text-white">{t("distributionTitle")}</h1>
-        <p className="text-sm text-white/50">{t("distributionIntro")}</p>
-      </div>
+      {/* The screen's title is the frame's (top bar, phone title): not said a second time here. */}
+      {view === "handout" ? <p className="min-w-0 text-sm text-white/50">{t("distributionIntro")}</p> : null}
+      {requestedView === "orders" && !isAdmin ? <InlineAlert tone="info">{t("ordersNotYours")}</InlineAlert> : null}
       <Segmented<DistributionView>
         items={(Object.keys(VIEW_LABELS) as DistributionView[]).filter((id) => id !== "orders" || isAdmin).map((id) => ({ id, label: t(VIEW_LABELS[id]), count: id === "orders" ? pendingOrders : undefined }))}
         value={view}

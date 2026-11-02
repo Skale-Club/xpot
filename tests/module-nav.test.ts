@@ -5,16 +5,14 @@
 import { describe, expect, it } from "vitest";
 import {
   VISITS_TAB_ORDER,
-  accountGroups,
-  accountSection,
   activeVisitsTab,
-  administrationItems,
   contextOfPath,
   moduleGroups,
   panelGroups,
+  panelPhoneTabs,
   paletteExtras,
+  phoneBarHidden,
   platformItems,
-  repScreenFor,
   visitsAdminSection,
   visitsScreen,
   type PanelNames,
@@ -31,8 +29,8 @@ const manager = { canManage: true, isAdmin: false };
 const admin = { canManage: true, isAdmin: true };
 const hrefs = (groups: ReturnType<typeof moduleGroups>) => groups.flatMap((g) => g.items.map((i) => i.href));
 const panelNames: PanelNames = {
-  today: "Today", platform: "Platform", company: "My company", organization: "Organization", production: "Production",
-  team: "Team", stock: "Stock", kits: "Hand out", purchases: "Team purchases", settings: "Settings", tagsOverview: "Pieces results",
+  today: "Today", platform: "Platform", company: "My company", make: "Make", pieces: "Pieces", field: "Field", administration: "Administration",
+  team: "Team", companies: "My companies", stock: "Stock", kits: "Hand out", purchases: "Team purchases", tagsOverview: "Pieces results",
 };
 const both = ["visits", "tags"] as const;
 const groupsOf = (profile: Profile | null, modules: readonly ("visits" | "tags")[] = both, organizationId: number | null = 7) => panelGroups(profile, modules, labels, panelNames, organizationId);
@@ -45,65 +43,65 @@ describe("one panel per profile", () => {
     expect(groupsOf(null)).toEqual([]);
   });
 
-  it("gives an owner Today and the Organization group, with no Production and nothing of the platform", () => {
+  it("gives an owner Today and Team, then Pieces and Field, with no Production, no Settings and nothing of the platform", () => {
     const groups = groupsOf("owner");
-    expect(labelsOf(groups)).toEqual(["", "Organization"]);
-    expect(itemHrefs(groups, "Organization")).toEqual([
-      "/organizations/7?tab=team", "/admin/tags/pieces", "/admin/tags/kits", "/organizations/7?tab=purchases",
-      "/admin/work/leads", "/admin/work/tasks", "/admin/work/sales", "/admin/tags/overview", "/organizations/7?tab=settings",
-    ]);
+    expect(labelsOf(groups)).toEqual(["", "Pieces", "Field"]);
+    expect(itemHrefs(groups, "")).toEqual(["/admin", "/organizations/7?tab=team"]);
+    expect(itemHrefs(groups, "Pieces")).toEqual(["/admin/tags/pieces", "/admin/tags/kits", "/organizations/7?tab=purchases", "/admin/tags/overview"]);
+    expect(itemHrefs(groups, "Field")).toEqual(["/admin/work/leads", "/admin/work/tasks", "/admin/work/sales"]);
     const all = hrefs(groups);
-    for (const href of ["/admin/tags/production", "/admin/tags/provisioners", "/admin/tags/journey", "/admin/tags/shop", "/admin/reps", "/admin/products", "/admin/settings", "/admin/integrations", "/admin/branding", "/admin/health"]) expect(all).not.toContain(href);
+    for (const href of ["/admin/tags/production", "/admin/tags/provisioners", "/admin/tags/journey", "/admin/tags/shop", "/admin/reps", "/admin/products", "/admin/settings", "/admin/integrations", "/admin/branding", "/admin/health", "/organizations/7?tab=settings"]) expect(all).not.toContain(href);
     expect(groups.some((g) => g.adminOnly)).toBe(false);
     expect(groups.flatMap((g) => g.items).some((i) => i.adminOnly)).toBe(false);
   });
 
-  it("gives a partner the owner's panel plus a Production group in front of it", () => {
+  it("gives a partner the owner's panel plus a Make group in front of the pieces", () => {
     const groups = groupsOf("partner");
-    expect(labelsOf(groups)).toEqual(["", "Production", "Organization"]);
-    expect(itemHrefs(groups, "Production")).toEqual(["/admin/tags/production", "/admin/tags/provisioners"]);
-    expect(itemHrefs(groups, "Organization")).toEqual(itemHrefs(groupsOf("owner"), "Organization"));
+    expect(labelsOf(groups)).toEqual(["", "Make", "Pieces", "Field"]);
+    expect(itemHrefs(groups, "Make")).toEqual(["/admin/tags/production", "/admin/tags/provisioners"]);
+    expect(itemHrefs(groups, "Pieces")).toEqual(itemHrefs(groupsOf("owner"), "Pieces"));
     for (const href of ["/admin/reps", "/admin/integrations", "/admin/tags/shop", "/admin/tags/journey"]) expect(hrefs(groups)).not.toContain(href);
   });
 
-  it("gives the platform two collapsible groups: My company, open, then Platform, collapsed", () => {
+  it("gives the platform its work by task, and Administration collapsible and closed", () => {
     const groups = groupsOf("platform");
-    expect(labelsOf(groups)).toEqual(["", "My company", "Platform"]);
-    expect(itemHrefs(groups, "Platform")).toEqual([
+    expect(labelsOf(groups)).toEqual(["", "Make", "Pieces", "Field", "Administration"]);
+    expect(itemHrefs(groups, "")).toEqual(["/admin"]);
+    expect(itemHrefs(groups, "Make")).toEqual(["/admin/tags/production", "/admin/tags/provisioners", "/admin/tags/journey"]);
+    expect(itemHrefs(groups, "Pieces")).toEqual(["/admin/tags/pieces", "/admin/tags/kits", "/admin/tags/overview"]);
+    expect(itemHrefs(groups, "Field")).toEqual(["/admin/work/leads", "/admin/work/tasks", "/admin/work/sales", "/admin/overview"]);
+    expect(itemHrefs(groups, "Administration")).toEqual([
       "/organizations", "/admin/reps", "/admin/products", "/admin/tags/shop",
       "/admin/integrations", "/admin/branding", "/admin/health", "/admin/settings",
     ]);
-    expect(itemHrefs(groups, "My company")).toEqual([
-      "/admin/tags/production", "/admin/tags/pieces", "/admin/tags/kits", "/admin/tags/overview", "/admin/tags/journey", "/admin/tags/provisioners",
-      "/admin/work/leads", "/admin/work/tasks", "/admin/work/sales", "/admin/overview",
-    ]);
-    const platform = groups.find((g) => g.label === "Platform")!;
-    expect(platform.collapsible).toBe(true);
-    expect(platform.defaultOpen).toBeUndefined();
-    expect(platform.adminOnly).toBe(true);
-    const company = groups.find((g) => g.label === "My company")!;
-    expect(company.collapsible).toBe(true);
-    expect(company.defaultOpen).toBe(true);
-    // The group carries the tag, not each item.
+    const administration = groups.find((g) => g.label === "Administration")!;
+    expect(administration.collapsible).toBe(true);
+    expect(administration.defaultOpen).toBeUndefined();
+    expect(administration.adminOnly).toBe(true);
+    // Only the Administration group carries the tag, not each item.
     expect(groups.flatMap((g) => g.items).some((i) => i.adminOnly)).toBe(false);
+    expect(groups.filter((g) => g.collapsible)).toHaveLength(1);
   });
 
-  it("only the platform has Platform items; the other panels never list them", () => {
+  it("only the platform has Administration items; the other panels never list them", () => {
     const platformOnly = ["/organizations", "/admin/reps", "/admin/products", "/admin/integrations", "/admin/branding", "/admin/health", "/admin/settings", "/admin/tags/shop"];
     for (const profile of ["owner", "partner"] as const) {
       for (const href of platformOnly) expect(hrefs(groupsOf(profile, both, 7))).not.toContain(href);
-      // The organizations list is Team's door when there is no single workspace to open; nothing else of the platform's is.
+      // The companies list is Team's door when there is no single workspace to open; nothing else of the platform's is.
       for (const href of platformOnly.filter((h) => h !== "/organizations")) expect(hrefs(groupsOf(profile, both, null))).not.toContain(href);
-      expect(labelsOf(groupsOf(profile))).not.toContain("Platform");
+      expect(labelsOf(groupsOf(profile))).not.toContain("Administration");
     }
-    // Without the one organization to open, an owner reaches the organizations list as Team, and has no purchases or settings item to duplicate it.
-    expect(itemHrefs(groupsOf("owner", both, null), "Organization")).toEqual(["/organizations", "/admin/tags/pieces", "/admin/tags/kits", "/admin/work/leads", "/admin/work/tasks", "/admin/work/sales", "/admin/tags/overview"]);
+    // Without the one workspace to open, an owner of several companies reaches their list as "My companies", with no purchases item to duplicate it.
+    const several = groupsOf("owner", both, null);
+    expect(several[0].items.map((i) => [i.href, i.label])).toEqual([["/admin", "Today"], ["/organizations", "My companies"]]);
+    expect(itemHrefs(several, "Pieces")).toEqual(["/admin/tags/pieces", "/admin/tags/kits", "/admin/tags/overview"]);
   });
 
   it("follows the modules: no Visits items without Visits, no Tags items without Tags", () => {
-    expect(itemHrefs(groupsOf("owner", ["tags"]), "Organization")).toEqual(["/organizations/7?tab=team", "/admin/tags/pieces", "/admin/tags/kits", "/organizations/7?tab=purchases", "/admin/tags/overview", "/organizations/7?tab=settings"]);
-    expect(itemHrefs(groupsOf("owner", ["visits"]), "Organization")).toEqual(["/organizations/7?tab=team", "/admin/work/leads", "/admin/work/tasks", "/admin/work/sales", "/organizations/7?tab=settings"]);
-    expect(itemHrefs(groupsOf("partner", ["visits"]), "Production")).toBeUndefined();
+    const owner = (modules: readonly ("visits" | "tags")[]) => groupsOf("owner", modules).flatMap((g) => g.items.map((i) => i.href));
+    expect(owner(["tags"])).toEqual(["/admin", "/organizations/7?tab=team", "/admin/tags/pieces", "/admin/tags/kits", "/organizations/7?tab=purchases", "/admin/tags/overview"]);
+    expect(owner(["visits"])).toEqual(["/admin", "/organizations/7?tab=team", "/admin/work/leads", "/admin/work/tasks", "/admin/work/sales"]);
+    expect(labelsOf(groupsOf("partner", ["visits"]))).not.toContain("Make");
   });
 
   it("keeps personal work screens out of every panel and lists each destination once", () => {
@@ -111,7 +109,14 @@ describe("one panel per profile", () => {
       const all = hrefs(groupsOf(profile));
       for (const href of ["/tags", "/dashboard", "/settings", "/route"]) expect(all).not.toContain(href);
       expect(new Set(all).size).toBe(all.length);
-      expect(groupsOf(profile)[0].items.map((i) => i.href)).toEqual(["/admin"]);
+      expect(groupsOf(profile)[0].items[0].href).toBe("/admin");
+    }
+  });
+
+  it("gives every item of a panel its own icon", () => {
+    for (const profile of ["platform", "partner", "owner"] as const) {
+      const icons = groupsOf(profile).flatMap((g) => g.items.map((i) => i.icon));
+      expect(new Set(icons).size).toBe(icons.length);
     }
   });
 
@@ -131,6 +136,29 @@ describe("one panel per profile", () => {
   });
 });
 
+describe("the phone's bottom bar in the panel", () => {
+  const bar = (profile: Profile, organizationId: number | null = 7) => {
+    const { tabs: picked, more } = panelPhoneTabs(groupsOf(profile, both, organizationId), profile);
+    return { tabs: picked.map((i) => i.label), more: more.flatMap((g) => g.items.map((i) => i.label)) };
+  };
+  it("is Today and the four screens used most, and More holds all the rest, nothing twice", () => {
+    expect(bar("owner").tabs).toEqual(["Today", "Stock", "Hand out", "Team"]);
+    // (This test's labels are the message keys: manageProduction is "Production".)
+    expect(bar("partner").tabs).toEqual(["Today", "manageProduction", "Stock", "Hand out"]);
+    expect(bar("platform").tabs).toEqual(["Today", "manageProduction", "Stock", "Hand out"]);
+    expect(bar("owner", null).tabs).toEqual(["Today", "Stock", "Hand out", "My companies"]);
+    for (const profile of ["owner", "partner", "platform"] as const) {
+      const { tabs: picked, more } = bar(profile);
+      const all = groupsOf(profile).flatMap((g) => g.items.map((i) => i.label));
+      expect([...picked, ...more].sort()).toEqual([...all].sort());
+    }
+  });
+  it("fills the bar from the next screens when the usual ones are missing (an owner with only Visits)", () => {
+    const owner = panelPhoneTabs(groupsOf("owner", ["visits"]), "owner").tabs.map((i) => i.href);
+    expect(owner).toEqual(["/admin", "/organizations/7?tab=team", "/admin/work/leads", "/admin/work/tasks"]);
+  });
+});
+
 describe("one name per screen", () => {
   // The real words, in every language: a name that repeats in one panel is two doors that look like one.
   for (const lang of ["en", "pt", "es"] as const) {
@@ -143,16 +171,23 @@ describe("one name per screen", () => {
       nav: (k: string) => k,
     } as never;
     const names: PanelNames = {
-      today: ws.todayTitle, platform: ws.panelPlatform, company: ws.panelCompany, organization: ws.organizationGroup, production: ws.panelProduction,
-      team: ws.panelTeam, stock: ws.panelStock, kits: ws.panelKits, purchases: ws.panelPurchases, settings: ws.panelSettings, tagsOverview: ws.panelTagsOverview,
+      today: ws.todayTitle, platform: ws.panelPlatform, company: ws.panelCompany, make: ws.groupMake, pieces: ws.groupPieces, field: ws.groupField, administration: ws.groupAdministration,
+      team: ws.panelTeam, companies: ws.panelCompanies, stock: ws.panelStock, kits: ws.panelKits, purchases: ws.panelPurchases, tagsOverview: ws.panelTagsOverview,
     };
     for (const profile of ["platform", "partner", "owner"] as const) {
-      it(`${profile} (${lang}): no label repeats in the panel`, () => {
-        const labels = panelGroups(profile, both, real, names, 7).flatMap((g) => g.items.map((i) => i.label));
+      it(`${profile} (${lang}): no label repeats in the panel, and no group is named like an item`, () => {
+        const groups = panelGroups(profile, both, real, names, 7);
+        const labels = groups.flatMap((g) => g.items.map((i) => i.label));
         expect(labels.filter((label, i) => labels.indexOf(label) !== i)).toEqual([]);
         expect(labels.every(Boolean)).toBe(true);
+        for (const group of groups) expect(labels).not.toContain(group.label);
       });
     }
+    it(`${lang}: the panel is not called Production, and the area names differ`, () => {
+      expect(ws.panelCompany).not.toBe(ws.panelPlatform);
+      expect(ws.panelCompanies).not.toBe(ws.panelCompany);
+      expect(ws.panelCompany.toLowerCase()).not.toContain("produ");
+    });
     it(`${lang}: a screen has the same name in the panel and in the Tags module`, () => {
       const tagsManage = moduleGroups("tags", admin, real)[1].items;
       const byHref = new Map(tagsManage.map((i) => [i.href, i.label]));
@@ -160,6 +195,10 @@ describe("one name per screen", () => {
       for (const href of ["/admin/tags/production", "/admin/tags/pieces", "/admin/tags/kits", "/admin/tags/overview", "/admin/tags/journey", "/admin/tags/provisioners"]) {
         expect(panel.find((i) => i.href === href)?.label).toBe(byHref.get(href));
       }
+    });
+    it(`${lang}: the visit history is History, not the module's name`, () => {
+      expect(shell.tabVisits).not.toBe(shell.tabDashboard);
+      expect(["History", "Histórico", "Historial"]).toContain(shell.tabVisits);
     });
   }
 });
@@ -174,7 +213,7 @@ describe("contextOfPath", () => {
   it("puts the Visits management in Visits, not in an Admin of its own", () => {
     for (const p of ["/admin", "/admin/overview", "/admin/products", "/admin/settings"]) expect(contextOfPath(p)).toBe("visits");
   });
-  it("puts settings, Administration and Platform in the account", () => {
+  it("puts settings and the platform's own screens in the account", () => {
     // Xphere is an account integration; its old URL opens Integrations.
     for (const p of ["/settings", "/organizations", "/organizations/4", "/admin/reps", "/admin/integrations", "/admin/branding", "/admin/landing", "/admin/xphere", "/admin/health"]) expect(contextOfPath(p)).toBe("account");
   });
@@ -185,17 +224,8 @@ describe("contextOfPath", () => {
   });
 });
 
-describe("accountSection", () => {
-  it("splits the account into Settings, Administration and Platform", () => {
-    expect(accountSection("/settings")).toBe("settings");
-    for (const p of ["/admin/reps", "/organizations", "/organizations/3"]) expect(accountSection(p)).toBe("administration");
-    for (const p of ["/admin/integrations", "/admin/xphere", "/admin/branding", "/admin/landing", "/admin/health/runs"]) expect(accountSection(p)).toBe("platform");
-    for (const p of ["/dashboard", "/admin/overview", "/admin/tags"]) expect(accountSection(p)).toBeNull();
-  });
-});
-
 describe("visitsScreen", () => {
-  it("names the history Visits and the active visit Visit, apart from Route and Dashboard", () => {
+  it("names the history History and the active visit the current visit, apart from Route and Dashboard", () => {
     expect(visitsScreen("/dashboard")).toBe("dashboard");
     expect(visitsScreen("/dashboard/history")).toBe("visits");
     expect(visitsScreen("/dashboard/history/12")).toBe("visits");
@@ -208,12 +238,20 @@ describe("visitsScreen", () => {
     expect(visitsScreen("/somewhere")).toBe("dashboard");
   });
 
-  it("lights Route on the phone only for the route itself", () => {
+  it("lights no phone tab for the history or the visit, and Route only for the route itself", () => {
     expect(activeVisitsTab("/route")).toBe("route");
     expect(activeVisitsTab("/route/check-in")).toBeNull();
-    expect(activeVisitsTab("/dashboard/history")).toBe("dashboard");
+    expect(activeVisitsTab("/dashboard/history")).toBeNull();
+    expect(activeVisitsTab("/dashboard")).toBe("dashboard");
     expect(activeVisitsTab("/admin/overview")).toBe("manage");
     expect(activeVisitsTab("/sales/stock/3")).toBe("sales");
+  });
+});
+
+describe("phoneBarHidden", () => {
+  it("hides the top bar inside a piece, a customer, a company or a visit, and keeps it on the screens you start from", () => {
+    for (const p of ["/tags/t/ABC123", "/tags/pieces/ABC123", "/tags/customers/27", "/leads/9", "/dashboard/history/4", "/route/check-in", "/check-in"]) expect(phoneBarHidden(p)).toBe(true);
+    for (const p of ["/tags", "/tags/pieces", "/tags/customers", "/tags/shop", "/tags/direct", "/dashboard", "/dashboard/history", "/route", "/leads", "/leads/prospects", "/tasks", "/sales"]) expect(phoneBarHidden(p)).toBe(false);
   });
 });
 
@@ -242,17 +280,17 @@ describe("moduleGroups", () => {
     expect(moduleGroups("tags", rep, labels)).toHaveLength(1);
     expect(hrefs(moduleGroups("visits", rep, labels))).toEqual(["/dashboard", "/route", "/leads", "/dashboard/history", "/tasks", "/sales"]);
   });
-  it("the sidebar and the phone tab bar list Visits in the same order (the bar leaves Visits to the Dashboard)", () => {
+  it("the sidebar and the phone tab bar list Visits in the same order (the bar leaves History to the Dashboard)", () => {
     const sidebar = hrefs(moduleGroups("visits", rep, labels)).map((href) => href.slice(1));
     expect(tabs.map((tab) => tab.id)).toEqual([...VISITS_TAB_ORDER]);
     expect(sidebar.filter((id) => (VISITS_TAB_ORDER as readonly string[]).includes(id))).toEqual([...VISITS_TAB_ORDER]);
   });
-  it("lights exactly one Visits item per screen", () => {
+  it("lights exactly one Visits item per screen, and none while a visit is open", () => {
     const [work] = moduleGroups("visits", rep, labels);
     const active = (path: string) => work.items.filter((item) => item.match(path)).map((item) => item.href);
     expect(active("/dashboard")).toEqual(["/dashboard"]);
     expect(active("/dashboard/history/4")).toEqual(["/dashboard/history"]);
-    expect(active("/route/check-in")).toEqual(["/dashboard/history"]);
+    expect(active("/route/check-in")).toEqual([]);
     expect(active("/route")).toEqual(["/route"]);
     expect(active("/admin/reps")).toEqual([]);
   });
@@ -282,9 +320,8 @@ describe("moduleGroups", () => {
       moduleGroups(m, admin, labels).flatMap((g) => g.items).filter((i) => i.adminOnly).map((i) => i.href);
     expect(extra("tags")).toEqual(["/admin/tags/production", "/admin/tags/shop", "/admin/tags/journey", "/admin/tags/provisioners"]);
     expect(extra("visits")).toEqual([]);
-    // Platform is the Xpot admin's as a whole: one tag on the group, none on its items.
-    expect(accountGroups(admin, labels).map((g) => Boolean(g.adminOnly))).toEqual([false, true]);
-    expect([...administrationItems(labels), ...platformItems(labels)].some((i) => i.adminOnly)).toBe(false);
+    // The platform's own screens carry the tag once, on the group's heading: none on its items.
+    expect(platformItems(labels).some((i) => i.adminOnly)).toBe(false);
   });
   it("every Manage link stays in its own module", () => {
     for (const m of ["visits", "tags"] as const) {
@@ -293,19 +330,9 @@ describe("moduleGroups", () => {
   });
 });
 
-describe("accountGroups", () => {
-  it("Administration for managers in management mode, Platform for the Xpot admin only", () => {
-    expect(accountGroups(rep, labels)).toEqual([]);
-    expect(accountGroups(manager, labels).map((g) => [g.label, g.items.map((i) => i.href)])).toEqual([
-      ["navOrganization", ["/admin/reps", "/organizations"]],
-    ]);
-    expect(accountGroups(admin, labels).map((g) => [g.label, g.items.map((i) => i.href)])).toEqual([
-      ["navOrganization", ["/admin/reps", "/organizations"]],
-      ["navPlatform", ["/admin/integrations", "/admin/branding", "/admin/health"]],
-    ]);
-  });
-  it("keeps every account link in the account, the old URLs lit under their new item", () => {
-    for (const item of [...administrationItems(labels), ...platformItems(labels)]) expect(contextOfPath(item.href)).toBe("account");
+describe("the platform's own screens", () => {
+  it("keeps every link in the account, the old URLs lit under their new item", () => {
+    for (const item of platformItems(labels)) expect(contextOfPath(item.href)).toBe("account");
     const lit = (path: string) => platformItems(labels).filter((i) => i.match(path)).map((i) => i.href);
     expect(lit("/admin/xphere")).toEqual(["/admin/integrations"]);
     expect(lit("/admin/landing")).toEqual(["/admin/branding"]);
@@ -315,19 +342,5 @@ describe("accountGroups", () => {
     expect(paletteExtras("visits", labels).map((i) => i.href)).toEqual(["/route/check-in"]);
     expect(paletteExtras("tags", labels).map((i) => i.href)).toEqual(["/tags/direct"]);
     expect(paletteExtras("platform", labels).map((i) => i.href)).toEqual(["/admin/landing"]);
-  });
-});
-
-describe("repScreenFor", () => {
-  it("leaving management lands on the same module's rep screen", () => {
-    expect(repScreenFor("/admin/tags/pieces/12", "/x")).toBe("/tags/pieces");
-    expect(repScreenFor("/admin/tags/kits", "/x")).toBe("/tags");
-    expect(repScreenFor("/admin/tags/shop", "/x")).toBe("/tags/shop");
-    expect(repScreenFor("/admin/tags", "/x")).toBe("/tags");
-    expect(repScreenFor("/admin/products", "/x")).toBe("/sales");
-    expect(repScreenFor("/admin/overview", "/x")).toBe("/dashboard");
-    expect(repScreenFor("/admin", "/x")).toBe("/dashboard");
-    expect(repScreenFor("/admin/reps", "/route")).toBe("/route");
-    expect(repScreenFor("/admin/integrations", "/tags")).toBe("/tags");
   });
 });

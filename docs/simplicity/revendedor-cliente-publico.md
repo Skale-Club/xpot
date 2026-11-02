@@ -186,6 +186,7 @@ Mudança:
 - A bolinha "online" vira uma faixa que só aparece quando estiver offline.
 Arquivos: client/src/pages/tags/TagsApp.tsx:60-71, client/src/components/xpot/ShellHeader.tsx:62-96, client/src/components/xpot/UserGreeting.tsx
 Risco: o `ShellHeader` é compartilhado com Visitas. Recomendo decidir uma vez para os dois módulos. Esta auditoria só comprova o caso de Tags.
+Status: feito. No celular, telas de aba têm uma barra de 48px (título e menu do avatar); dentro de uma peça, cliente, empresa ou visita não há barra, só voltar e título. Sem saudação, emoji, data nem logo; offline vira uma faixa. Vale para Visits também.
 
 ### RCP-10 [S2] O início é um relatório, e não diz o que fazer
 Telas: reseller/en-phone/tags-home, reseller/en-desktop/tags-home, reseller/pt-desktop/tags-home, reseller/en-phone/visits-blocked-dashboard
@@ -219,6 +220,7 @@ Mudança: sai do cabeçalho do celular. Entra no fim da lista de Settings, com c
 - es: "¿Salir de Xpot?" / "Para volver necesitarás un código por SMS."
 Arquivos: client/src/components/xpot/ShellHeader.tsx:105, client/src/pages/xpot/XpotSettings.tsx:585
 Risco: nenhum.
+Status: feito. Sign out saiu do cabeçalho: está no menu do avatar e no fim da lista de Settings, e pergunta Sign out of Xpot? antes.
 
 ### RCP-13 [S2] "With Kevin Brooks" para o próprio Kevin, e numa peça que está no cliente
 Telas: reseller/en-phone/tags-piece-live, tags-piece-in-kit, tags-piece-configured-no-chip, reseller/en-desktop dos mesmos, reseller/en-phone/tags-home
@@ -308,6 +310,7 @@ Problema: o revendedor sem permissão abre `?tab=administration` e vê só o tí
 Mudança: seção sem permissão cai na lista de Settings. Em `XpotSettings`, `linkedSection === "administration" && !canManage` é tratado como `null`.
 Arquivos: client/src/pages/xpot/XpotSettings.tsx:227,524,552
 Risco: nenhum.
+Status: feito. A seção sumiu; ?tab=administration abre a lista de Settings.
 
 ### RCP-21 [S2] "To change it, ask the platform"
 Telas: reseller/en-phone/settings-signin, reseller/en-desktop/settings-profile
@@ -319,6 +322,7 @@ Mudança:
 Mostrar o telefone como texto, não como campo.
 Arquivos: client/src/i18n/messages/navIa.ts:29 (e pt/es)
 Risco: revendedor de parceiro talvez deva falar com o parceiro. Recomendo manter "equipe do Xpot" até haver o nome da casa (item 2b).
+Status: feito. To change it, talk to the Xpot team.; o telefone é texto, não campo.
 
 ### RCP-22 [S2] "My organization" contra "My company", e um texto estranho
 Telas: reseller/en-phone/settings-profile, settings-organization, settings-administration, reseller/en-desktop/settings-organization
@@ -334,6 +338,7 @@ Mudança:
   - es: "Trabajas para esta empresa. Tus piezas y clientes quedan a tu nombre."
 Arquivos: client/src/i18n/messages/addPerson.ts:22,28,55,79, client/src/i18n/messages/workspaces.ts:8-9
 Risco: confirmar com o dono se "ficam no seu nome" é a regra.
+Status: feito. My company / Minha empresa / Mi empresa, e o novo texto do vínculo (confirmar com o dono se ficam no seu nome é a regra).
 
 ### RCP-23 [S2] Cliente, empresa, negócio: três palavras para a mesma coisa; "Chapa" e "placa" para a mesma peça
 Telas: reseller/en-desktop/tags-customers, tags-pieces, tags-customer-27, reseller/en-phone/tags-direct, settings-organization, reseller/pt-desktop/tags-home, tags-customer-27, reseller/es-desktop/tags-piece-configured-no-chip, reseller/en-desktop/organizations

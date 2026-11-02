@@ -26,6 +26,8 @@ export interface TodayRow {
   /** The row's words live in the Panel (workspaces) or the Tags flow dictionary. */
   label: { dict: "home"; key: HomeKey } | { dict: "flow"; key: FlowKey };
   hint: { dict: "home"; key: HomeKey } | { dict: "flow"; key: FlowKey };
+  /** Something broke: it goes first in its block, in red. The routine rows are what is simply next in line. */
+  urgent?: boolean;
 }
 
 /** The platform's home has two blocks, with headings; everyone else's is a single list. */
@@ -98,8 +100,8 @@ function productionRows({ profile, requests, queues, now }: TodayInput): TodayRo
   const plates = plateCounts(requests, now);
   const rows: TodayRow[] = [
     { id: "platesToPrint", count: plates.toPrint, href: `${TAGS}/production/queue`, label: home("todayPlatesToPrint"), hint: home("todayPlatesToPrintHint") },
-    { id: "filesStuck", count: plates.stuck, href: `${TAGS}/production/queue`, label: home("todayFilesStuck"), hint: home("todayFilesStuckHint") },
-    { id: "printsFailed", count: plates.failed, href: `${TAGS}/production/queue`, label: home("todayPrintsFailed"), hint: home("todayPrintsFailedHint") },
+    { id: "filesStuck", count: plates.stuck, href: `${TAGS}/production/queue`, label: home("todayFilesStuck"), hint: home("todayFilesStuckHint"), urgent: true },
+    { id: "printsFailed", count: plates.failed, href: `${TAGS}/production/queue`, label: home("todayPrintsFailed"), hint: home("todayPrintsFailedHint"), urgent: true },
   ];
   rows.push(...queueRows(profile, queues, ["stuscleOrders"]));
   return rows;
@@ -132,7 +134,9 @@ export function todayBlocks(input: TodayInput): TodayBlock[] {
       ...queueRows(profile, input.queues, ["stuscleOrders"]),
     ] });
   }
-  return blocks.map((block) => ({ ...block, rows: block.rows.filter((row) => row.count > 0) })).filter((block) => block.rows.length > 0);
+  // What is broken first (a stable sort: the rest keeps the order it is worked in).
+  const urgentFirst = (rows: TodayRow[]) => [...rows.filter((row) => row.urgent), ...rows.filter((row) => !row.urgent)];
+  return blocks.map((block) => ({ ...block, rows: urgentFirst(block.rows.filter((row) => row.count > 0)) })).filter((block) => block.rows.length > 0);
 }
 
 /** Every row of every block, in order. */

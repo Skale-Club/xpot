@@ -195,6 +195,7 @@ Problema: em platform/Today, "Platform" está na faixa, no cartão da barra, no 
 Mudança: sai a faixa, o cartão e o eyebrow, e o breadcrumb perde a primeira palavra. Entra o controle `My work | My company` no lugar do cartão. A seção "PLATFORM" do Today vira "For the platform" (PT "Para a plataforma", ES "Para la plataforma"), e "MY COMPANY" vira "Skale Club".
 Arquivos: client/src/components/xpot/AdminMode.tsx:27-37, client/src/components/xpot/AppLayout.tsx:126,305,376-384, client/src/pages/admin/AdminHome.tsx:86,121
 Risco: D7. Sem isso, ao menos tirar o eyebrow e a primeira palavra do breadcrumb.
+Status: feito. Sem faixa, cartão, eyebrow nem breadcrumb no painel; o controle My work | My company vem no lugar; o título é um só (barra do topo no computador, título próprio no celular).
 
 ### NAV-6 [S2] Painel inteiro de um parceiro se chama "Production"
 Telas: partner/en-desktop/panel-today, partner/en-desktop/panel-kits-handout, partner/en-desktop/panel-tags-overview
@@ -202,6 +203,7 @@ Problema: aparece "Production › Hand out" e "Production › Pieces results", c
 Mudança: `panelName` usa "My company" (PT "Minha empresa", ES "Mi empresa") para o partner também. O grupo "PRODUCTION" vira "Make" (PT "Produzir", ES "Producir"). O item Production fica.
 Arquivos: client/src/components/xpot/panelNames.ts:12, client/src/components/xpot/moduleNav.ts:370
 Risco: nenhuma regra muda; ajustar `tests/module-nav.test.ts`.
+Status: feito. O painel de quem não é a plataforma se chama My company (My companies para dono de várias); Production fica só como item do grupo Make.
 
 ### NAV-7 [S2] No celular, dentro do painel, não há Sign out, Settings nem idioma
 Telas: platform/en-phone/panel-today, partner/en-phone/panel-today, owner/en-phone/panel-today, owner-multi/en-phone/panel-today
@@ -209,6 +211,7 @@ Problema: o painel no celular só tem a faixa e um select nativo. A captura `pla
 Mudança: barra inferior no painel com 5 itens (seção Navegação final). "More" lista o resto, mais Settings, Language e Sign out. O select sai.
 Arquivos: client/src/pages/admin/AdminApp.tsx:68-74, client/src/components/xpot/AppLayout.tsx:323-339,534, client/src/components/xpot/MobileTabBar.tsx
 Risco: nenhuma regra muda.
+Status: feito. Barra inferior no painel (Today, Production ou Team, Stock, Hand out, More); More lista o resto agrupado; o select saiu; Settings, idioma e Sign out ficam no menu do avatar.
 
 ### NAV-8 [S2] Fila de chips no celular não mostra o estado do chip
 Telas: platform/en-phone/panel-tags-overview-chipPending, partner/en-phone/panel-tags-overview-chipPending, owner/en-phone/panel-tags-overview-chipPending
@@ -223,6 +226,7 @@ Problema: "Hand out" aparece no título, no select, no subtítulo e na aba. O ca
 Mudança: sai o subtítulo repetido e a seta. O texto vira "Give pieces to someone and take them back." (PT "Entregue peças a alguém e receba de volta.", ES "Entrega piezas a alguien y recíbelas de vuelta."), escondido depois da primeira entrega. Passos futuros viram uma só linha: "Next: who pays, pieces, confirm" (PT "Depois: quem paga, peças, confirmar", ES "Después: quién paga, piezas, confirmar").
 Arquivos: client/src/pages/admin/tags/KitsTab.tsx:257-260, client/src/pages/admin/tags/kits-give-form.tsx:213-262, client/src/i18n/messages/adminTagsFlow.ts:50-51, client/src/pages/admin/AdminApp.tsx:68
 Risco: nenhum.
+Status: feito (moldura) | pendente (texto). Saíram o select, o título repetido e o campo Code or scanned link; sobram a introdução, os passos futuros e os termos hand-over/kit em KitsTab e kits-give-form (frente F4, NAV-10/FLX-1).
 
 ### NAV-10 [S2] "Reseller / Reseller" e "Ownership and cost": a mesma regra dita três vezes em jargão
 Telas: platform/en-desktop/handout-form-reseller-picked, platform/en-desktop/handout-form-codes-checked, platform/en-phone/handout-form-reseller-picked
@@ -259,6 +263,7 @@ Problema: no celular, a entrada é uma caixa cinza, escura e sem seta escrita "M
 Mudança: o controle de D7. Sai a seção em Settings, a linha do celular e a subtela. Se D7 for adiada: texto "Manage my company" (PT "Gerenciar minha empresa", ES "Gestionar mi empresa") com seta e fundo âmbar no topo.
 Arquivos: client/src/components/xpot/AdminMode.tsx:14-23, client/src/components/xpot/AppLayout.tsx:325,528, client/src/pages/xpot/XpotSettings.tsx:523-528,572, client/src/i18n/messages/workspaces.ts:19-24, client/src/i18n/messages/manage.ts:14
 Risco: D7.
+Status: feito. Uma só porta: o controle de área. Sai a seção Administration de Settings, a linha do celular, a subtela e o botão Open panel; ?tab=administration abre a lista (RCP-20).
 
 ### NAV-13 [S2] "Take back unsold" em peça comprada não fala de dinheiro
 Telas: platform/en-desktop/panel-kits-history, owner/en-phone/panel-kits-history, owner-multi/en-desktop/panel-kits-history
@@ -273,6 +278,7 @@ Problema: o glossário fechou "My company" para o dono, e a seção diz "My orga
 Mudança: título "My company" (PT "Minha empresa", ES "Mi empresa"). Sai o formulário, e fica o link "Manage team" (PT "Gerenciar equipe", ES "Gestionar equipo"). Para o admin, o telefone abre o editor de People. Se isso não existir, o texto vira "Change it in People" (PT "Altere em Pessoas", ES "Cámbialo en Personas").
 Arquivos: client/src/i18n/messages/addPerson.ts:22,49,73, client/src/pages/xpot/XpotSettings.tsx:437-458, client/src/i18n/messages/navIa.ts:29
 Risco: conferir se quem vende sozinho, sem painel, usa esse Add person para convidar o primeiro colega (`profiles.ts:6-7`). Se usa, mantenha o formulário só para ele.
+Status: feito. Seção My company; o formulário Add person só aparece para quem vende sozinho (para quem tem equipe, o link Manage team); o admin da plataforma vê o link Change it in People em vez de ask the platform.
 
 ### NAV-15 [S2] Dono com várias empresas: menu não bate com o Today, e nada diz qual é a empresa
 Telas: owner-multi/en-desktop/panel-today, owner-multi/en-desktop/organizations, owner-multi/en-desktop/panel-kits-handout, owner-multi/en-desktop/panel-kits-history, owner-multi/en-desktop/panel-tags-overview-chipPending
@@ -280,6 +286,7 @@ Problema: Today mostra "2 Team purchases" e o menu não tem esse item. "Team" ac
 Mudança: ver a seção Navegação final, "Owner com várias empresas". O filtro de organização passa a valer para quem administra mais de uma.
 Arquivos: client/src/components/xpot/moduleNav.ts:351-366, client/src/pages/admin/tags/KitsTab.tsx:155-158,189-197, client/src/pages/admin/tags/kits-list.tsx:248
 Risco: nenhuma regra muda; o servidor já limita ao que a pessoa administra.
+Status: feito (nomes) | pendente (listas). O item Team vira My companies e abre a lista; o painel se chama My companies. Pendente: um item Team purchases (não existe lista entre empresas; o Today abre /organizations, onde Team fica aceso) e empresa em cada linha com filtro All my companies em Stock, Hand out e Pieces results (telas da F2 e F4).
 
 ### NAV-16 [S2] "A cost here is for reference" é falso quando a regra é "they buy"
 Telas: platform/en-desktop/handout-form-codes-checked, platform/en-phone/handout-form-codes-checked
@@ -310,6 +317,7 @@ Problema: título e select dizem "Hand out", com a aba Take back ligada. A intro
 Mudança: título "Take back" nesta aba. Fica só "Scan each piece they hand back. Pieces already sold or set up for a customer can't come back." (PT "Leia cada peça devolvida. Peças vendidas ou configuradas para um cliente não voltam.", ES "Lee cada pieza devuelta. Las piezas vendidas o configuradas para un cliente no vuelven."). O botão só aparece com peça na lista. O fundo do `sticky` sai no desktop.
 Arquivos: client/src/pages/admin/tags/returns-station.tsx:69,90, client/src/pages/admin/tags/KitsTab.tsx:257-260, client/src/i18n/messages/adminTagsFlow.ts:19,115
 Risco: nenhum.
+Status: feito. O título é o do frame; fica só a frase Scan each piece they hand back...; o botão só existe com peça na lista; sem fundo atrás dele no computador.
 
 ### NAV-19 [S2] Wholesale orders: dois campos para a mesma lista, SKU cru e "Complete separation"
 Telas: platform/en-desktop/panel-kits-orders, platform/en-phone/panel-kits-orders
@@ -331,6 +339,7 @@ Problema: "East Boston Bike Works" e "F3G1VTJK" são a mesma peça, em duas linh
 Mudança: sempre o nome da empresa como título, código como detalhe. Agrupar: "East Boston Bike Works: 10 scans, last Nov 1" (PT "10 leituras, última em 1/11", ES "10 lecturas, última el 1/11"). A URL fica recolhida na peça. Limite de 5 linhas, com "See all" (PT "Ver tudo", ES "Ver todo").
 Arquivos: client/src/pages/admin/tags/OverviewTab.tsx:106-183
 Risco: nenhum.
+Status: feito (agrupar e limitar) | pendente (títulos). As leituras de uma peça viram uma linha com a contagem e a data da última; 5 linhas antes de See all. Não feito: a URL crua e a mesma peça com dois títulos (cliente e código) em linhas de tipos diferentes.
 
 ### NAV-22 [S3] Top pieces: texto sobreposto no celular, e formato desperdiçado no desktop
 Telas: platform/en-phone/panel-tags-overview, partner/en-phone/panel-tags-overview, owner/en-phone/panel-tags-overview, platform/en-desktop/panel-tags-overview
@@ -338,6 +347,7 @@ Problema: no celular, o nome da peça passa por cima de "QR 102 · NFC 54". Data
 Mudança: no celular, o "QR · NFC" vai para a linha de baixo, com o nome truncado. Datas ficam em linha própria, e Apply só aparece com datas preenchidas. Devices usa altura própria (`items-start`).
 Arquivos: client/src/pages/admin/tags/pieces-analytics.tsx:179,205-219, client/src/components/xpot/TagProductThumbnail.tsx:180-184
 Risco: nenhum.
+Status: feito. O código e o QR/NFC não se sobrepõem no celular, Apply só aparece com data inicial, Devices tem altura própria. Resta o detalhe 3 scans cortado em Activity quando a linha é estreita.
 
 ### NAV-23 [S3] Today: tudo com o mesmo peso, e atalhos que repetem o menu
 Telas: platform/en-desktop/panel-today, partner/en-desktop/panel-today, owner/en-phone/panel-today
@@ -345,6 +355,7 @@ Problema: "2 Failed prints" e "3 Ready to print" têm o mesmo número âmbar. A 
 Mudança: falhas no topo, em vermelho (Failed prints, Print files stuck, Write failed); rotina em branco. Sai o bloco Shortcuts no desktop. No celular, a barra inferior cobre os atalhos.
 Arquivos: client/src/pages/admin/AdminHome.tsx:92,123-129, client/src/pages/admin/home-model.ts:97-105
 Risco: nenhum.
+Status: feito. Falhas (Print files stuck, Failed prints) primeiro e em vermelho, a rotina em branco; o bloco Shortcuts saiu (a barra inferior e o menu cobrem). Write failed não existe como fila no servidor.
 
 ### NAV-24 [S2] "Company" significa duas empresas na mesma linha
 Telas: platform/en-desktop/panel-tags-overview-chipPending, owner/en-desktop/panel-tags-overview-scannedNotLive, platform/en-desktop/panel-tags-overview
@@ -359,6 +370,7 @@ Problema: com PLATFORM aberto a 900px, só "Organizations" aparece, cortado pelo
 Mudança: grupos da Navegação final, com o estado lembrado. Sombra no fim da lista quando houver rolagem. Ícones únicos: Team results `BarChart3`, Chip writers `Nfc`, History `History`, Stock `Package`.
 Arquivos: client/src/components/xpot/moduleNav.ts:236-241,322,342-346, client/src/components/xpot/AppLayout.tsx:309
 Risco: nenhum.
+Status: feito. Grupos por tarefa, Administration recolhida e lembrada, sombra no fim da lista quando há mais abaixo, ícones únicos (Package, Nfc, History, TrendingUp, Network).
 
 ### NAV-26 [S3] Busca: "Visits" ao lado de "Visit", e entrada do painel escondida
 Telas: platform/en-desktop/command-palette, rep-both/en-desktop/command-palette, reseller/en-desktop/command-palette
@@ -366,6 +378,7 @@ Problema: "Visits" e "Visit" aparecem um depois do outro. "Shop" fica cortado. O
 Mudança: "Visit" vira "Current visit" (PT "Visita atual", ES "Visita actual"). Sem título para grupo de um item. Sem o trecho "Shortcuts". Painel listado primeiro. No painel, a busca consulta todas as peças da empresa, e "Code or scanned link" passa a ser parte dela.
 Arquivos: client/src/components/xpot/CommandPalette.tsx:72-77,217, client/src/components/xpot/moduleNav.ts:383-387, client/src/components/xpot/AppLayout.tsx:122-124, client/src/pages/admin/AdminApp.tsx:67,73
 Risco: a busca na empresa pode precisar de limite por tamanho da lista.
+Status: feito (quase tudo). Current visit, grupos de um item sem título, atalhos só quando há mais que a busca, entrada do painel em primeiro lugar, e a busca de peças no painel pesquisa as da empresa. Pendente: o campo Code or scanned link continua separado da busca (saiu de Hand out e Take back; fica em Stock).
 
 ### NAV-27 [S4] Moldura do trabalho: switch de um item e logo solto
 Telas: reseller/en-desktop/tags-home, reseller/en-phone/tags-home, platform/en-desktop/settings-administration
@@ -373,6 +386,7 @@ Problema: revendedor no desktop vê um botão grande "Tags" que não troca nada.
 Mudança: `SidebarModuleSwitch` não aparece com um módulo. Sai o logo do `mobileHeader`. Em Settings, a barra lista só o módulo em que a pessoa estava.
 Arquivos: client/src/components/xpot/AppLayout.tsx:177,304-305, client/src/pages/tags/TagsApp.tsx:65-69
 Risco: nenhum.
+Status: feito. O seletor de módulos só aparece com dois módulos, o logo saiu do celular, e Settings lista o módulo em que a pessoa estava.
 
 ### NAV-28 [S3] Página da empresa repete o menu e abre destinos diferentes com o mesmo nome
 Telas: owner/en-desktop/org-brightside-team, owner/en-desktop/org-brightside-inventory, owner/en-desktop/org-brightside-settings, owner/en-phone/org-brightside-team, partner/en-desktop/org-harbor-settings
@@ -380,6 +394,7 @@ Problema: abas Overview, Team, Stock, Kits, Team purchases, Companies e Settings
 Mudança: dono de uma empresa só: Team abre só a equipe, sem abas, com o link "Company details". As abas ficam para a plataforma e para quem tem várias empresas, como o PR 3 decidiu, com "Kits" trocado por "Past hand-outs" (PT e ES "Entregas anteriores"). No celular, a barra inferior vale aqui também.
 Arquivos: client/src/pages/xpot/OrganizationsPage.tsx:292-300,316,328-340, client/src/i18n/messages/organizations.ts:25,55, client/src/components/xpot/moduleNav.ts:361-366
 Risco: confirmar o caso do PR 3, "dono só com Tags vê as empresas": ele precisa manter a aba Companies, pois o menu dele não tem o item.
+Status: pendente (OrganizationsPage é da frente F4). As abas repetidas e Kits continuam; Settings saiu do menu do painel, mas a aba Settings ainda existe na página da empresa.
 
 ### NAV-29 [S2] Histórico no celular: botões sem nome, nota cortada
 Telas: platform/en-phone/panel-kits-history, partner/en-phone/panel-kits-history, owner/en-phone/panel-kits-history, owner-multi/en-phone/panel-kits-history
@@ -387,6 +402,7 @@ Problema: "Packing list" e "Take back unsold" viram dois ícones sem texto. Um d
 Mudança: texto nos botões, em linha própria, ou um menu "⋯" com nomes. Preço e nota em linhas separadas. Filtro só com mais de um revendedor.
 Arquivos: client/src/pages/admin/tags/kits-list.tsx:248-277, client/src/pages/admin/tags/KitsTab.tsx:178-197
 Risco: nenhum.
+Status: pendente (kits-list é da frente F4).
 
 ### NAV-30 [S4] Sem acesso a Wholesale orders: cai em Hand out sem dizer nada
 Telas: partner/en-desktop/panel-kits-orders-denied, owner/en-desktop/panel-kits-orders-denied, owner-multi/en-desktop/panel-kits-orders-denied
@@ -394,6 +410,7 @@ Problema: a URL de pedidos abre Hand out em silêncio. Só acontece por link dir
 Mudança: manter o redirecionamento e mostrar um aviso curto: "Wholesale orders are handled by the platform. Yours are in Team purchases." (PT "Os pedidos de atacado ficam com a plataforma. Os seus estão em Compras da equipe.", ES "Los pedidos mayoristas los gestiona la plataforma. Los tuyos están en Compras del equipo.").
 Arquivos: client/src/pages/admin/tags/KitsTab.tsx:250
 Risco: nenhum.
+Status: feito. Avisa com Wholesale orders are handled by the platform. Yours are in Team purchases.
 
 ### NAV-31 [S3] Acesso restrito diz ao dono que ele não tem acesso à gestão
 Telas: owner/en-desktop/panel-team-results-owner
@@ -401,6 +418,7 @@ Problema: dono em `/admin/overview` lê "You don't have access to management." e
 Mudança: dentro do painel, com moldura, o texto vira "Only the platform can open this screen." (PT "Só a plataforma abre esta tela.", ES "Solo la plataforma abre esta pantalla."), com o botão "Today" (PT "Hoje", ES "Hoy"). Para quem não tem painel, o texto vira "This area is for company owners." (PT "Esta área é para donos de empresa.", ES "Esta área es para dueños de empresa.").
 Arquivos: client/src/pages/admin/AdminApp.tsx:56-60, client/src/i18n/messages/manage.ts:11-14
 Risco: nenhum.
+Status: feito. Dentro do painel o texto é Only the platform can open this screen. com o botão Today; para quem não tem painel, This area is for company owners.
 
 ### NAV-32 [S3] Dois campos de código na mesma tela
 Telas: platform/en-desktop/panel-kits-returns, partner/en-phone/panel-kits-returns, platform/en-phone/handout-form-codes-checked
@@ -408,6 +426,7 @@ Problema: em Hand out e Take back há "Code or scanned link" no topo e "Scan, ty
 Mudança: "Code or scanned link" sai de Hand out e Take back. Fica em Stock e na busca (NAV-26). Em Hand out, a aba "Type or paste" sai, pois o campo de "Scan" já aceita os três modos; ficam "Scan" e "Next from a batch".
 Arquivos: client/src/pages/admin/AdminApp.tsx:65-67,73, client/src/pages/admin/tags/kits-give-form.tsx:262-280
 Risco: nenhum; conferir se a aba Type tem cola de várias linhas que o campo único não aceita.
+Status: feito (moldura) | pendente. Hand out e Take back não têm mais o campo de cima (AdminApp). A aba Type or paste fica com a F4 (kits-give-form).
 
 ### NAV-33 [S3] "Take back" tem sentido oposto em espanhol
 Telas: platform/es-desktop/panel-kits-handout
@@ -415,6 +434,7 @@ Problema: EN "Take back" e PT "Recolher" (do dicionário) são ações de quem r
 Mudança: ES "Recoger".
 Arquivos: client/src/i18n/messages/adminTagsFlow.ts:460
 Risco: nenhum.
+Status: feito. ES Recoger, também no botão Recoger N piezas.
 
 ### NAV-34 [S4] Pílula azul cortada no topo do celular
 Telas: platform/en-phone/handout-form-codes-checked, platform/en-phone/handout-from-batch
@@ -422,6 +442,7 @@ Problema: há um retângulo azul cortado acima da faixa. Coincide com o link "Sk
 Mudança: conferir no aparelho. Se ocorrer, usar `-translate-y-full` e sem transição fora do foco.
 Arquivos: client/src/components/xpot/AppLayout.tsx:505-510
 Risco: nenhum.
+Status: feito. O link Skip to content usa sr-only e só aparece no foco; o retângulo não foi reproduzido nas capturas.
 
 ### NAV-35 [S1] A mesma peça tem status diferente nas duas telas chamadas Stock
 Telas: owner/en-desktop/panel-stock, owner/en-desktop/org-brightside-inventory

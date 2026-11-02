@@ -4,9 +4,6 @@ import type { Dictionary } from "../index";
 // Metric labels are shown on two lines, split at the first space.
 
 const en = {
-  greetingMorning: "Good morning",
-  greetingAfternoon: "Good afternoon",
-  greetingEvening: "Good evening",
 
   metricVisitsToday: "Visits today",
   metricCompletedToday: "Finished today",
@@ -108,9 +105,6 @@ const en = {
 export const dashboardMessages: Dictionary<typeof en> = {
   en,
   pt: {
-    greetingMorning: "Bom dia",
-    greetingAfternoon: "Boa tarde",
-    greetingEvening: "Boa noite",
 
     metricVisitsToday: "Visitas hoje",
     metricCompletedToday: "Finalizadas hoje",
@@ -207,9 +201,6 @@ export const dashboardMessages: Dictionary<typeof en> = {
     metricSalesProfit: "{amount} de lucro hoje",
   },
   es: {
-    greetingMorning: "Buenos días",
-    greetingAfternoon: "Buenas tardes",
-    greetingEvening: "Buenas noches",
 
     metricVisitsToday: "Visitas hoy",
     metricCompletedToday: "Finalizadas hoy",

@@ -164,6 +164,7 @@ Problema: módulo "Visits", item "Visits", título "Visits", migalha só "Visits
 Mudança: o item e o título viram "History" / "Histórico" / "Historial" (a Rev. 2 de `docs/MODULES.md` já decidiu por isso, D1; a tela em inglês não acompanhou, e pt e es precisam ser conferidos). Migalha da tela de check-in: "Visits › Check-in". Nela nenhum item fica ativo, ou fica Route. No celular, sem destaque falso: o histórico fica sob Route, com o botão de voltar.
 Arquivos: client/src/components/xpot/moduleNav.ts; client/src/i18n/messages/shell.ts:9, 86, 153; client/src/pages/xpot/XpotVisits.tsx
 Risco: nenhum. Os links e a URL não mudam.
+Status: feito. History / Histórico / Historial no item e no título; a tela da visita se chama Current visit e não acende nenhum item; no celular o histórico e a visita não acendem aba alguma.
 
 ### VIS-13 [S2] A aba Pipeline apresenta o GoHighLevel a quem não sabe o que é, e se contradiz
 Telas: rep/p+d/visits-sales-pipeline, -pipeline-detail; plat, owner, partner/p+d/visits-sales-pipeline
@@ -246,6 +247,7 @@ Problema: faixa "Production", migalha "Production › Companies", grupo "Product
 Mudança: faixa e migalha usam "My company" / "Minha empresa" / "Mi empresa", como o glossário. O grupo e o item "Production" continuam dentro.
 Arquivos: client/src/components/xpot/moduleNav.ts:283, 309, 369-371; client/src/i18n/messages/shell.ts:37
 Risco: nenhum.
+Status: feito. O painel do parceiro é My company; o grupo e o item Production continuam dentro.
 
 ### VIS-31 [S2] Regras de check-in: "never blocked" e "also allows" na mesma tela
 Telas: plat/p+d/check-in-rules

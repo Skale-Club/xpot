@@ -4,7 +4,6 @@ import { useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import { useT } from "@/i18n";
 import { pieceScreenMessages } from "@/i18n/messages/pieceScreen";
-import { getSellTo } from "@/pages/tags/lib";
 import { ActivitySection } from "./ActivitySection";
 import { ChipSection } from "./ChipSection";
 import { CustodyCard } from "./CustodyCard";
@@ -37,11 +36,7 @@ export function PieceBody({ layout, desktopWriter }: { layout: "stack" | "column
   const [, navigate] = useLocation();
   // Sections fill these on render; the main button calls them (PieceCommands).
   const commands = useRef<PieceCommands>({});
-  // Sheets are not portals: one that opens by itself (the chip write continued from a computer, a
-  // piece sold during a visit) would be hidden inside a closed "More details", so those start it open.
-  const [detailsOpen, setDetailsOpen] = useState(
-    () => new URLSearchParams(window.location.search).get("write") === "1" || (!tag.leadId && viewer.surface === "field" && !!getSellTo()),
-  );
+  const [detailsOpen, setDetailsOpen] = useState(false);
   const performanceRef = useRef<HTMLDivElement>(null);
   const chipRef = useRef<HTMLDivElement>(null);
 

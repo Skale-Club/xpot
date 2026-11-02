@@ -7,9 +7,8 @@ import type { Dictionary } from "../index";
 
 const en = {
   // Sidebar and palette groups (shell.ts has Administration = navOrganization)
-  navPlatform: "Platform",
   /** The active-visit screen (/route/check-in). */
-  visitScreen: "Visit",
+  visitScreen: "Current visit",
 
   // Management mode
   /** An owner in the panel: the organizations they run. */
@@ -26,7 +25,8 @@ const en = {
   photoHint: "Shown to your team and on your visits.",
   contactPhone: "Contact phone (not used to sign in)",
   signInPhone: "Sign-in phone",
-  signInPhoneHint: "To change it, ask the platform.",
+  signInPhoneHint: "To change it, talk to the Xpot team.",
+  signInPhoneAdminHint: "Change it in People.",
   signInPhoneNone: "No sign-in phone on file",
   signInEmail: "Sign-in email",
   password: "Password",
@@ -39,8 +39,7 @@ const en = {
 export const navIaMessages: Dictionary<typeof en> = {
   en,
   pt: {
-    navPlatform: "Plataforma",
-    visitScreen: "Visita",
+    visitScreen: "Visita atual",
 
     shortcutsLabel: "Atalhos",
     shortcutSearch: "/ buscar",
@@ -52,7 +51,8 @@ export const navIaMessages: Dictionary<typeof en> = {
     photoHint: "Aparece para a sua equipe e nas suas visitas.",
     contactPhone: "Telefone de contato (não serve para entrar)",
     signInPhone: "Telefone de acesso",
-    signInPhoneHint: "Para trocar, peça a um gestor.",
+    signInPhoneHint: "Para mudar, fale com a equipe do Xpot.",
+    signInPhoneAdminHint: "Altere em Pessoas.",
     signInPhoneNone: "Nenhum telefone de acesso cadastrado",
     signInEmail: "E-mail de acesso",
     password: "Senha",
@@ -62,8 +62,7 @@ export const navIaMessages: Dictionary<typeof en> = {
     administration: "Administração",
   },
   es: {
-    navPlatform: "Plataforma",
-    visitScreen: "Visita",
+    visitScreen: "Visita actual",
 
     shortcutsLabel: "Atajos",
     shortcutSearch: "/ buscar",
@@ -75,7 +74,8 @@ export const navIaMessages: Dictionary<typeof en> = {
     photoHint: "La ve tu equipo y aparece en tus visitas.",
     contactPhone: "Teléfono de contacto (no sirve para iniciar sesión)",
     signInPhone: "Teléfono de acceso",
-    signInPhoneHint: "Para cambiarlo, pídeselo a la plataforma.",
+    signInPhoneHint: "Para cambiarlo, habla con el equipo de Xpot.",
+    signInPhoneAdminHint: "Cámbialo en Personas.",
     signInPhoneNone: "No hay teléfono de acceso registrado",
     signInEmail: "Correo de acceso",
     password: "Contraseña",
