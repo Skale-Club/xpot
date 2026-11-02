@@ -1,14 +1,15 @@
 import { useEffect, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useLocation } from "wouter";
-import { Briefcase, ChevronUp, LogOut, Settings, ShieldCheck } from "lucide-react";
+import { ArrowLeft, ChevronUp, LogOut, Settings, ShieldCheck } from "lucide-react";
 import { useT } from "@/i18n";
 import { shellMessages } from "@/i18n/messages/shell";
 import { workspacesMessages } from "@/i18n/messages/workspaces";
 import { signOut } from "@/lib/signOut";
 import { navigateGuarded } from "@/hooks/useUnsavedChangesGuard";
 import { useViewerAccess } from "@/lib/adminMode";
-import { homeForModules, useXpotModules } from "@/components/ModuleSwitch";
+import { commonMessages } from "@/i18n/messages/common";
+import { homeForModules, homeModule, useXpotModules } from "@/components/ModuleSwitch";
 import type { XpotMeResponse } from "@/pages/xpot/types";
 import { ConfirmDialog } from "./ConfirmDialog";
 import { InstallAppSidebarItem } from "./InstallApp";
@@ -63,6 +64,7 @@ export function AccountMenu({ variant, collapsed = false }: { variant: "sidebar"
   const { name } = useAccountName();
   const modules = useXpotModules();
   const { reach, adminMode, profile } = useViewerAccess();
+  const tc = useT(commonMessages);
   const { panelName } = usePanelNames();
   const online = useOnline();
   const [open, setOpen] = useState(false);
@@ -118,8 +120,8 @@ export function AccountMenu({ variant, collapsed = false }: { variant: "sidebar"
           {name ? <p className="truncate px-3 pb-1.5 pt-2 text-xs font-semibold text-white/45">{name}</p> : null}
           {reach ? (
             <button type="button" role="menuitem" className={item} onClick={() => { setOpen(false); goToOtherArea(); }} data-testid="account-menu-area">
-              {adminMode ? <Briefcase className="h-[18px] w-[18px] shrink-0" aria-hidden="true" /> : <ShieldCheck className="h-[18px] w-[18px] shrink-0" aria-hidden="true" />}
-              {adminMode ? tw("userArea") : panelName(profile)}
+              {adminMode ? <ArrowLeft className="h-[18px] w-[18px] shrink-0" aria-hidden="true" /> : <ShieldCheck className="h-[18px] w-[18px] shrink-0" aria-hidden="true" />}
+              {adminMode ? tc(homeModule(modules) === "tags" ? "moduleTags" : "moduleVisits") : panelName(profile)}
             </button>
           ) : null}
           <button type="button" role="menuitem" className={item} onClick={() => { setOpen(false); navigateGuarded("/settings", navigate); }} data-testid="account-menu-settings">
