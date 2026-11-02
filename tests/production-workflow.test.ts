@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { PrintModelItem, PrintRequestItem } from "../shared/printProduction";
 import { parseBatchName, batchTabsFor, pendingBatches } from "../client/src/pages/admin/tags/batches-model";
-import { journeyTitle, personName, plainTitle, batchPrefixFromTitle, boardGroups, chipsWritten, pauseNeedsChips, canAssembleJob, canPrintModel, journeyProgress, latestPlates, pendingPieces, plateActions, printableBeds, printComputers, printedOutcome, printQuantity, productionNeedsAction, productionPath, productionTabFor, showPlateNumber, slugFromTitle } from "../client/src/pages/admin/tags/production-workflow";
+import { buildState, collapsedPlates, damagedToReprint, needsPrintComputer, journeyTitle, personName, plainTitle, batchPrefixFromTitle, boardGroups, chipsWritten, pauseNeedsChips, canAssembleJob, canPrintModel, journeyProgress, latestPlates, pendingPieces, plateActions, printableBeds, printComputers, printedOutcome, printQuantity, productionNeedsAction, productionPath, productionTabFor, showPlateNumber, slugFromTitle } from "../client/src/pages/admin/tags/production-workflow";
 
 const model = {
   id: "model", kind: "serialized", status: "ready", productType: "large_plate", face: "google_review", salesProductId: 1,
@@ -75,9 +75,46 @@ describe("unified production", () => {
       ["ready", [["b", ["3:ready"]]]],
       ["waiting", [["a", ["1:requested"]]]],
     ]);
+    // A plate being built is the computer's work, not a file the operator owes: its own group, after the ones with a button.
+    const mixed = boardGroups([request("d", plate(1, "building", "1"), plate(2, "requested", "1"))]);
+    expect(mixed.map((g) => [g.group, g.requests[0].plates.map((p) => p.status)])).toEqual([["waiting", ["requested"]], ["making", ["building"]]]);
+    expect(needsPrintComputer([request("d", plate(1, "building", "1"))])).toBe(true);
+    expect(needsPrintComputer([request("e", plate(1, "ready", "1"), plate(2, "failed", "1"))])).toBe(false);
     // A failed plate printed again no longer asks for attention: only its new attempt counts.
     expect(latestPlates({ plates: [plate(1, "failed", "1"), plate(1, "ready", "2")] as never[] }).map((p) => (p as { status: string }).status)).toEqual(["ready"]);
     expect(boardGroups([request("c", plate(1, "printed", "1"))])).toEqual([]);
+  });
+  it("tells one story about a plate being built, from the job and its computer together", () => {
+    const computer = (name: string, on: boolean) => ({ name, on, lastSeenAt: on ? "2026-11-02T09:59:00Z" : "2026-11-02T01:00:00Z" });
+    const job = (status: string, stale: boolean, deviceName: string | null) => ({ status, stale, deviceName }) as never;
+    const computers = [computer("Bench PC", true), computer("Harbor bench", false)];
+    // The computer is on and the file moves: making. On but silent for 30 minutes: quiet.
+    expect(buildState(job("building", false, "Bench PC"), computers)).toBe("making");
+    expect(buildState(job("building", true, "Bench PC"), computers)).toBe("quiet");
+    // The computer that took it is off: it waits for it, however recent the job's own news is, and silence does not change that.
+    expect(buildState(job("building", false, "Harbor bench"), computers)).toBe("computerOff");
+    expect(buildState(job("building", true, "Harbor bench"), computers)).toBe("computerOff");
+    // A computer no longer paired is not coming back.
+    expect(buildState(job("building", false, "Old PC"), computers)).toBe("computerOff");
+    // Computers not loaded, or a job no computer took yet: the job's own news is all there is.
+    expect(buildState(job("building", false, "Harbor bench"), null)).toBe("making");
+    expect(buildState(job("building", true, null), computers)).toBe("quiet");
+    expect(buildState(job("building", false, null), computers)).toBe("making");
+    for (const status of ["requested", "ready", "printing", "printed", "failed", "cancelled"]) expect(buildState(job(status, true, "Bench PC"), computers)).toBeNull();
+  });
+  it("says nine alike prints once, and not before three", () => {
+    const plate = (quantity: number, files: number) => ({ quantity, downloads: Array.from({ length: files }, (_, i) => ({ id: String(i) })) }) as never;
+    expect(collapsedPlates([plate(4, 0), plate(4, 0)])).toBeNull();
+    expect(collapsedPlates(Array.from({ length: 9 }, () => plate(4, 0)))).toEqual({ count: 9, each: 4, filesSent: 0 });
+    expect(collapsedPlates([plate(4, 1), plate(4, 0), plate(2, 1)])).toEqual({ count: 3, each: null, filesSent: 2 });
+  });
+  it("asks for damaged pieces again only while no replacement is alive", () => {
+    const job = (extra = {}) => ({ status: "printed", batchId: "b", pendingCount: 0, damagedCount: 2, reprintedBy: null, ...extra }) as never;
+    expect(damagedToReprint(job())).toBe(2);
+    expect(damagedToReprint(job({ reprintedBy: { id: "n", batchCode: "LPLATE-2026-014" } }))).toBe(0);
+    expect(damagedToReprint(job({ damagedCount: 0 }))).toBe(0);
+    expect(damagedToReprint(job({ pendingCount: 1 }))).toBe(0);
+    expect(damagedToReprint(job({ status: "failed" }))).toBe(0);
   });
   it("knows when the pause needs chips written first, and how many are", () => {
     expect(pauseNeedsChips("Peel one programmed 10 × 20 NTAG213 sticker and press it flat")).toBe(true);

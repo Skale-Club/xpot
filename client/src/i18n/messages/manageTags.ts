@@ -171,7 +171,7 @@ const en = {
   pairStep4After: " once it's paired.",
   pairComputer: "Pair a computer",
   pairComputerHint:
-    "Install the Xpot app on the computer connected to the NFC reader or the printer, then pair it with a one-time code. The app can only do this work and has no admin access. Ask the Xpot team for the installer.",
+    "Install the Xpot app on the computer connected to the NFC reader or the printer, then pair it with a one-time code. The app can only do this work and has no admin access.",
   computerNamePlaceholder: "Computer name, e.g. Workshop PC",
   createPairingCode: "Create pairing code",
   couldNotCreatePairingCode: "Could not create a pairing code",
@@ -225,7 +225,9 @@ const en = {
   journeyAction_delivered: "Delivered",
 
   // Journey tab and panel
-  allKinds: "All kinds",
+  journeyNotes: "Notes and decisions",
+  journeyEverything: "Everything",
+  journeyHappened: "What happened",
   showArchived: "Show archived",
   journeySearch: "Search",
   journeyDetails: "Details ({count})",
@@ -476,7 +478,7 @@ export const manageTagsMessages: Dictionary<typeof en> = {
     pairStep4After: " assim que ele for pareado.",
     pairComputer: "Parear um computador",
     pairComputerHint:
-      "Instale o app do Xpot no computador ligado ao leitor NFC ou à impressora e pareie-o com um código de uso único. O app só faz esse trabalho e não tem acesso de admin. Peça o instalador à equipe do Xpot.",
+      "Instale o app do Xpot no computador ligado ao leitor NFC ou à impressora e pareie-o com um código de uso único. O app só faz esse trabalho e não tem acesso de admin.",
     computerNamePlaceholder: "Nome do computador, ex.: PC da oficina",
     createPairingCode: "Criar código de pareamento",
     couldNotCreatePairingCode: "Não foi possível criar um código de pareamento",
@@ -528,7 +530,9 @@ export const manageTagsMessages: Dictionary<typeof en> = {
     journeyAction_tested: "Testado",
     journeyAction_delivered: "Entregue",
 
-    allKinds: "Todos os tipos",
+    journeyNotes: "Notas e decisões",
+    journeyEverything: "Tudo",
+    journeyHappened: "O que aconteceu",
     showArchived: "Mostrar arquivados",
     journeySearch: "Buscar",
     journeyDetails: "Detalhes ({count})",
@@ -774,7 +778,7 @@ export const manageTagsMessages: Dictionary<typeof en> = {
     pairStep4After: " cuando quede emparejada.",
     pairComputer: "Emparejar una computadora",
     pairComputerHint:
-      "Instala la app de Xpot en la computadora conectada al lector NFC o a la impresora y emparéjala con un código de un solo uso. La app solo hace ese trabajo y no tiene acceso de admin. Pide el instalador al equipo de Xpot.",
+      "Instala la app de Xpot en la computadora conectada al lector NFC o a la impresora y emparéjala con un código de un solo uso. La app solo hace ese trabajo y no tiene acceso de admin.",
     computerNamePlaceholder: "Nombre de la computadora, p. ej. PC del taller",
     createPairingCode: "Crear código de emparejamiento",
     couldNotCreatePairingCode: "No se pudo crear un código de emparejamiento",
@@ -826,7 +830,9 @@ export const manageTagsMessages: Dictionary<typeof en> = {
     journeyAction_tested: "Probado",
     journeyAction_delivered: "Entregado",
 
-    allKinds: "Todos los tipos",
+    journeyNotes: "Notas y decisiones",
+    journeyEverything: "Todo",
+    journeyHappened: "Qué pasó",
     showArchived: "Mostrar archivadas",
     journeySearch: "Buscar",
     journeyDetails: "Detalles ({count})",

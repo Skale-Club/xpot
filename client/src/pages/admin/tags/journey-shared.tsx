@@ -32,7 +32,7 @@ export interface JourneyFilters extends JourneyScope {
 }
 
 /** Entries per page of the timeline; older ones load as you reach the end. */
-export const JOURNEY_PAGE = 100;
+export const JOURNEY_PAGE = 20;
 
 /**
  * The timeline and plans of a scope, newest entries first, a page at a time.

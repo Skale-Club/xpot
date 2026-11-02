@@ -25,8 +25,8 @@ import { GenerateDialog } from "./production-generate";
 import { ToPrintList } from "./production-orders";
 import type { PreviewState } from "./production-preview-3d";
 import { PRODUCTION_BASE, minutesText, usePrintComputers, usePrintModels, usePrintRequests, useProductionAccess } from "./production-shared";
-import { boardGroups, orderedPath } from "./production-workflow";
-import { formatDateTime } from "./api";
+import { needsPrintComputer, orderedPath } from "./production-workflow";
+import { relativeTime } from "@/pages/my/format";
 
 // Tags › Production's first screen: how print production actually runs. The first thing on it is what to print now.
 //   To print        the print jobs not printed yet (and the failed ones), by what each needs: its file, the printer,
@@ -55,7 +55,7 @@ export function ProductionBoard({ go, onOtherWays }: { go: Go; onOtherWays?: () 
   const options = useMemo(() => printGenerateOptions(data ?? []), [data]);
   const bySlug = new Map(models.map((model) => [model.slug, model]));
   const { data: requests } = usePrintRequests("all");
-  const waiting = boardGroups(requests ?? []).some((group) => group.group === "waiting");
+  const waiting = needsPrintComputer(requests ?? []);
   const openModel = (model: PrintModelItem) => go(`${PRODUCTION_BASE}/models/${model.slug}`);
 
   if (error && !data) return <LoadError what={t("catalogWhat")} error={error} onRetry={() => void refetch()} />;
@@ -104,9 +104,9 @@ export function ProductionBoard({ go, onOtherWays }: { go: Go; onOtherWays?: () 
       </section> : null}
 
       {onOtherWays ? (
-        <button type="button" onClick={onOtherWays} className="text-sm text-white/60 underline underline-offset-2 hover:text-white" data-testid="production-other-ways">
-          {u("otherWays")}
-        </button>
+        <div>
+          <Button type="button" variant="secondary" size="sm" onClick={onOtherWays} data-testid="production-other-ways">{u("otherWays")}</Button>
+        </div>
       ) : null}
 
       {generating ? <GenerateDialog option={generating} models={bySlug} onClose={() => setGenerating(null)} onGenerated={(request) => go(orderedPath(request))} /> : null}
@@ -144,7 +144,7 @@ function PrintComputerLine({ go, waiting }: { go: Go; waiting: boolean }) {
           <span className={`h-2 w-2 shrink-0 rounded-full ${computer.on ? "bg-emerald-400" : waiting ? "bg-amber-400" : "bg-white/30"}`} aria-hidden="true" />
           {computer.on
             ? b("computerOn", { name: computer.name })
-            : computer.lastSeenAt ? b(waiting ? "computerOffWaiting" : "computerOff", { name: computer.name, time: formatDateTime(computer.lastSeenAt) }) : b("computerNever", { name: computer.name })}
+            : computer.lastSeenAt ? b(waiting ? "computerOffWaiting" : "computerOff", { name: computer.name, time: relativeTime(computer.lastSeenAt, Date.now(), b.lang) }) : b("computerNever", { name: computer.name })}
         </li>
       ))}
     </ul>
@@ -219,6 +219,9 @@ function PartFamilyCard({ family, onOpen }: { family: PrintPartFamily<PrintModel
         <span className="min-w-0 flex-1">
           <span className="block text-sm font-semibold leading-snug text-white">{family.name}</span>
           <span className="mt-0.5 block text-xs text-white/50">{b.plural("partOptionCount", family.models.length)}</span>
+          <span className={`mt-0.5 block text-xs ${family.models.some((m) => m.lowStock) ? "text-amber-200" : "text-white/50"}`} data-testid="production-ready-stock">
+            {b("partInStock", { count: family.models.reduce((sum, m) => sum + m.onHand, 0) })}{family.models.some((m) => m.lowStock) ? ` · ${b("partLowAny")}` : ""}
+          </span>
         </span>
         <ChevronRight className="h-4 w-4 shrink-0 text-white/40" aria-hidden="true" />
       </button>
@@ -262,6 +265,9 @@ function PartCard({ model, title, onOpen: open }: { model: PrintModelItem; title
         <button type="button" onClick={onOpen} className="min-w-0 text-left hover:underline">
           <span className="block text-sm font-semibold leading-snug text-white">{title ?? model.title}</span>
           {model.description ? <span className="mt-0.5 line-clamp-2 block text-xs text-white/45">{model.description}</span> : null}
+          <span className={`mt-0.5 block text-xs ${model.lowStock ? "text-amber-200" : "text-white/50"}`} data-testid="production-ready-stock">
+            {model.lowStock ? b("partLowStock", { count: model.onHand, reorder: model.partReorderAt ?? 0 }) : b("partInStock", { count: model.onHand })}
+          </span>
         </button>
         {ready.length ? (
           <ul className="mt-auto space-y-1">

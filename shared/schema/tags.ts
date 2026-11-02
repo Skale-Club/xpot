@@ -478,6 +478,8 @@ export const printRequests = pgTable("print_requests", {
   notes: text("notes"),
   source: text("source").notNull().default("admin"),
   requestedByUserId: text("requested_by_user_id"),
+  // The printed plate whose damaged pieces this request prints again (migrations/0074); one live replacement at most.
+  replacesJobId: uuid("replaces_job_id"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 }, (table) => ({
   createdIdx: index("print_requests_created_idx").on(table.createdAt),
