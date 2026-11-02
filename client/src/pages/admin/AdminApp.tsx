@@ -95,11 +95,8 @@ export function AdminApp({ section }: { section: string }) {
   </AppLayout>;
   return <AppLayout title={title} size="wide" mobileMaxWidth="max-w-5xl" mobileColumnClassName="pb-10 pt-5"
     topBarActions={lookupBox ? <CodeLookup onFound={(id) => navigate(`/admin/tags/pieces/${id}`)} /> : undefined}
-    mobileHeader={<div className="mb-5 space-y-3">
-      {/* A piece's page has its own back arrow named Stock: the title above it would say Stock a second time (PE-30). */}
-      {/^\/admin\/tags\/(?:production|batches|pieces\/[^/]+)(?:\/|$)/.test(location) ? null : <h1 className="truncate text-xl font-bold tracking-tight text-white" data-testid="panel-phone-title">{title}</h1>}
-      {lookupBox ? <CodeLookup fill onFound={(id) => navigate(`/admin/tags/pieces/${id}`)} /> : null}
-    </div>}>
+    // The phone bar already says the screen's title (PhoneTopBar).
+    mobileHeader={lookupBox ? <div className="mb-5"><CodeLookup fill onFound={(id) => navigate(`/admin/tags/pieces/${id}`)} /></div> : undefined}>
     {active === "home" && <AdminHome />}
     {active === "work" && <AdminWork />}
     {active === "overview" && <AdminOverview />}
