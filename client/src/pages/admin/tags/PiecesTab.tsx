@@ -24,10 +24,10 @@ import { MasterDetail } from "@/components/xpot/MasterDetail";
 import { useIsDesktop } from "@/hooks/use-is-desktop";
 import { useIsSuperAdmin } from "@/components/xpot/AdminBadge";
 import { useTagLabels } from "./labels";
-import { WHERE_CHIPS, whereQuery, whereSelection, type WhereChip } from "./where-model";
+import { WHERE_CHIPS, houseFilterQuery, whereQuery, whereSelection, type WhereChip } from "./where-model";
 import { useT } from "@/i18n";
 import { commonMessages } from "@/i18n/messages/common";
-import { shellMessages } from "@/i18n/messages/shell";
+import { pieceScreenMessages } from "@/i18n/messages/pieceScreen";
 import { manageTagsMessages } from "@/i18n/messages/manageTags";
 import { manageTagsPiecesMessages } from "@/i18n/messages/manageTagsPieces";
 import { manageTagsBatchesMessages } from "@/i18n/messages/manageTagsBatches";
@@ -36,7 +36,7 @@ import { manageTagsBatchesMessages } from "@/i18n/messages/manageTagsBatches";
 const PAGE = 100;
 
 // Batch is in the piece and in the batch filter; the stock list keeps what a person asks of a piece: whose, with whom, chip, scans.
-const ALL_COLUMNS: readonly PieceColumn[] = ["customer", "reseller", "chip", "scans"];
+const COLUMNS: readonly PieceColumn[] = ["customer", "reseller", "chip", "scans"];
 
 /** Whether a piece is open in the pane now (the next open replaces it in history). */
 const current = () => new URLSearchParams(window.location.search).has("piece");
@@ -47,8 +47,8 @@ const current = () => new URLSearchParams(window.location.search).has("piece");
  */
 const PIECE_FILTERS = { where: "", status: "", stock: "", product: "", rep: "", lead: "", batch: "", method: "", search: "", org: "" };
 type Filters = Record<keyof typeof PIECE_FILTERS, string>;
-/** The filters behind "More filters" (`method` has no control any more; an old ?method= link still filters). */
-const MORE_FILTERS = ["org", "rep", "lead", "batch"] as const;
+/** The filters behind "More filters" (`method` has no control any more; an old ?method= link still filters). The organization is in view for platform management. */
+const MORE_FILTERS = ["rep", "lead", "batch"] as const;
 /** Everything that narrows the list besides the status: a chip count is a whole-stock number, so it hides under any of these. */
 const NARROWING = ["product", "rep", "lead", "batch", "method", "search", "org"] as const;
 
@@ -64,11 +64,14 @@ export const hidesNotInStock = (f: Pick<Filters, "where" | "status" | "stock" | 
 
 /** Translate the URL filters into the list endpoint's query (listQuerySchema), dropping junk. */
 function listUrl(f: Filters, limit: number, offset: number): string {
+  const place = whereQuery(f);
+  const { metric, house } = houseFilterQuery(place, f.rep);
   return withQuery("/api/xpot/tags", {
-    ...whereQuery(f),
+    ...place,
+    metric,
     hidePending: hidesNotInStock(f) ? "1" : undefined,
     productType: f.product && (TAG_PRODUCT_TYPES as readonly string[]).includes(f.product) ? f.product : undefined,
-    house: f.rep === "house" ? "1" : undefined,
+    house: house ? "1" : undefined,
     repId: f.rep !== "house" ? posInt(f.rep) : undefined,
     leadId: posInt(f.lead),
     batchId: f.batch && UUID.test(f.batch) ? f.batch : undefined,
@@ -85,8 +88,8 @@ function NewPieceDialog({ open, onOpenChange, onCreated }: { open: boolean; onOp
   const { toast } = useToast();
   const t = useT(manageTagsPiecesMessages);
   const tc = useT(commonMessages);
-  const ts = useT(shellMessages);
   const tg = useT(manageTagsMessages);
+  const tp = useT(pieceScreenMessages);
   const tb = useT(manageTagsBatchesMessages);
   const labels = useTagLabels();
   const [productType, setProductType] = useState("google_review_sign");
@@ -117,25 +120,31 @@ function NewPieceDialog({ open, onOpenChange, onCreated }: { open: boolean; onOp
         <form onSubmit={submit} className="space-y-4">
           <DialogHeader>
             <DialogTitle>{t("newPieceTitle")}</DialogTitle>
-            <DialogDescription>{t("newPieceDescription", { batches: ts("manageBatches") })}</DialogDescription>
+            <DialogDescription>{t("newPieceDescription")}</DialogDescription>
           </DialogHeader>
-          <Field label={t("productType")}>
-            <Select value={productType} onChange={(e) => setProductType(e.target.value)} options={labels.productOptions} data-testid="new-piece-product" />
-          </Field>
+          {/* The product comes first: it is what is sold, and sets the price. The kind of piece and what is printed follow it. */}
           <Field label={t("newPieceProduct")} hint={t("newPieceProductHint")}>
             <Select value={salesProductId} onChange={(e) => setSalesProductId(e.target.value)} placeholder={tb("chooseCatalogProduct")} options={catalogOptions(catalog)} data-testid="new-piece-catalog" />
           </Field>
-          <Field label={tg("printedOnPiece")} id="new-piece-face">
-            <div className="flex items-center gap-2">
-              <TagFaceIcon face={face || (productType === "google_review_sign" ? "google_review" : null)} size="md" />
-              <div className="min-w-0 flex-1">
-                <Select id="new-piece-face" value={face} onChange={(e) => setFace(e.target.value)} placeholder={t("faceFromProductGoogle")} options={labels.faceOptions} data-testid="new-piece-face" />
-              </div>
+          <Field label={t("productType")}>
+            <Select value={productType} onChange={(e) => setProductType(e.target.value)} options={labels.productOptions} data-testid="new-piece-product" />
+          </Field>
+          <details className="group">
+            <summary className="flex min-h-10 cursor-pointer list-none items-center text-sm font-semibold text-white/70 hover:text-white [&::-webkit-details-marker]:hidden">{tp("moreDetails")}</summary>
+            <div className="mt-2 space-y-4">
+              <Field label={tg("printedOnPiece")} id="new-piece-face">
+                <div className="flex items-center gap-2">
+                  <TagFaceIcon face={face || (productType === "google_review_sign" ? "google_review" : null)} size="md" />
+                  <div className="min-w-0 flex-1">
+                    <Select id="new-piece-face" value={face} onChange={(e) => setFace(e.target.value)} placeholder={t("faceFromProductGoogle")} options={labels.faceOptions} data-testid="new-piece-face" />
+                  </div>
+                </div>
+              </Field>
+              <Field label={t("internalLabelOptional")}>
+                <Input value={label} onChange={(e) => setLabel(e.target.value)} maxLength={120} data-testid="new-piece-label" />
+              </Field>
             </div>
-          </Field>
-          <Field label={t("internalLabelOptional")}>
-            <Input value={label} onChange={(e) => setLabel(e.target.value)} maxLength={120} data-testid="new-piece-label" />
-          </Field>
+          </details>
           <DialogFooter className="gap-2">
             <Button type="button" variant="ghost" onClick={() => onOpenChange(false)}>{tc("cancel")}</Button>
             <Button type="submit" variant="brand" accent="tags" disabled={!productType || !salesProductId} loading={create.isPending} data-testid="new-piece-create">{t("createPiece")}</Button>
@@ -244,12 +253,19 @@ export function PiecesTab({ go }: { go: (path: string) => void }) {
   }, []);
   // "More filters" opens by itself whenever one of them narrows the list (a link, the back button), so it never hides one.
   const moreActive = urlFilters.activeCount([...MORE_FILTERS]);
-  const [moreOpen, setMoreOpen] = useState(moreActive > 0);
+  // A place the chips do not show (Damaged, Lost, Paused, Deactivated) is picked in the select; a phone keeps every select behind one button.
+  const chipPlaces: readonly string[] = WHERE_CHIPS;
+  const placeOutsideChips = where !== "" && !chipPlaces.includes(where);
+  const hiddenActive = urlFilters.activeCount(["product", "org", ...MORE_FILTERS]) + (placeOutsideChips ? 1 : 0);
+  // What the corner counter cannot say alone: any filter besides the chip in force.
+  const extraActive = hiddenActive + urlFilters.activeCount(["method", "search"]);
+  const forceOpen = isDesktop ? moreActive : hiddenActive;
+  const [moreOpen, setMoreOpen] = useState(forceOpen > 0);
   useEffect(() => {
-    if (moreActive > 0) setMoreOpen(true);
-  }, [moreActive]);
+    if (forceOpen > 0) setMoreOpen(true);
+  }, [forceOpen]);
 
-  const repOptions = uniqueOptions([{ value: "house", label: tm("noReseller") }, ...reps.map((r) => ({ value: String(r.id), label: labels.repOption(r) }))]);
+  const repOptions = uniqueOptions([{ value: "house", label: tm("houseStock") }, ...reps.map((r) => ({ value: String(r.id), label: labels.repOption(r) }))]);
   // A rep/lead/batch in the URL that isn't in the pickers (e.g. still loading) still shows as selected.
   if (filters.rep && !repOptions.some((o) => o.value === filters.rep)) repOptions.push({ value: filters.rep, label: tm("resellerNumber", { id: filters.rep }) });
   const leadOptions = uniqueOptions(leads.map((l) => ({ value: String(l.id), label: l.name })));
@@ -263,9 +279,25 @@ export function PiecesTab({ go }: { go: (path: string) => void }) {
     whereOptions.push({ value: where, label: kind === "status" ? labels.status(raw) : labels.stock(raw) });
   }
   const orgOptions = organizationFilterOptions(organizations, filters.org, (id) => tg("organizationNumber", { id }));
+  // The chips carry the places with a number; the select is for the rest, so it never repeats a chip.
+  const otherStatusOptions = whereOptions.filter((o) => !chipPlaces.includes(o.value));
+  const statusSelect = <FilterSelect value={placeOutsideChips ? where : ""} onChange={(next) => set({ where: next, status: "", stock: "" })} placeholder={tm("moreStatuses")} options={otherStatusOptions} icon={MapPin} testId="admin-pieces-where" />;
+  const productSelect = <FilterSelect value={filters.product} onChange={(product) => set({ product })} placeholder={tm("allProducts")} options={labels.productOptions} icon={Package} />;
+  const orgSelect = spansOrganizations ? <FilterSelect value={filters.org} onChange={(org) => set({ org })} placeholder={tg("allOrganizations")} options={orgOptions} icon={Network} testId="admin-pieces-org" /> : null;
+  // Quiet on purpose: a loose piece outside any production is the exception, not the way to add stock.
+  const newPieceButton = isAdmin ? (
+    <Button type="button" variant="ghost" className="min-h-10" onClick={() => setCreating(true)} data-testid="admin-pieces-new">
+      <Plus className="h-4 w-4" />{tm("newPiece")}
+    </Button>
+  ) : undefined;
 
   // A phone has no pane: a shared ?piece= link shows the piece's page.
   if (!isDesktop && paneId) return <PieceDetail id={paneId} go={go} />;
+
+  // Platform management sees every company's pieces, so it reads whose each is. In company stock every row says "Company stock": no column.
+  const columns = COLUMNS.filter((c) => !(c === "reseller" && where === "house"));
+  // Someone who runs several organizations (or the platform with "All organizations") sees whose piece each is.
+  if (spansOrganizations && !filters.org && orgOptions.length > 1) columns.unshift("organization");
 
   const list = isLoading ? (
     <Loading rows={6} />
@@ -283,9 +315,7 @@ export function PiecesTab({ go }: { go: (path: string) => void }) {
       <PieceTable
         pieces={tags}
         onOpen={openPiece}
-        columns={ALL_COLUMNS}
-        // Someone who runs several organizations (or the platform with "All organizations") sees whose piece each is.
-        showOrganization={spansOrganizations && !filters.org && orgOptions.length > 1}
+        columns={columns}
         selectedId={paneId}
         testId="admin-pieces-table"
         headTop={isDesktop ? stickyHeight : undefined}
@@ -311,34 +341,39 @@ export function PiecesTab({ go }: { go: (path: string) => void }) {
       <FilterBar
         testId="admin-pieces-filters"
         search={<FilterSearch value={filters.search} onChange={(search) => set({ search })} onEnter={openByCode} placeholder={tm("searchPlaceholder")} debounceMs={350} testId="admin-pieces-search" />}
-        actions={
-          isAdmin ? (
-            // Quiet on purpose: a loose piece outside any production is the exception, not the way to add stock.
-            <Button type="button" variant="ghost" className="min-h-10" onClick={() => setCreating(true)} data-testid="admin-pieces-new">
-              <Plus className="h-4 w-4" />{tm("newPiece")}
-            </Button>
-          ) : undefined
-        }
+        actions={isDesktop ? newPieceButton : undefined}
         controls={
-          <>
-            <FilterSelect value={where} onChange={(next) => set({ where: next, status: "", stock: "" })} placeholder={tg("allWhere")} options={whereOptions} icon={MapPin} testId="admin-pieces-where" />
-            <FilterSelect value={filters.product} onChange={(product) => set({ product })} placeholder={tm("allProducts")} options={labels.productOptions} icon={Package} />
-            <FilterToggle pressed={moreOpen} onChange={setMoreOpen} icon={SlidersHorizontal} label={moreActive ? tg("moreFiltersCount", { count: moreActive }) : tg("moreFilters")} testId="admin-pieces-more" />
-          </>
+          isDesktop ? (
+            <>
+              {statusSelect}
+              {productSelect}
+              {orgSelect}
+              <FilterToggle pressed={moreOpen} onChange={setMoreOpen} icon={SlidersHorizontal} label={moreActive ? tg("moreFiltersCount", { count: moreActive }) : tg("moreFilters")} testId="admin-pieces-more" />
+            </>
+          ) : (
+            // A phone keeps the search and the place chips in view; every other filter waits behind one button.
+            <FilterToggle pressed={moreOpen} onChange={setMoreOpen} icon={SlidersHorizontal} label={hiddenActive ? tm("filtersCount", { count: hiddenActive }) : tm("filters")} testId="admin-pieces-more" />
+          )
         }
         secondary={
           moreOpen ? (
             <div className="flex flex-wrap items-center gap-2" data-testid="admin-pieces-more-filters">
-              {spansOrganizations ? (
-                <FilterSelect value={filters.org} onChange={(org) => set({ org })} placeholder={tg("allOrganizations")} options={orgOptions} icon={Network} testId="admin-pieces-org" />
-              ) : null}
+              {isDesktop ? null : (
+                <>
+                  {statusSelect}
+                  {productSelect}
+                  {orgSelect}
+                </>
+              )}
               <FilterSelect value={filters.rep} onChange={(rep) => set({ rep })} placeholder={tg("allResellers")} options={repOptions} icon={Users} testId="admin-pieces-rep" />
               <FilterSelect value={filters.lead} onChange={(lead) => set({ lead })} placeholder={tm("allCustomers")} options={leadOptions} icon={Building2} />
               <FilterSelect value={filters.batch} onChange={(batch) => set({ batch })} placeholder={tm("allBatches")} options={batchOptions} icon={Layers} />
+              {isDesktop ? null : newPieceButton}
             </div>
           ) : undefined
         }
-        summary={{ shown: pieces.hasMore ? undefined : tags.length, active: hasFilters, onClear: () => urlFilters.reset() }}
+        // One counter, in the corner; this line only appears for a filter the chips do not show.
+        summary={{ shown: pieces.hasMore ? undefined : tags.length, active: extraActive > 0, onClear: () => urlFilters.reset() }}
       />
       </div>
 

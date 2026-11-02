@@ -50,14 +50,16 @@ export interface PieceMainAction {
 }
 
 /** A sentence about the chip under the pill, only for a piece whose chip is missing or failed. */
-export type PieceChipNote = "qrWorks" | "missing" | "failed";
+export type PieceChipNote = "qrWorks" | "failed";
 
 export interface PieceSituation {
   key: PieceSituationKey;
   tone: PillTone;
   action: PieceMainAction | null;
   /** One line under the status, when the next step is not obvious from it. */
-  hint?: "waitingPrint" | "askManager" | "printFailed" | "printCancelled";
+  hint?: "waitingPrint" | "printDone" | "askManager" | "printFailed" | "printCancelled";
+  /** The print order of a cancelled print: a quiet link, since there is nothing left to do in it. */
+  printHref?: string;
   /** The piece is sold but not live: the customer paid and it does nothing yet. */
   note: PieceStatus["note"];
   chip: PieceChipState;
@@ -102,8 +104,12 @@ export function showsReceive(tag: { printJobId?: string | null }, viewer: PieceV
 export function pieceSituation(tag: SituationTag, viewer: PieceViewer): PieceSituation {
   const base = pieceStatus(tag);
   const chipMissing = chipIsMissing(base.chip);
-  const chipNote: PieceChipNote | null = !chipMissing ? null : base.chip === "failed" ? "failed" : base.key === "live" || base.key === "soldLive" ? "qrWorks" : "missing";
-  const out = (action: PieceMainAction | null, hint?: PieceSituation["hint"]): PieceSituation => ({ key: base.key, tone: base.tone, note: base.note, chip: base.chip, chipNote, action, ...(hint ? { hint } : {}) });
+  // The pill already says "Chip to write" / "Chip write failed", and a sold piece that is not live says the urgent thing:
+  // the sentence about the chip comes once it is live ("QR works").
+  const pillSaysChip = base.key === "chipToWrite" || base.key === "chipFailed" || base.key === "soldNotLive";
+  const chipNote: PieceChipNote | null = !chipMissing || pillSaysChip ? null : base.chip === "failed" ? "failed" : "qrWorks";
+  const out = (action: PieceMainAction | null, hint?: PieceSituation["hint"], printHref?: string): PieceSituation =>
+    ({ key: base.key, tone: base.tone, note: base.note, chip: base.chip, chipNote, action, ...(hint ? { hint } : {}), ...(printHref ? { printHref } : {}) });
   const canActivate = planTransition(tag, "activate").ok;
   const writeOrGoLive = (): PieceMainAction | null => (chipMissing ? { kind: "writeChip" } : canActivate ? { kind: "goLive" } : null);
 
@@ -118,9 +124,11 @@ export function pieceSituation(tag: SituationTag, viewer: PieceViewer): PieceSit
     case "printFailed":
     case "printCancelled": {
       const hint = base.key;
-      // Whoever produces opens the print to redo it; everyone else asks.
-      if (!showsReceive(tag, viewer) && tag.printJobId) return out({ kind: "openPrint", href: `/admin/tags/production/jobs/${encodeURIComponent(tag.printJobId)}` }, hint);
-      return out(null, hint);
+      const href = !showsReceive(tag, viewer) && tag.printJobId ? `/admin/tags/production/jobs/${encodeURIComponent(tag.printJobId)}` : null;
+      // A failed print is redone: whoever produces opens it, everyone else asks. A cancelled one has nothing to do
+      // in it (the piece won't arrive), so no main button, only a link to look.
+      if (href && base.key === "printFailed") return out({ kind: "openPrint", href }, hint);
+      return out(null, hint, href ?? undefined);
     }
     case "pending": {
       const receive = tag.custody?.receive;
@@ -129,7 +137,8 @@ export function pieceSituation(tag: SituationTag, viewer: PieceViewer): PieceSit
       // a supplier's lot (no print) and everyone who does not produce receive.
       if (!showsReceive(tag, viewer) && tag.printJobId) {
         const waiting = (OPEN_PRINT_JOB_STATUSES as readonly string[]).includes(tag.printJobStatus ?? "");
-        return out({ kind: "openPrint", href: `/admin/tags/production/jobs/${encodeURIComponent(tag.printJobId)}` }, waiting ? "waitingPrint" : undefined);
+        // A print that is over and left this piece out of stock says so, so the print is opened to fix it.
+        return out({ kind: "openPrint", href: `/admin/tags/production/jobs/${encodeURIComponent(tag.printJobId)}` }, waiting ? "waitingPrint" : "printDone");
       }
       if (canReceive) return out({ kind: "receive" });
       return out(null, "askManager");
@@ -140,11 +149,14 @@ export function pieceSituation(tag: SituationTag, viewer: PieceViewer): PieceSit
     case "paused":
       return out(canActivate ? { kind: "reactivate" } : null);
     case "ready":
+    case "chipToWrite":
+    case "chipFailed":
       return out(writeOrGoLive());
     case "soldNotLive":
       // Sold from a kit before it was set up for anyone: set it up first.
       if (tag.status === "inventory") return out({ kind: "configure" });
-      return out(writeOrGoLive());
+      // The customer bought it, so switching it on comes first (the QR works without the chip); the chip follows.
+      return out(canActivate ? { kind: "goLive" } : chipMissing ? { kind: "writeChip" } : null);
     case "noCustomer":
       return out({ kind: "configure" });
   }

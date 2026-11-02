@@ -245,10 +245,9 @@ export function OverviewQueue({ queue, go }: { queue: TagPieceQueue; go: Go }) {
           pieces={rows}
           onOpen={open}
           selectedId={paneId}
-          columns={queue === "chipPending" ? ["customer", "reseller", "chip"] : queue === "scannedNotLive" ? ["customer", "reseller", "scanned"] : ["reseller", "batch"]}
+          columns={[...(canManage && !/^\d+$/.test(org) && organizations.length > 1 ? (["organization"] as const) : []), ...(queue === "chipPending" ? (["customer", "reseller", "chip"] as const) : queue === "scannedNotLive" ? (["customer", "reseller", "scanned"] as const) : (["reseller", "batch"] as const))]}
           pageSize={50}
           empty={t("queueEmpty")}
-          showOrganization={canManage && !/^d+$/.test(org) && organizations.length > 1}
         />
       )}
     </SectionCard>

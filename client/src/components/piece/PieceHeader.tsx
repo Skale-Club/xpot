@@ -11,6 +11,7 @@ import { manageTagsPiecesMessages } from "@/i18n/messages/manageTagsPieces";
 import { pieceScreenMessages } from "@/i18n/messages/pieceScreen";
 import { usePiece, usePieceActivity } from "./PieceContext";
 import { useReasonText } from "./reasonText";
+import { useJourney } from "@/pages/admin/tags/journey-shared";
 import { formatDate } from "@/lib/format";
 import { pieceHolderLine, pieceIsSold, pieceSituation, pieceStatusChips, type PieceDimension, type PieceSituationKey } from "./pieceView";
 
@@ -58,16 +59,21 @@ export function PieceStatusChips({ tag, className = "" }: { tag: Pick<TagDetail,
 const ENDED_BY: Partial<Record<PieceSituationKey, string>> = { damaged: "damage", lost: "loss", retired: "retire", reserved: "reserve", internalUse: "internal_use" };
 
 function LastMovement({ movementType }: { movementType: string }) {
-  const { tag } = usePiece();
+  const { tag, viewer } = usePiece();
   const tp = useT(pieceScreenMessages);
   const reasonText = useReasonText();
   const { data } = usePieceActivity(tag.id, tag.updatedAt);
+  // Deactivating a piece writes no stock movement: its who, when and why are in the production log (the global admin reads it).
+  const log = useJourney({ tagId: tag.id }, viewer.isAdmin && movementType === "retire");
   const movement = data?.movements?.find((m) => m.movementType === movementType);
-  if (!movement) return null;
-  const reason = reasonText(movement.reason);
+  const entry = movement ? null : movementType === "retire" ? log.data?.entries.find((e) => e.action === "tag_retired") ?? null : null;
+  const at = movement?.createdAt ?? entry?.occurredAt;
+  if (!at) return null;
+  const actor = movement ? movement.actorName : entry?.actorName;
+  const reason = reasonText(movement ? movement.reason : entry?.content ?? null);
   return (
     <p className="text-sm text-white/55" data-testid="piece-last-movement">
-      {[tp(`movement_${movementType}` as "movement_loss"), formatDate(movement.createdAt, { month: "short", day: "numeric" }), movement.actorName ? tp("evBy", { name: movement.actorName }) : null].filter(Boolean).join(" · ")}
+      {[tp(`movement_${movementType}` as "movement_loss"), formatDate(at, { month: "short", day: "numeric" }), actor ? tp("evBy", { name: actor }) : null].filter(Boolean).join(" · ")}
       {reason ? <span className="block text-white/45">{reason}</span> : null}
     </p>
   );
@@ -87,7 +93,7 @@ export function PieceSituationPill({ className = "" }: { className?: string }) {
       <Pill tone={situation.tone}>{text}</Pill>
       {situation.note ? <p className="text-sm text-amber-200/85" data-testid="piece-note">{tp(`note${situation.note[0].toUpperCase()}${situation.note.slice(1)}` as "noteSoldNotLive")}</p> : null}
       {viewer.canManage && ENDED_BY[situation.key] ? <LastMovement movementType={ENDED_BY[situation.key]!} /> : null}
-      {situation.chipNote ? <p className={`text-sm ${situation.chipNote === "failed" ? "text-red-300/90" : "text-amber-200/85"}`} data-testid="piece-chip-note">{tp(`chipNote_${situation.chipNote}` as "chipNote_missing")}</p> : null}
+      {situation.chipNote ? <p className={`text-sm ${situation.chipNote === "failed" ? "text-red-300/90" : "text-amber-200/85"}`} data-testid="piece-chip-note">{tp(`chipNote_${situation.chipNote}` as "chipNote_qrWorks")}</p> : null}
     </div>
   );
 }

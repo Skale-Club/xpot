@@ -46,7 +46,7 @@ function frameAround(corners: QrPoint[], video: HTMLVideoElement): FrameBox | nu
 }
 
 /** Full-screen rear-camera QR reader (useQrCamera). */
-export default function QrScanner({ onResult, onClose }: { onResult: (text: string) => void; onClose: () => void }) {
+export default function QrScanner({ onResult, onClose, onTypeCode }: { onResult: (text: string) => void; onClose: () => void; /** When the camera is not available: the way on is typing the code printed on the piece. */ onTypeCode?: () => void }) {
   const t = useT(tagsMessages);
   const tc = useT(commonMessages);
   const doneRef = useRef(false);
@@ -128,9 +128,14 @@ export default function QrScanner({ onResult, onClose }: { onResult: (text: stri
         {error ? (
           <div className={`pointer-events-auto max-w-sm rounded-2xl p-5 text-center text-white ${SURFACE_MODAL_CLASS}`}>
             <p className="font-semibold">{t(error)}</p>
-            <Button type="button" variant="brand" accent="tags" size="lg" onClick={onClose} className="mt-4">
-              {tc("back")}
+            <Button type="button" variant="brand" accent="tags" size="lg" onClick={onTypeCode ?? onClose} className="mt-4" data-testid="button-qr-type-code">
+              {onTypeCode ? t("qrTypeCode") : tc("back")}
             </Button>
+            {onTypeCode ? (
+              <Button type="button" variant="ghost" size="lg" onClick={onClose} className="mt-2">
+                {tc("back")}
+              </Button>
+            ) : null}
           </div>
         ) : (
           <>

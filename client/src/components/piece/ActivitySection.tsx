@@ -128,7 +128,8 @@ function TimelineRow({ event }: { event: PieceTimelineEvent }) {
     case "journey":
       // The server writes these titles in English and with the word "tag": say what happened from the action, in the app's words.
       title = event.entry.action === "tag_activated" ? tp("evPutLive") : event.entry.action === "tag_created" ? tp("evCreated") : event.entry.action === "tag_assigned" ? linkedTitle(event.entry.title, tp) : event.entry.title;
-      who = event.entry.actorName ?? event.entry.actorEmail;
+      // A name, never an e-mail: an author with no known name is left out.
+      who = event.entry.actorName;
       detail = event.entry.content;
       break;
   }

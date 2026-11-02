@@ -22,7 +22,7 @@ import { pieceSections, pieceSituation, type PieceMainAction } from "./pieceView
 // `columns`: the admin page on a computer, the working sections on the left,
 // Management on the right, Performance and Activity across the bottom.
 
-const HINT_KEY = { waitingPrint: "hintWaitingPrint", askManager: "hintAskManager", printFailed: "hintPrintFailed", printCancelled: "hintPrintCancelled" } as const;
+const HINT_KEY = { waitingPrint: "hintWaitingPrint", printDone: "hintPrintDone", askManager: "hintAskManager", printFailed: "hintPrintFailed", printCancelled: "hintPrintCancelled" } as const;
 const ACTION_ICON = { openPrint: Printer, viewPerformance: BarChart3, reactivate: Power, goLive: Power, writeChip: Nfc, configure: Settings2 } as const;
 
 function ActionIcon({ kind }: { kind: keyof typeof ACTION_ICON }) {
@@ -83,7 +83,18 @@ export function PieceBody({ layout, desktopWriter }: { layout: "stack" | "column
       {tp(`action${action.kind[0].toUpperCase()}${action.kind.slice(1)}` as "actionGoLive")}
     </Button>
   ) : null;
-  const hint = situation.hint ? <p className="text-sm text-white/55" data-testid="piece-hint">{tp(HINT_KEY[situation.hint])}</p> : null;
+  const printHref = situation.printHref;
+  const hint = situation.hint ? (
+    <p className="text-sm text-white/55" data-testid="piece-hint">
+      {tp(HINT_KEY[situation.hint])}
+      {printHref ? (
+        <>
+          {" "}
+          <a href={printHref} onClick={(e) => { e.preventDefault(); navigate(printHref); }} className="font-semibold text-white/80 underline underline-offset-2 hover:text-white" data-testid="link-see-print">{tp("actionSeePrint")}</a>
+        </>
+      ) : null}
+    </p>
+  ) : null;
 
   if (layout === "stack") {
     const customerOutside = !!tag.leadId || action?.kind === "configure";

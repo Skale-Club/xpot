@@ -221,7 +221,7 @@ describe("the header never contradicts the status", () => {
     const open = pieceSituation({ ...piece, printJobStatus: "ready" }, admin);
     expect([open.key, open.hint, open.action?.kind]).toEqual(["pending", "waitingPrint", "openPrint"]);
     const done = pieceSituation({ ...piece, printJobStatus: "printed" }, admin);
-    expect([done.key, done.hint, done.action?.kind]).toEqual(["pending", undefined, "openPrint"]);
+    expect([done.key, done.hint, done.action?.kind]).toEqual(["pending", "printDone", "openPrint"]);
     expect(pieceSituation({ ...piece, printJobStatus: "ready", custody: receivable }, rep).key).toBe("pending");
   });
 
@@ -264,7 +264,7 @@ describe("pieceSituation", () => {
     ["sale beats pending", { stockStatus: "pending", saleId: 9 }, rep, "soldNotLive", "amber", "configure"],
     ["sold and live, chip never written: the chip first", { status: "active", stockStatus: "sold", saleId: 9, nfcStatus: "not_programmed", ...set }, rep, "soldLive", "blue", "writeChip"],
     ["sold, set up, not live: put it live", { status: "assigned", stockStatus: "sold", saleId: 9, ...set }, rep, "soldNotLive", "amber", "goLive"],
-    ["sold, not live, chip not written: write it", { status: "assigned", stockStatus: "sold", saleId: 9, nfcStatus: "not_programmed", ...set }, rep, "soldNotLive", "amber", "writeChip"],
+    ["sold, not live, chip not written: put it live first, the chip follows", { status: "assigned", stockStatus: "sold", saleId: 9, nfcStatus: "not_programmed", ...set }, rep, "soldNotLive", "amber", "goLive"],
     ["sold and paused, no link to restore: no action", { status: "disabled", stockStatus: "sold", saleId: 9, leadId: 4 }, rep, "soldNotLive", "amber", null],
     ["pending, reseller who may receive", { stockStatus: "pending", custody: receivable }, rep, "pending", "amber", "receive"],
     ["pending, receive blocked", { stockStatus: "pending", custody: blocked }, rep, "pending", "amber", null],
@@ -287,8 +287,8 @@ describe("pieceSituation", () => {
     ["live, chip write failed", { status: "active", nfcStatus: "failed", ...set }, rep, "live", "green", "writeChip"],
     ["paused", { status: "disabled", ...set }, rep, "paused", "amber", "reactivate"],
     ["paused but activation blocked: no action", { status: "disabled", leadId: 4 }, rep, "paused", "amber", null],
-    ["assigned, chip not written", { status: "assigned", nfcStatus: "not_programmed", ...set }, rep, "ready", "sky", "writeChip"],
-    ["assigned, chip write failed", { status: "assigned", nfcStatus: "failed", ...set }, rep, "ready", "sky", "writeChip"],
+    ["assigned, chip not written", { status: "assigned", nfcStatus: "not_programmed", ...set }, rep, "chipToWrite", "amber", "writeChip"],
+    ["assigned, chip write failed", { status: "assigned", nfcStatus: "failed", ...set }, rep, "chipFailed", "red", "writeChip"],
     ["assigned, chip written", { status: "assigned", nfcStatus: "programmed", ...set }, rep, "ready", "sky", "goLive"],
     ["assigned, chip verified", { status: "assigned", nfcStatus: "verified", ...set }, rep, "ready", "sky", "goLive"],
     ["assigned, chip locked", { status: "assigned", nfcStatus: "locked", ...set }, rep, "ready", "sky", "goLive"],
@@ -298,7 +298,7 @@ describe("pieceSituation", () => {
     ["internal use", { status: "inventory", stockStatus: "internal_use" }, rep, "internalUse", "slate", null],
     ["print failed, the producer opens the print", { stockStatus: "pending", batchId: "b-1", printJobId: "j-1", printJobStatus: "failed" }, admin, "printFailed", "red", "openPrint"],
     ["print failed, a reseller can only ask", { stockStatus: "pending", batchId: "b-1", printJobId: "j-1", printJobStatus: "failed" }, rep, "printFailed", "red", null],
-    ["print cancelled", { stockStatus: "pending", batchId: "b-1", printJobId: "j-1", printJobStatus: "cancelled" }, admin, "printCancelled", "muted", "openPrint"],
+    ["print cancelled", { stockStatus: "pending", batchId: "b-1", printJobId: "j-1", printJobStatus: "cancelled" }, admin, "printCancelled", "muted", null],
     ["unknown status does not break", { status: "weird", stockStatus: "weird", nfcStatus: "weird" }, rep, "other", "slate", null],
   ];
   it.each(cases)("%s", (_name, piece, viewer, key, tone, action) => {
@@ -309,6 +309,21 @@ describe("pieceSituation", () => {
   it("links the print action to the print order of the piece", () => {
     const got = pieceSituation({ ...base, stockStatus: "pending", batchId: "b-1", printJobId: "job 1" }, admin);
     expect(got.action).toEqual({ kind: "openPrint", href: "/admin/tags/production/jobs/job%201" });
+  });
+
+  it("only looks at a cancelled print: a quiet link, no main button", () => {
+    const got = pieceSituation({ ...base, stockStatus: "pending", batchId: "b-1", printJobId: "j-1", printJobStatus: "cancelled" }, admin);
+    expect([got.action, got.hint, got.printHref]).toEqual([null, "printCancelled", "/admin/tags/production/jobs/j-1"]);
+  });
+
+  it("says the chip once: in the pill when the piece is not ready, after going live when it was sold", () => {
+    const note = (piece: Record<string, unknown>) => pieceSituation({ ...base, ...piece } as Parameters<typeof pieceSituation>[0], rep).chipNote;
+    expect(note({ status: "assigned", nfcStatus: "not_programmed", ...set })).toBeNull();
+    expect(note({ status: "assigned", nfcStatus: "failed", ...set })).toBeNull();
+    expect(note({ status: "assigned", stockStatus: "sold", saleId: 9, nfcStatus: "not_programmed", ...set })).toBeNull();
+    expect(note({ status: "active", nfcStatus: "not_programmed", ...set })).toBe("qrWorks");
+    expect(note({ status: "active", nfcStatus: "failed", ...set })).toBe("failed");
+    expect(note({ status: "active", stockStatus: "sold", saleId: 9, nfcStatus: "not_programmed", ...set })).toBe("qrWorks");
   });
 });
 

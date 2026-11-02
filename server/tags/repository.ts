@@ -154,9 +154,9 @@ type TagRow = {
   destination_url: string | null;
   lead_id: number | null;
   lead_name: string | null;
+  organization_id: number | null;
   rep_id: number | null;
   rep_name: string | null;
-  organization_id: number;
   organization_name: string | null;
   kit_id: string | null;
   kit_number: number | null;
@@ -199,9 +199,9 @@ function toListItem(r: TagRow): TagListItem {
     destinationUrl: r.destination_url,
     leadId: r.lead_id,
     leadName: r.lead_name,
+    organizationId: r.organization_id,
     repId: r.rep_id,
     repName: r.rep_name,
-    organizationId: r.organization_id,
     organizationName: r.organization_name,
     kitId: r.kit_id,
     kitCode: r.kit_number == null ? null : kitCode(Number(r.kit_number)),
