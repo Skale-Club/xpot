@@ -67,6 +67,7 @@ Problema: Coastline e Lindgren mostram os mesmos números: "Visits 8 · Finished
 Mudança: filtrar visitas e vendas pela organização da empresa visitada ou vendida (`sales_leads.organization_id`), não pela lista de pessoas. O total passa a bater com as páginas das pessoas.
 Arquivos: server/routes/xpot/teamActivity.ts:1-3,28; server/routes/xpot/organizations.ts:223-231
 Risco: regra de negócio. Recomendo contar pela organização da empresa. Afeta só quem está em mais de uma organização, ou quem atende empresa de outra. A exclusão do Kevin vem da regra "só quem usa Visits conta"; ele ter visitas sendo só de Tags é coisa do seed, mas a regra esconde vendas reais se isso acontecer em produção.
+Status: feito. `teamActivity(since, undefined, organizationId)` conta visitas e vendas pela empresa visitada (`sales_leads.organization_id`), de quem fez; `tests/organization-activity.integration.test.ts`. Quem so usa Tags tambem entra nas vendas de uma empresa da organizacao.
 
 ### AD-02 [S1] Pessoa pendente: o topo diz "Visits · Tags" e os módulos estão desmarcados
 Telas: platform/en-desktop/person-pending, platform/en-phone/person-pending
@@ -104,6 +105,7 @@ Problema: "Select all" e "Clear" aparecem como links, mas não fazem nada. "Not 
 Mudança: para quem não edita, trocar tudo por um resumo: en "You can print every model" e "You handle your own orders"; pt "Você pode imprimir todos os modelos" e "Você cuida dos seus próprios pedidos"; es "Puedes imprimir todos los modelos" y "Te encargas de tus propios pedidos". Esconder os links quando `disabled`. Frase única: en "Only the Xpot team can change this", pt "Só a equipe do Xpot pode mudar isto", es "Solo el equipo de Xpot puede cambiar esto".
 Arquivos: pages/xpot/components/ReleasedModelsField.tsx:32-37; i18n/messages/partnerMaterials.ts:39; i18n/messages/organizations.ts:83,106; i18n/messages/peopleWorkspace.ts:72
 Risco: nenhum.
+Status: feito. Quem nao edita ve um resumo ("You can print every model", "You handle your own orders") e uma frase unica "Only the Xpot team can change this"; Select all e Clear somem quando desabilitados.
 
 ### AD-06 [S2] Área do dono: dois menus para o mesmo lugar, com nomes diferentes
 Telas: owner/en-desktop/org-brightside-team, org-brightside-overview; owner-multi/en-desktop/org-lindgren-team, organizations; owner/en-phone/organizations; partner/en-desktop/org-harbor-overview
@@ -139,6 +141,7 @@ Problema: "Cost rule for physical Tags", com as opções "Company stock · cost 
 Mudança: rótulo en "Who pays for the pieces this person receives", pt "Quem paga pelas peças que esta pessoa recebe", es "Quién paga las piezas que recibe esta persona". Opções en "The company (they pay for what they sell)" / "They buy them", pt "A empresa (a pessoa paga o que vender)" / "A própria pessoa compra", es "La empresa (paga lo que venda)" / "La persona las compra". Usar os mesmos nomes em Hand out.
 Arquivos: i18n/messages/manage.ts:76-77,90,296-297; i18n/messages/adminTagsFlow.ts:63,72-73,278-279; pages/admin/PersonDetail.tsx:783
 Risco: confirmar com o dono se "custo $0" é consignação. O texto de Hand out indica que sim: "ele paga o que vender".
+Status: feito (so texto, em `manage.ts`: "Who pays for the pieces this person receives" e as opcoes). `PersonDetail.tsx` nao mudou.
 
 ### AD-11 [S2] Compras da equipe mostram o código de produto
 Telas: platform/en-desktop/org-brightside-purchases; partner/en-desktop/org-harbor-purchases; owner/en-phone/org-brightside-purchases; owner-multi/en-desktop/org-coastline-purchases (vazia)
@@ -146,6 +149,7 @@ Problema: "10 x plate-large", "5 x stand-large", "4 x stand-small" e, sem SKU, "
 Mudança: traduzir o SKU para o nome do produto ("10 Large Plate"), com o mapa de SKU da loja. Sem SKU: en "2 pieces", pt "2 peças", es "2 piezas". Mostrar o total do pedido à direita. Dica: en "You follow the orders here; payment happens in the wholesale store.", pt "Aqui você acompanha os pedidos; o pagamento é feito na loja de atacado.", es "Aquí sigues los pedidos; el pago se hace en la tienda mayorista."
 Arquivos: pages/xpot/OrganizationsPage.tsx:91,520-530; i18n/messages/organizations.ts:31
 Risco: o valor já vem em `subtotalCents`. Sem regra nova.
+Status: feito. "10 × Large Plate" no lugar do SKU, "2 pieces" sem produto, total do pedido a direita; status pendente deixou de ser ambar; dica so quando ha pedidos.
 
 ### AD-12 [S2] Equipe: o formulário vem antes da equipe
 Telas: owner/en-phone/org-brightside-team; owner-multi/en-phone/org-lindgren-team, org-coastline-team; owner/en-desktop/org-brightside-team; platform/en-desktop/org-company-team, org-harbor-team
@@ -153,6 +157,7 @@ Problema: na tela Team, o que aparece primeiro é um formulário aberto; no admi
 Mudança: lista primeiro. Botão "Add person" no topo abre o formulário. Dica: en "Open a person to see their companies, visits, tasks and sales.", pt "Abra uma pessoa para ver empresas, visitas, tarefas e vendas.", es "Abre una persona para ver sus empresas, visitas, tareas y ventas."
 Arquivos: pages/xpot/OrganizationsPage.tsx:347-349; i18n/messages/organizations.ts:109
 Risco: nenhum.
+Status: feito. A equipe vem primeiro; "Add person" abre o formulario (e o de pessoa existente, para a plataforma).
 
 ### AD-13 [S2] Tipos de organização com três nomes
 Telas: platform/en-desktop/organizations, organizations-new-dialog; platform/en-phone/organizations, organizations-new-dialog
@@ -160,6 +165,7 @@ Problema: o botão diz "New partner", o formulário diz "Create organization", e
 Mudança: botões en "New organization" e "New partner that prints". Pills en "Sells" / "Prints and sells", pt "Vende" / "Imprime e vende", es "Vende" / "Imprime y vende". Formulário recolhido atrás do botão.
 Arquivos: i18n/messages/organizations.ts:12,48-49,162-163,272
 Risco: nenhum.
+Status: feito. Botoes "New organization" e "New partner that prints" (fora do cabecalho, para caber no celular), selos "Sells" / "Prints and sells", formulario de criar recolhido atras do botao, descricao com "customers".
 
 ### AD-14 [S2] Ações perigosas lado a lado, e botões que o servidor recusa
 Telas: platform/en-desktop/org-harbor-team, org-company-team; owner/en-desktop/org-brightside-team; owner-multi/en-desktop/org-lindgren-team; platform/en-desktop/person-blocked
@@ -209,6 +215,7 @@ Problema: "My organization" mostra só "Coastline Reviews", embora Tomas também
 Mudança: listar todas as empresas com o papel em cada uma. Tirar o formulário (AD-15). Na linha do celular: en "2 companies", pt "2 empresas", es "2 empresas".
 Arquivos: pages/xpot/XpotSettings.tsx:358-362,447
 Risco: nenhum.
+Status: feito em parte. Dono de varias empresas ve todas, com o papel em cada uma, e a linha do celular diz "2 companies". O formulario "Add person" some quando ha mais de uma (qual empresa?); com uma so empresa ele fica como estava (AD-15 e da F7).
 
 ### ID-02 [S2] "Fatiado" e "Laminado" no botão de baixar
 Telas: platform/pt-desktop/production-queue, production-board; platform/es-desktop/production-queue, production-board
@@ -265,6 +272,7 @@ Problema: a aba em que o gestor pega as peças de volta chama-se "Devolver", que
 Mudança: es "Recoger" na aba e nos botões ("Recoger {count} pieza").
 Arquivos: i18n/messages/adminTagsFlow.ts:460,517 e as demais chaves `takeBack*` em es
 Risco: nenhum.
+Status: feito. es: "Recoger" na aba, nos botoes e nas mensagens do recolhimento.
 
 ### ID-10 [S2] "Cuida dos próprios" e "se encarga de los suyos": frase sem objeto
 Telas: platform/pt-desktop/org-harbor-settings, platform/es-desktop/org-harbor-settings, platform/en-desktop/org-harbor-settings
@@ -272,6 +280,7 @@ Problema: "Este parceiro cuida dos próprios" não diz dos próprios o quê. Os 
 Mudança: en "This partner handles its own orders", pt "Este parceiro cuida dos próprios pedidos", es "Este socio se encarga de sus propios pedidos". Na opção do Xpot: en "Xpot handles the orders", pt "O Xpot cuida dos pedidos", es "Xpot se encarga de los pedidos".
 Arquivos: i18n/messages/organizations.ts:81-83,195-197,305-307
 Risco: nenhum.
+Status: feito. "This partner handles its own orders" / "Este parceiro cuida dos proprios pedidos" / "Este socio se encarga de sus propios pedidos"; "Xpot handles the orders"; a dica troca "Stuscle" por "loja de atacado".
 
 ### ID-13 [S2] "Plate" usado para impressão, contra o glossário
 Telas: platform/en-desktop/org-brightside-settings, org-coastline-settings; platform/pt-desktop/org-harbor-settings; platform/es-desktop/org-harbor-settings
