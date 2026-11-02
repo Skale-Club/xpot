@@ -38,6 +38,9 @@ export interface TagListItem {
   /** The reseller holding / credited with the piece. */
   repId: number | null;
   repName: string | null;
+  /** The organization whose piece it is (tags.organization_id): the platform's lists show it when they span several. */
+  organizationId?: number;
+  organizationName?: string | null;
   kitId: string | null;
   /** "K-0001" (shared/tagKits.ts kitCode) when the piece is in a kit. */
   kitCode: string | null;

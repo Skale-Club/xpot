@@ -7,7 +7,8 @@ import type { Dictionary } from "../index";
 const en = {
   // Tabs and list
   tabLeads: "Companies",
-  tabMine: "My companies",
+  tabMine: "Mine",
+  tabAllCompanies: "All companies",
   tabProspects: "To visit",
   searchLeads: "Search companies...",
   noProspects: "No prospects yet",
@@ -144,7 +145,8 @@ export const leadsMessages: Dictionary<typeof en> = {
   en,
   pt: {
     tabLeads: "Empresas",
-    tabMine: "Minhas empresas",
+    tabMine: "Minhas",
+    tabAllCompanies: "Todas as empresas",
     tabProspects: "A visitar",
     searchLeads: "Buscar empresas...",
     noProspects: "Nenhum prospecto ainda",
@@ -273,7 +275,8 @@ export const leadsMessages: Dictionary<typeof en> = {
   },
   es: {
     tabLeads: "Empresas",
-    tabMine: "Mis empresas",
+    tabMine: "Mías",
+    tabAllCompanies: "Todas las empresas",
     tabProspects: "Por visitar",
     searchLeads: "Buscar empresas...",
     noProspects: "Aún no hay prospectos",
@@ -319,7 +322,7 @@ export const leadsMessages: Dictionary<typeof en> = {
     fieldPhone: "Teléfono",
     fieldEmail: "Correo",
     fieldWebsite: "Sitio web",
-    fieldIndustry: "Tipo de negocio",
+    fieldIndustry: "Tipo de empresa",
     fieldAddress: "Dirección",
     fieldStreet: "Calle y número",
     fieldCity: "Ciudad",

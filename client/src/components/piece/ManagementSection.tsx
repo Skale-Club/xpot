@@ -310,7 +310,8 @@ function HeavyActions() {
   const items: Array<{ action: HeavyAction; icon: typeof Archive; enabled: boolean; reversible: boolean; note?: string }> = [];
   if (!damaged && planTransition(tag, "retire").ok) items.push({ action: "retire", icon: Archive, enabled: true, reversible: true });
   if (!damaged && planTransition(tag, "restore").ok) items.push({ action: "restore", icon: RotateCcw, enabled: true, reversible: true });
-  if (!damaged && tag.status !== "retired") items.push({ action: "damage", icon: Ban, enabled: canDamage, reversible: false, note: canDamage ? undefined : tp("damageHouseOnly") });
+  // What cannot be done to this piece is not listed: a piece with someone or set up for a customer comes back to company stock first.
+  if (!damaged && tag.status !== "retired" && canDamage) items.push({ action: "damage", icon: Ban, enabled: true, reversible: false });
 
   const confirm = async (reason: string) => {
     if (!pending) return;
@@ -337,7 +338,7 @@ function HeavyActions() {
         </Button>
       )}
 
-      <BottomSheet open={open} onClose={() => setOpen(false)} title={tp("moreActionsTitle", { code: tag.publicCode })}>
+      <BottomSheet open={open} onClose={() => setOpen(false)} title={tp("moreActionsTitle")}>
         <ul className="space-y-2">
           {items.map(({ action, icon: Icon, enabled, reversible, note }) => (
             <li key={action}>

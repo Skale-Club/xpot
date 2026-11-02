@@ -360,6 +360,8 @@ export async function listOrganizationMembers(organizationId: number, actor: Org
       isActive: organizationMemberships.isActive,
       blockedAt: organizationMemberships.blockedAt,
       blockedReason: organizationMemberships.blockedReason,
+      /** The person's own block (People): the team says "Blocked" and sends to People, not to Reactivate. */
+      personBlockedAt: salesReps.blockedAt,
       modules: salesReps.modules,
       createdAt: organizationMemberships.createdAt,
     })

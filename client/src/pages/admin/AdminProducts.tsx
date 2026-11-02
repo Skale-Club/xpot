@@ -161,7 +161,7 @@ export function AdminProducts() {
                   <div className="flex flex-wrap items-center gap-2">
                     <span className="truncate text-sm font-medium text-white">{p.name}</span>
                     <Pill tone="slate">{p.kind === "digital" ? t("kind_digital") : t("kind_physical")}</Pill>
-                    {p.consignable ? <Pill tone="slate">{t("consignable")}</Pill> : null}
+                    {p.consignable ? <span title={t("consignableHint")}><Pill tone="slate">{t("consignable")}</Pill></span> : null}
                     {!p.isActive ? <Pill tone="muted">{t("archived")}</Pill> : null}
                     {p.tiers.length > 0 ? <Pill tone="slate">{t.plural("tiers", p.tiers.length)}</Pill> : null}
                   </div>

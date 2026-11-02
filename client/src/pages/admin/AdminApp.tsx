@@ -39,8 +39,11 @@ import { useXpotModules, homeForModules } from "@/components/ModuleSwitch";
 const SECTIONS = ["home", "work", "overview", "tags", "products", "integrations", "branding", "landing", "xphere", "reps", "settings", "health"] as const;
 /** What an owner's or a partner's panel reaches; the rest of /admin is the platform's. (Tags narrows itself by tab: AdminTags.) */
 const ORGANIZATION_SECTIONS = ["home", "work", "tags"];
-/** Hand out and Take back have their own code field; a second one above them would open the piece and lose the list (NAV-32). */
-const NO_CODE_LOOKUP = /^\/admin\/tags\/kits(?:\/|$)/;
+/**
+ * Hand out and Take back have their own code field; a second one above them would open the piece and lose the list
+ * (NAV-32). A queue Today opened lists its pieces and opens each one itself: a code box above it only pushes it down.
+ */
+const NO_CODE_LOOKUP = /^\/admin\/tags\/(?:kits|overview\/[^/]+)(?:\/|$)/;
 /** Stock lists and a piece's own page: the list has its own search, and a piece needs no second lookup (PE-30). */
 const OWN_PIECE_SEARCH = /^\/admin\/tags\/pieces(?:\/|$)/;
 /** The Tags screens only the platform reaches, and those a partner reaches only if it prints: said as denied, so no lookup above them (PROD-57). */

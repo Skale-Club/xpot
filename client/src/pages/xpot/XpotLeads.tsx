@@ -189,7 +189,7 @@ export function XpotLeads() {
   const queryClient = useQueryClient();
   const isDesktop = useIsDesktop();
   // Management mode: the piece chips count every rep's pieces (getLeadTagSummaries).
-  const { canManage } = useViewerAccess();
+  const { canManage, adminMode } = useViewerAccess();
   const [routeMatch, routeParams] = useRoute("/leads/:id");
   const routeId = routeMatch && /^\d+$/.test(routeParams.id) ? Number(routeParams.id) : null;
   // ?status=customer&day=2026-10-12&q=bakery&org=4 — survives reloads and opening a company.
@@ -365,7 +365,8 @@ export function XpotLeads() {
     count: worked.filter((lead) => matchesLeadFilter(lead, id, lastOutcomeFor(lead.id))).length,
   }));
   const companyTabs = [
-    { id: "mine", label: t("tabMine"), count: worked.length },
+    // "My companies" is the owner's organizations; this tab is the saved companies: the person's own, or in the panel everyone's in scope.
+    { id: "mine", label: t(adminMode ? "tabAllCompanies" : "tabMine"), count: worked.length },
     { id: "tovisit", label: t("tabProspects"), count: narrow(prospects).length },
   ];
   const nothingSaved = !leadsQuery.isLoading && !leadsQuery.isError && allLeads.length === 0;

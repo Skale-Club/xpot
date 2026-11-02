@@ -80,6 +80,8 @@ type Member = {
   membershipRole: "admin" | "member";
   isActive: boolean;
   blockedAt?: string | null;
+  /** The person's own block (People), which suspends them in every organization. */
+  personBlockedAt?: string | null;
 };
 
 type Person = { id: number; displayName: string; access: "pending" | "active" | "blocked"; refused?: boolean };
@@ -392,10 +394,12 @@ function OrganizationWorkspace({ organizationId }: { organizationId: number }) {
             ) : (
             <div className={`divide-y divide-white/[0.06] overflow-hidden rounded-2xl ${GLASS_SUBTLE_CLASS}`} data-testid="organization-members">
               {(members.data ?? []).map((member) => {
+                const personBlocked = !!member.personBlockedAt;
                 const suspended = !member.isActive || !!member.blockedAt;
                 // The server keeps the last owner: no button to suspend, remove or demote them.
                 const lastOwner = member.membershipRole === "admin" && !suspended && (members.data ?? []).filter((m) => m.membershipRole === "admin" && m.isActive && !m.blockedAt).length === 1;
-                const canChange = mayManageTeam && member.repId !== me?.rep.id && (platformManager || member.membershipRole !== "admin") && !lastOwner;
+                // A blocked person is changed in People (Unblock), not here: Reactivate would not give them access back.
+                const canChange = mayManageTeam && !personBlocked && member.repId !== me?.rep.id && (platformManager || member.membershipRole !== "admin") && !lastOwner;
                 return (
                   <div key={member.repId} className="flex flex-wrap items-center gap-3 px-4 py-3">
                     <div className="min-w-0 flex-1">
@@ -410,7 +414,10 @@ function OrganizationWorkspace({ organizationId }: { organizationId: number }) {
                     <Pill tone="slate" className="gap-1">
                       {member.membershipRole === "admin" && <ShieldCheck className="h-3 w-3" aria-hidden="true" />}{member.membershipRole === "admin" ? t("roleRepAdmin") : t("roleRep")}
                     </Pill>
-                    <Pill tone={suspended ? "red" : "green"}>{suspended ? t("memberSuspended") : t("memberActive")}</Pill>
+                    <Pill tone={suspended || personBlocked ? "red" : "green"}>{personBlocked ? t("memberBlocked") : suspended ? t("memberSuspended") : t("memberActive")}</Pill>
+                    {personBlocked && platformManager && (
+                      <Link href={`/admin/reps/${member.repId}`} className="text-xs font-medium text-blue-300 hover:text-blue-200" data-testid={`member-unblock-${member.repId}`}>{t("unblockInPeople")}</Link>
+                    )}
                     {canChange && <MemberMenu label={t("memberActions")} testId={`member-menu-${member.repId}`} items={[
                       { key: member.blockedAt ? "reactivate" : "suspend", label: member.blockedAt ? t("reactivate") : t("suspend"), hint: member.blockedAt ? undefined : t("suspendHint"), onSelect: () => setPending({ member, kind: member.blockedAt ? "reactivate" : "suspend" }) },
                       ...(platformManager ? [{ key: "role", label: member.membershipRole === "admin" ? t("makeRep") : t("makeRepAdmin"), onSelect: () => setPending({ member, kind: member.membershipRole === "admin" ? "makeRep" as const : "makeAdmin" as const }) }] : []),

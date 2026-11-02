@@ -155,7 +155,7 @@ export const signinMessages: Dictionary<typeof en> = {
     kitHow3: "Cuando te aprueben, recibes tu código de socio para pedir más kits por Xpot cuando lo necesites. No hay compra mínima mensual.",
     kitAcknowledgement: "Entiendo cómo funciona el kit inicial",
     activeSellerQuestion: "Cómo mantener tu cuenta activa",
-    activeSellerText1: "Xpot está hecho para quien sale a vender: visitar negocios, registrar visitas y cerrar ventas.",
+    activeSellerText1: "Xpot está hecho para quien sale a vender: visitar empresas, registrar visitas y cerrar ventas.",
     activeSellerText2: "Si una cuenta pasa mucho tiempo sin actividad, nuestro equipo la revisa, y las cuentas que ya no se usan pueden desactivarse.",
     activeSellerAcknowledgement: "Entiendo cómo mantener mi cuenta activa",
     workCityLabel: "Ciudad",

@@ -246,7 +246,7 @@ export const integrationsMessages: Dictionary<typeof en> = {
     searchModel: "Busca o escribe un modelo",
     useCustomValue: "Usar \"{value}\"",
     noModels: "No se encontraron modelos.",
-    descGooglePlaces: "Búsqueda de negocios en el check-in y en la prospección, autocompletado de direcciones e imágenes de mapa.",
+    descGooglePlaces: "Búsqueda de empresas en el check-in y en la prospección, autocompletado de direcciones e imágenes de mapa.",
     descGroq: "Principal para las notas de voz de las visitas: convierte la grabación en texto.",
     descOpenai: "Respaldo para las notas de voz de las visitas: se usa cuando Groq está apagado o falla.",
     descOpenrouter: "Principal para texto con IA: resúmenes de visitas y seguimientos sugeridos.",

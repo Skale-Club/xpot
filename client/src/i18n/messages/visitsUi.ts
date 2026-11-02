@@ -57,7 +57,7 @@ export const visitsUiMessages: Dictionary<typeof en> = {
     photoReadFailed: "No se pudo leer la imagen",
     editCompany: "Editar empresa",
     doneEditing: "Listo",
-    businessName: "Nombre del negocio",
+    businessName: "Nombre de la empresa",
     syncEntity_lead: "Empresa",
     syncEntity_visit: "Visita",
     syncEntity_opportunity: "Oportunidad",

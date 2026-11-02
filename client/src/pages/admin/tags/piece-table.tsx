@@ -93,6 +93,7 @@ export function PieceTable({
   testId,
   selectedId,
   headTop,
+  showOrganization,
 }: {
   pieces: readonly TagListItem[];
   onOpen: (id: string) => void;
@@ -107,6 +108,8 @@ export function PieceTable({
   testId?: string;
   /** Keep the column headings in view while the list scrolls, this many px below the top of the scrolling area. */
   headTop?: number;
+  /** A list that spans several organizations (the platform's, with "All organizations" chosen) says whose piece each is. */
+  showOrganization?: boolean;
 }) {
   const tm = useT(manageTagsMessages);
   const tp = useT(manageTagsPiecesMessages);
@@ -139,7 +142,9 @@ export function PieceTable({
       key: "reseller",
       label: tm("colWith"),
       cellClassName: "max-w-[190px] truncate text-white/70",
-      render: (p) => heldBy(p) ?? none,
+      render: (p) => (showOrganization && p.organizationName
+        ? <><span className="block truncate">{heldBy(p) ?? none}</span><span className="block truncate text-xs text-white/40">{p.organizationName}</span></>
+        : heldBy(p) ?? none),
     },
     chip: {
       key: "chip",
@@ -213,7 +218,7 @@ export function PieceTable({
       {/* Phones: tappable cards */}
       <ul className="space-y-2 md:hidden">
         {shown.map((p) => {
-          const meta = [has("customer") ? p.leadName : null, has("reseller") ? heldBy(p) : null].filter(Boolean).join(" · ");
+          const meta = [has("customer") ? p.leadName : null, has("reseller") ? heldBy(p) : null, showOrganization ? p.organizationName : null].filter(Boolean).join(" · ");
           const scans = has("scans") && scansOf(p) > 0 ? `${tp("colScans")} ${scansOf(p)} · ${day(p.lastInteractionAt)}` : null;
           const scanned = has("scanned") && p.lastInventoryScanAt ? tp("cardScanned", { date: day(p.lastInventoryScanAt) }) : null;
           return (

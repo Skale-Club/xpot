@@ -45,7 +45,7 @@ import { ReviewLinkError, resolveReviewLink } from "./reviewLink.js";
 import { tagSaleCreateSchema } from "#shared/tagSales.js";
 import { createTagSale, linkTagToSale, listLinkableSales, TagSaleError } from "./sales.js";
 import { syncSaleToXphere } from "../routes/xpot/xphere-sync.js";
-import { fulfillAcquisition, listAcquisitions } from "./acquisitions.js";
+import { checkAcquisition, fulfillAcquisition, listAcquisitions } from "./acquisitions.js";
 import { registerShowcaseRoutes } from "./showcase.js";
 import { registerShopCatalogRoutes } from "./shopCatalog.js";
 import { registerProductionRoutes } from "./productionRoutes.js";
@@ -1064,6 +1064,19 @@ export function registerTagRoutes(app: Express) {
       res.json(await listAcquisitions({ repId, organizationIds: tagScopeOf(req) }));
     } catch (err) {
       fail(res, err, "Failed to load acquisitions");
+    }
+  });
+
+  // Dry run of separating an order: each code as Hand out checks it, plus whether it belongs to this order. Nothing moves.
+  app.post("/api/xpot/admin/tag-acquisitions/:id/check", requireTagAdmin, async (req, res) => {
+    const id = z.string().uuid().safeParse(req.params.id);
+    if (!id.success) return res.status(404).json({ message: "Acquisition not found" });
+    try {
+      const { codes } = z.object({ codes: codeList }).strict().parse(req.body);
+      res.json(await checkAcquisition(id.data, codes));
+    } catch (err) {
+      if (err instanceof TagSaleError) return res.status(err.status).json({ code: err.code, message: err.message, ...(err.params ? { params: err.params } : {}) });
+      fail(res, err, "Failed to check pieces");
     }
   });
 

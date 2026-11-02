@@ -12,7 +12,7 @@ import { manageTagsBatchesMessages } from "@/i18n/messages/manageTagsBatches";
 import { adminTagsFlowMessages } from "@/i18n/messages/adminTagsFlow";
 import { ADMIN_TAGS_KEY, AdminHttpError, STALE_MS, errorMessage, getJson, invalidateAdminTags, sendJson } from "./api";
 import { Loading, LoadError } from "./pieces-shared";
-import { CodeCheckList, useCodeCheck } from "./code-check-list";
+import { CodeCheckList, useOrderCheck } from "./code-check-list";
 import { addCodes } from "./distribution-model";
 import { readCode } from "./batches-model";
 import { CameraButton, CodeEntry, ContinuousCamera, feedback } from "./scan-station";
@@ -64,10 +64,16 @@ function OrderCard({ item, open, onToggle }: { item: AcquisitionInboxItem; open:
   const firstName = buyer.split(" ")[0];
   const products = item.lines.map((line) => `${line.productName ?? line.externalSku ?? t("catalogProduct")} × ${line.quantity}`).join(", ");
 
-  const check = useCodeCheck("handOut", codes);
+  const check = useOrderCheck(item.acquisition.id, codes);
   const okCodes = useMemo(() => codes.filter((code) => check.data?.items.find((i) => i.code === code)?.ok), [codes, check.data]);
   const checked = !check.isFetching && !!check.data && codes.every((code) => check.data!.items.some((i) => i.code === code));
   const complete = checked && codes.length === expected && okCodes.length === expected;
+
+  // What is still missing, per product: "Small Plate 6/8 · Large Plate 0/2"; a single product reads "6 of 8 codes".
+  const lineProgress = check.data?.lines ?? [];
+  const progress = lineProgress.length > 1
+    ? lineProgress.map((line) => `${line.productName ?? t("catalogProduct")} ${line.filled}/${line.quantity}`).join(" · ")
+    : t("acquisitionCodesProgress", { count: okCodes.length, expected });
 
   const fulfill = useMutation({
     mutationFn: () => sendJson("POST", `/api/xpot/admin/tag-acquisitions/${item.acquisition.id}/fulfill`, { codes }),
@@ -142,7 +148,7 @@ function OrderCard({ item, open, onToggle }: { item: AcquisitionInboxItem; open:
           />
           <div className="flex flex-wrap items-center justify-between gap-2">
             <p className="text-xs text-white/40">
-              {t("acquisitionCodesProgress", { count: okCodes.length, expected })}
+              {progress}
               {item.acquisition.externalRef ? ` · ${tf("orderRef", { ref: item.acquisition.externalRef })}` : ""}
             </p>
             <Button type="button" variant="brand" accent="tags" disabled={!complete || fulfill.isPending} loading={fulfill.isPending} onClick={() => fulfill.mutate()} data-testid="stuscle-fulfill">
