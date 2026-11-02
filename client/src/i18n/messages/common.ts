@@ -30,7 +30,7 @@ const en = {
   goToSignIn: "Go to sign-in",
   requestFailed: "Something went wrong. Try again.",
   screenCrashed: "This screen hit an error",
-  screenCrashedHint: "The rest of the app still works. Reload to try again; if it keeps happening, tell Skale Club what you were doing.",
+  screenCrashedHint: "The rest of the app still works. Reload to try again; if it keeps happening, tell the Xpot team what you were doing.",
   reload: "Reload",
 };
 
@@ -64,7 +64,7 @@ export const commonMessages: Dictionary<typeof en> = {
     goToSignIn: "Ir para o login",
     requestFailed: "Algo deu errado. Tente de novo.",
     screenCrashed: "Esta tela encontrou um erro",
-    screenCrashedHint: "O resto do app continua funcionando. Recarregue para tentar de novo; se continuar, conte à Skale Club o que você estava fazendo.",
+    screenCrashedHint: "O resto do app continua funcionando. Recarregue para tentar de novo; se continuar, conte à equipe do Xpot o que você estava fazendo.",
     reload: "Recarregar",
   },
   es: {
@@ -95,7 +95,7 @@ export const commonMessages: Dictionary<typeof en> = {
     goToSignIn: "Ir a iniciar sesión",
     requestFailed: "Algo salió mal. Inténtalo de nuevo.",
     screenCrashed: "Esta pantalla encontró un error",
-    screenCrashedHint: "El resto de la app sigue funcionando. Recarga para intentarlo de nuevo; si sigue pasando, cuéntale a Skale Club qué estabas haciendo.",
+    screenCrashedHint: "El resto de la app sigue funcionando. Recarga para intentarlo de nuevo; si sigue pasando, cuéntale al equipo de Xpot qué estabas haciendo.",
     reload: "Recargar",
   },
 };
