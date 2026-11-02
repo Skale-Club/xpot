@@ -6,6 +6,7 @@ import type { PrintModelItem } from "@shared/printProduction";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { EmptyState } from "@/components/xpot/EmptyState";
+import { BackLink } from "@/components/xpot/PageHeader";
 import { Field, Input, Select, Textarea } from "@/components/xpot/Field";
 import { Tabs } from "@/components/xpot/Tabs";
 import { Pill } from "@/components/xpot/StatusPill";
@@ -27,13 +28,13 @@ import { BatchDetail } from "./BatchDetail";
 import { ProductionWizard } from "./production-wizard";
 import { ProductionBoard } from "./production-board";
 import { PendingBatches } from "./production-pending-batches";
-import { batchPrefixFromTitle, canPrintModel, productionPath, slugFromTitle } from "./production-workflow";
+import { batchPrefixFromTitle, canPrintModel, productionPath, productionTabFor, slugFromTitle } from "./production-workflow";
 import { ProductionIdentity } from "./production-identity";
 
 // Manage › Production (the Xpot admin's, docs/PRINT_EXECUTION_PLAN.md). The first screen is the board
 // (production-board.tsx): always-ready pieces to download, pieces to generate and the plates waiting to print. Then
-// the orders and the catalog of models. Paths: /admin/tags/production[/queue | /models[/<slug>] | /jobs/<id> |
-// /batches/<id>] (marking a plate printed puts its pieces in stock, so there is no receiving list).
+// the catalog of models. Paths: /admin/tags/production[/queue | /models[/<slug>] | /jobs/<id> |
+// /batches/<id>] (/queue is the full orders list, history included, reached from the board's "All orders"; it lights Produce) (marking a plate printed puts its pieces in stock, so there is no receiving list).
 // A printing branch's Rep Admin sees the same page for that branch: generating and printing its pieces, without
 // always-ready parts, supplier batches or editing models (useProductionAccess; the server scopes every call).
 
@@ -52,7 +53,7 @@ export function ProductionTab({ rest, go }: { rest: string[]; go: Go }) {
   if (view === "models" && id) return <PrintModelPage slug={id} go={navigate} />;
   if (view === "jobs" && id) return <PrintJobPage id={id} go={navigate} />;
   if (view === "batches" && id) return <BatchDetail id={id} go={navigate} />;
-  const tab = view === "models" ? "catalog" : view === "queue" || view === "batches" ? "queue" : "board";
+  const tab = productionTabFor(view);
   return (
     <div className="space-y-4" data-testid="admin-production">
       <header className="min-w-0">
@@ -62,17 +63,16 @@ export function ProductionTab({ rest, go }: { rest: string[]; go: Go }) {
       <Tabs
         tabs={[
           { id: "board", label: b("produce"), testId: "production-tab-board" },
-          { id: "queue", label: u("requests"), testId: "production-tab-queue" },
           { id: "catalog", label: u("models"), testId: "production-tab-catalog" },
         ]}
         value={tab}
-        onChange={(next) => navigate(next === "catalog" ? `${PRODUCTION_BASE}/models` : next === "queue" ? `${PRODUCTION_BASE}/queue` : PRODUCTION_BASE)}
+        onChange={(next) => navigate(next === "catalog" ? `${PRODUCTION_BASE}/models` : PRODUCTION_BASE)}
         ariaLabel={t("productionNav")}
         idPrefix="production"
         fill={false}
         accent="tags"
       />
-      {tab === "catalog" ? <CatalogView go={navigate} /> : view === "batches" && params.get("pending") === "1" ? <PendingBatches go={navigate} /> : tab === "queue" ? <QueueView go={navigate} /> : <ProductionBoard go={navigate} onOtherWays={isAdmin ? () => setExternal(true) : undefined} />}
+      {tab === "catalog" ? <CatalogView go={navigate} /> : view === "batches" && params.get("pending") === "1" ? <PendingBatches go={navigate} /> : view === "queue" ? <QueueView go={navigate} /> : <ProductionBoard go={navigate} onOtherWays={isAdmin ? () => setExternal(true) : undefined} />}
       {external ? <ProductionWizard external onClose={() => setExternal(false)} onCreated={(batchId) => navigate(`/batches/${batchId}?tab=receive`)} /> : null}
     </div>
   );
@@ -277,6 +277,7 @@ function QueueView({ go }: { go: Go }) {
   const [organization, setOrganization] = useState("");
   return (
     <div className="space-y-4">
+      <BackLink onBack={() => go(PRODUCTION_BASE)}>{u("title")}</BackLink>
       <div className="flex flex-wrap items-start justify-between gap-3">
         <p className="min-w-0 max-w-2xl text-sm text-white/60">{u("queueIntro")}</p>
         {isAdmin && organizations.length > 1 ? (

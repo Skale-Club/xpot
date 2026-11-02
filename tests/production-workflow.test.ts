@@ -1,12 +1,22 @@
 import { describe, expect, it } from "vitest";
 import type { PrintModelItem, PrintRequestItem } from "../shared/printProduction";
-import { batchPrefixFromTitle, canPrintModel, pendingPieces, printableBeds, printQuantity, productionJourneyStep, productionNeedsAction, productionPath, showPlateNumber, slugFromTitle } from "../client/src/pages/admin/tags/production-workflow";
+import { batchPrefixFromTitle, canPrintModel, pendingPieces, printableBeds, printQuantity, productionJourneyStep, productionNeedsAction, productionPath, productionTabFor, showPlateNumber, slugFromTitle } from "../client/src/pages/admin/tags/production-workflow";
 
 const model = {
   id: "model", kind: "serialized", status: "ready", productType: "large_plate", face: "google_review", salesProductId: 1,
   currentVersion: { builder: "plate.google", beds: [{ label: "x4", copies: 4 }, { label: "x8", copies: 8 }] },
 } as PrintModelItem;
 const batch = { id: "batch", batchCode: "LP-001", productType: "large_plate", face: "google_review", salesProductId: 1, tagCount: 6 };
+
+describe("production tabs", () => {
+  it("lights Models only on /models and Produce on every other view, the orders list included", () => {
+    expect(productionTabFor(undefined)).toBe("board");
+    expect(productionTabFor("queue")).toBe("board");
+    expect(productionTabFor("batches")).toBe("board");
+    expect(productionTabFor("jobs")).toBe("board");
+    expect(productionTabFor("models")).toBe("catalog");
+  });
+});
 
 describe("unified production", () => {
   it("advances from preparing to printing to done, where marking printed is the last step", () => {

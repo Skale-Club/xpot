@@ -14,6 +14,14 @@ export function productionPath(path: string): string {
   return path.replace(/^\/batches(?=\/|\?|$)/, "/production/batches");
 }
 
+/**
+ * The lit tab of Production for a path: Models owns /models; everything else (the board, the full orders list at
+ * /queue, a pending-batches list) belongs to Produce, since the board's "Waiting to print" is the day's queue.
+ */
+export function productionTabFor(view: string | undefined): "board" | "catalog" {
+  return view === "models" ? "catalog" : "board";
+}
+
 export function printableBeds(model: PrintModelItem, batch?: ExistingProductionBatch) {
   return (model.currentVersion?.beds ?? []).filter((bed) =>
     (model.kind === "serialized" ? !!model.currentVersion?.builder : !!bed.fileRef) &&

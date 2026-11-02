@@ -41,6 +41,11 @@ export function canMarkStep(step: StageStep, batchStage: string): boolean {
   return batchStage === "issued" || batchStage === "built" || batchStage === "printed";
 }
 
+/** The tabs of a batch page. A batch from a house print (it points at its print order) only has the summary; a supplier batch keeps Print and Receive. */
+export function batchTabsFor(batch: { printJobId: string | null }): readonly ("summary" | "print" | "receive")[] {
+  return batch.printJobId ? ["summary"] : ["summary", "print", "receive"];
+}
+
 /** The batches behind the "Batches awaiting pieces" count (server/tags/repository.ts queues): pieces still pending, not cancelled. */
 export function pendingBatches<B extends { status: string; pendingCount: number }>(batches: readonly B[]): B[] {
   return batches.filter((batch) => batch.status !== "cancelled" && batch.pendingCount > 0);
