@@ -24,7 +24,7 @@ import { MasterDetail } from "@/components/xpot/MasterDetail";
 import { useIsDesktop } from "@/hooks/use-is-desktop";
 import { useIsSuperAdmin } from "@/components/xpot/AdminBadge";
 import { useTagLabels } from "./labels";
-import { WHERE_CHIPS, whereQuery, whereSelection, type WhereChip } from "./where-model";
+import { WHERE_CHIPS, houseFilterQuery, whereQuery, whereSelection, type WhereChip } from "./where-model";
 import { useT } from "@/i18n";
 import { commonMessages } from "@/i18n/messages/common";
 import { pieceScreenMessages } from "@/i18n/messages/pieceScreen";
@@ -65,16 +65,13 @@ export const hidesNotInStock = (f: Pick<Filters, "where" | "status" | "stock" | 
 /** Translate the URL filters into the list endpoint's query (listQuerySchema), dropping junk. */
 function listUrl(f: Filters, limit: number, offset: number): string {
   const place = whereQuery(f);
-  // "Company stock" in the reseller filter asks what the "In company stock" chip asks (the shared house number), so both open
-  // the same pieces. Beside another place it only means no reseller: pieces lost, damaged or at a customer are not hidden then.
-  const house = f.rep === "house";
-  const metric = place.metric ?? (house && !place.status && !place.stockStatus ? "house" : undefined);
+  const { metric, house } = houseFilterQuery(place, f.rep);
   return withQuery("/api/xpot/tags", {
     ...place,
     metric,
     hidePending: hidesNotInStock(f) ? "1" : undefined,
     productType: f.product && (TAG_PRODUCT_TYPES as readonly string[]).includes(f.product) ? f.product : undefined,
-    house: house && metric !== "house" ? "1" : undefined,
+    house: house ? "1" : undefined,
     repId: f.rep !== "house" ? posInt(f.rep) : undefined,
     leadId: posInt(f.lead),
     batchId: f.batch && UUID.test(f.batch) ? f.batch : undefined,

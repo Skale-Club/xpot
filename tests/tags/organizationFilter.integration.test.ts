@@ -91,6 +91,8 @@ test.skipIf(!enabled)("organization filter: Inventory and Kits narrow for manage
       const north = await api("GET", `/api/xpot/tags?organizationId=${orgA.id}`, user);
       assert.equal(north.status, 200, north.text);
       assert.deepEqual(codesOf(north.json), [codes[0], codes[1]], user);
+      // Each piece says which company it belongs to (the platform's Company column).
+      assert.ok(north.json.every((piece: { organizationId: number }) => piece.organizationId === orgA.id), user);
       const south = await api("GET", `/api/xpot/tags?organizationId=${orgB.id}`, user);
       assert.deepEqual(codesOf(south.json), [codes[2], codes[3]], user);
       // Combined with another filter: South's house stock.

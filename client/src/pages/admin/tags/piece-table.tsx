@@ -131,19 +131,19 @@ export function PieceTable({
     organization: {
       key: "organization",
       label: tm("colCompany"),
-      cellClassName: "max-w-[170px] truncate text-white/70",
+      cellClassName: "max-w-[130px] truncate text-white/70",
       render: (p) => organizationName?.(p.organizationId) ?? none,
     },
     customer: {
       key: "customer",
       label: tm("colCustomer"),
-      cellClassName: "max-w-[200px] truncate text-white/80",
+      cellClassName: "max-w-[170px] truncate text-white/80",
       render: (p) => p.leadName ?? (noCustomerText(p) ? <span className="text-white/40">{noCustomerText(p)}</span> : none),
     },
     reseller: {
       key: "reseller",
       label: tm("colWith"),
-      cellClassName: "max-w-[190px] truncate text-white/70",
+      cellClassName: "max-w-[140px] truncate text-white/70",
       render: (p) => heldBy(p) ?? none,
     },
     chip: {
