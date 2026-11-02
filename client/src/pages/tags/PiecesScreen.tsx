@@ -24,6 +24,7 @@ import { APP_BASE, errorText, MY_PIECES_LIMIT, myPiecesQuery, shortUrl, tagPath 
 import { countMorePieceFilters, morePiecesOpen } from "./piecesFilters";
 import { useFirstPieceLine } from "./FirstSteps";
 import { CARD, ChipMark, PieceStatusPills, ScanCounts, TopBar } from "./ui";
+import { WholesaleCard } from "./WholesaleCard";
 
 // Two separate axes: where the piece is in its life, and whether a sale was recorded.
 // Paused is the rare one: it waits behind "More filters" so the four that matter fit a phone's row.
@@ -290,6 +291,7 @@ export default function PiecesScreen({ selectedCode = null }: { selectedCode?: s
                       details={tag.label}
                       className="w-full"
                     />
+                    {tag.destinationUrl && <span className="mt-1 block truncate pl-12 text-xs text-white/35">{shortUrl(tag.destinationUrl)}</span>}
                     <span className="mt-2 flex flex-wrap items-center gap-1 pl-12">
                       <PieceStatusPills tag={tag} />
                       <ChipMark tag={tag} />
@@ -307,6 +309,9 @@ export default function PiecesScreen({ selectedCode = null }: { selectedCode?: s
         )}
       </div>
 
+      <div className="mt-6">
+        <WholesaleCard />
+      </div>
     </>
   );
 }
