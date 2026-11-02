@@ -110,7 +110,7 @@ export function AdminTags() {
   const id = idSegment ? decodeURIComponent(idSegment) : null;
   const go = (path: string) => setLocation(`${ADMIN_TAGS_BASE}${productionPath(path)}`);
   const requested = TABS.find((item) => item.id === tabSegment);
-  if ((requested && "adminOnly" in requested && !reaches(requested.id)) || (tabSegment === "batches" && !reaches("production"))) return <EmptyState tone="red" icon={ShieldAlert} title={tm("accessRestricted")} hint={tm("noAdminPermission")} />;
+  if ((requested && "adminOnly" in requested && !reaches(requested.id)) || (tabSegment === "batches" && !reaches("production"))) return <EmptyState tone="tags" icon={ShieldAlert} title={tm("xpotTeamOnly")}><Button type="button" variant="secondary" onClick={() => setLocation("/admin")}>{tm("goToToday")}</Button></EmptyState>;
 
   return (
     <div className="space-y-5">

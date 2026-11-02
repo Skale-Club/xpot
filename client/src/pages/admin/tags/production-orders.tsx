@@ -227,7 +227,7 @@ function PlateRow({ plate, go, showStatus, rows }: { plate: PrintJobItem; go: Go
           <span className="text-xs text-white/45">{t.plural("pieceCount", plate.quantity)}</span>
           {plate.batchCode ? <span className="whitespace-nowrap font-mono text-xs text-white/45">{plate.batchCode}</span> : null}
           {plate.pieceCount !== null && plate.status === "printed" ? <span className="text-xs text-white/45">{t("received", { received: plate.receivedCount ?? 0, total: plate.pieceCount })}</span> : null}
-          {plate.stale ? <AlertTriangle className="h-4 w-4 shrink-0 text-amber-300" aria-label={t("stale")} /> : null}
+          {plate.stale ? <span className="inline-flex items-center gap-1 text-xs text-amber-200"><AlertTriangle className="h-3.5 w-3.5 shrink-0 text-amber-300" aria-hidden="true" />{t("stale")}</span> : null}
         </span>
         {plate.status === "failed" ? <span className="line-clamp-2 block text-xs text-red-200/80" data-testid="production-plate-reason">{plate.errorMessage || t("failedNoReason")}</span> : null}
       </button>

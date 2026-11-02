@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { PrintModelItem, PrintRequestItem } from "../shared/printProduction";
-import { batchPrefixFromTitle, boardGroups, chipsWritten, pauseNeedsChips, canAssembleJob, canPrintModel, journeyProgress, latestPlates, pendingPieces, plateActions, printableBeds, printComputers, printedOutcome, printQuantity, productionNeedsAction, productionPath, productionTabFor, showPlateNumber, slugFromTitle } from "../client/src/pages/admin/tags/production-workflow";
+import { parseBatchName, batchTabsFor, pendingBatches } from "../client/src/pages/admin/tags/batches-model";
+import { journeyTitle, personName, plainTitle, batchPrefixFromTitle, boardGroups, chipsWritten, pauseNeedsChips, canAssembleJob, canPrintModel, journeyProgress, latestPlates, pendingPieces, plateActions, printableBeds, printComputers, printedOutcome, printQuantity, productionNeedsAction, productionPath, productionTabFor, showPlateNumber, slugFromTitle } from "../client/src/pages/admin/tags/production-workflow";
 
 const model = {
   id: "model", kind: "serialized", status: "ready", productType: "large_plate", face: "google_review", salesProductId: 1,
@@ -83,6 +84,27 @@ describe("unified production", () => {
     expect(pauseNeedsChips("Drop one blank NTAG sticker in each pocket")).toBe(false);
     expect(pauseNeedsChips(null)).toBe(false);
     expect(chipsWritten([{ chipWritten: true }, { chipWritten: false }, { chipWritten: false }])).toEqual({ done: 1, total: 3 });
+  });
+  it("keeps the piece's name and print job number out of a batch name, old or new", () => {
+    expect(parseBatchName("Stand Large · Google Review · White · v1 · plate 1/2 · 4 of x4")).toEqual({ title: "Stand Large · Google Review · White", plate: { number: 1, total: 2 } });
+    expect(parseBatchName("Plate Large · Menu · White · print job 3/3")).toEqual({ title: "Plate Large · Menu · White", plate: { number: 3, total: 3 } });
+    expect(parseBatchName("Plate Large · Menu · White · v2 · 4 of x4")).toEqual({ title: "Plate Large · Menu · White", plate: null });
+    expect(parseBatchName("Tagworks acrylic run")).toEqual({ title: "Tagworks acrylic run", plate: null });
+    expect(plainTitle("Google G token · Large Stand (rounded relief v2)")).toBe("Google G token · Large Stand");
+    expect(plainTitle("Stand base · Small")).toBe("Stand base · Small");
+  });
+  it("leaves a cancelled print job's batch out of the batches awaiting pieces, and a scanned batch without Print", () => {
+    const batch = (printJobStatus: string | null, pendingCount = 4, status = "open") => ({ status, pendingCount, printJobStatus });
+    expect(pendingBatches([batch("printing"), batch("cancelled"), batch(null), batch("failed"), batch("printed", 0), batch(null, 4, "cancelled")]).length).toBe(3);
+    expect(batchTabsFor({ printJobId: null, codeSource: "scanned" })).toEqual(["summary", "receive"]);
+    expect(batchTabsFor({ printJobId: null, codeSource: "issued" })).toEqual(["summary", "print", "receive"]);
+  });
+  it("shows a piece, not a tag, and a name, not an address, in the history", () => {
+    expect(journeyTitle("Tag 0XBAXB57 created (Plate)")).toBe("Piece 0XBAXB57 created (Plate)");
+    expect(journeyTitle("Tag shop updated")).toBe("Tag shop updated");
+    expect(personName("Jessica Alvarez", "jessica.alvarez@lab.example")).toBe("Jessica Alvarez");
+    expect(personName(null, "jessica.alvarez@lab.example")).toBe("Jessica Alvarez");
+    expect(personName(null, null)).toBeNull();
   });
   it("calls a print computer on when it was heard from in the last ten minutes", () => {
     const now = Date.parse("2026-11-02T10:00:00Z");

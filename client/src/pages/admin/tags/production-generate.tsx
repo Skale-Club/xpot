@@ -1,6 +1,6 @@
 import { useEffect, useId, useRef, useState, type FormEvent, type ReactNode } from "react";
 import { useMutation } from "@tanstack/react-query";
-import { Check, ChevronRight, Info } from "lucide-react";
+import { Check, ChevronRight, Minus, Plus } from "lucide-react";
 import type { PrintGenerateFace, PrintGenerateOption, PrintModelItem, PrintRequestItem } from "@shared/printProduction";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
@@ -17,7 +17,7 @@ import { errorMessage, invalidateAdminTags, sendJson } from "./api";
 import { useTagLabels } from "./labels";
 import { ProductionIdentity, ProductionPlatePreview } from "./production-identity";
 import { MaterialsNeeded } from "./production-materials";
-import { printQuantity } from "./production-workflow";
+import { assemblyParts, filamentColours, printQuantity } from "./production-workflow";
 import { useProductionAccess } from "./production-shared";
 
 // "Generate pieces" on the Production page: the predefined questions of one product (colour → face → how many), only
@@ -96,7 +96,7 @@ export function GenerateDialog({ option, models, onClose, onGenerated }: {
       <DialogContent phoneSheet className="flex max-h-[min(90dvh,850px)] max-w-2xl flex-col gap-0 overflow-hidden p-0" onEscapeKeyDown={(event) => { if (busy) event.preventDefault(); }}>
         <div className="shrink-0 border-b border-white/[0.08] px-5 py-5 pr-14 sm:px-6 sm:pr-14">
           <DialogTitle className="text-white">{b("generateDialog", { product })}</DialogTitle>
-          <DialogDescription className="mt-2">{b("generateDialogIntro")}</DialogDescription>
+          <DialogDescription className="sr-only">{b("generateDialogIntro")}</DialogDescription>
           <ol className="mt-5 flex items-center gap-1.5" aria-label={tw("stepCount", { current: step + 1, total: STEPS.length })}>
             {STEPS.map((name, index) => (
               <li key={name} className={`flex min-w-0 items-center gap-1.5 ${step === index ? "flex-[2]" : "flex-1"}`}>
@@ -149,8 +149,29 @@ export function GenerateDialog({ option, models, onClose, onGenerated }: {
               ) : null}
               {step === 2 && face ? (
                 <div className="space-y-4">
-                  {model ? <ProductionIdentity model={model} hero /> : null}
-                  <MaterialsNeeded materials={face.materials} />
+                  <Field label={t("fieldQuantity")} hint={b("quantityHint", { copies: face.copies, max: plan.max })}>
+                    <div className="flex items-center gap-2">
+                      <Button type="button" variant="secondary" size="icon" aria-label={b("lessPieces")} disabled={!plan.valid || plan.count <= 1} onClick={() => setQuantity(String(plan.count - 1))}><Minus className="h-4 w-4" /></Button>
+                      <Input
+                        type="number"
+                        inputMode="numeric"
+                        required
+                        min={1}
+                        max={plan.max}
+                        step={1}
+                        value={quantity || String(copies)}
+                        onChange={(e) => setQuantity(e.target.value)}
+                        className="w-24 text-center tabular-nums"
+                        data-testid="production-generate-quantity"
+                      />
+                      <Button type="button" variant="secondary" size="icon" aria-label={b("morePieces")} disabled={!plan.valid || plan.count >= plan.max} onClick={() => setQuantity(String(plan.count + 1))}><Plus className="h-4 w-4" /></Button>
+                    </div>
+                  </Field>
+                  {plan.valid ? (
+                    <p className="rounded-xl border border-violet-400/20 bg-violet-500/[0.06] p-3 text-sm text-white/75">
+                      {t.plural("plateSplit", plan.plates.length, { split: plan.plates.join(" + ") })}
+                    </p>
+                  ) : null}
                   {organizations.length > 1 ? (
                     <Field label={t("organization")} hint={t("organizationHint")}>
                       <Select
@@ -161,37 +182,17 @@ export function GenerateDialog({ option, models, onClose, onGenerated }: {
                       />
                     </Field>
                   ) : null}
-                  <Field label={t("fieldQuantity")} hint={b("quantityHint", { copies: face.copies, max: plan.max })}>
-                    <Input
-                      type="number"
-                      inputMode="numeric"
-                      required
-                      min={1}
-                      max={plan.max}
-                      step={1}
-                      value={quantity || String(copies)}
-                      onChange={(e) => setQuantity(e.target.value)}
-                      className="tabular-nums sm:max-w-[180px]"
-                      data-testid="production-generate-quantity"
-                    />
-                  </Field>
-                  {plan.valid ? (
-                    <p className="rounded-xl border border-violet-400/20 bg-violet-500/[0.06] p-3 text-sm text-white/75">
-                      {t.plural("plateSplit", plan.plates.length, { split: plan.plates.join(" + ") })}
-                    </p>
-                  ) : null}
                   {model ? <ProductionPlatePreview model={model} plates={plan.plates} /> : null}
                 </div>
               ) : null}
               {step === 3 && face ? (
                 <div className="space-y-4">
                   {model ? <ProductionIdentity model={model} hero /> : null}
-                  <MaterialsNeeded materials={face.materials} />
+                  <MaterialsNeeded materials={face.materials} filaments={filamentColours(model)} assembly={assemblyParts(model, models)} />
                   <dl className="grid grid-cols-1 gap-4 rounded-xl border border-white/10 bg-white/[0.02] p-4 text-sm sm:grid-cols-2">
                     {[
                       [b("what"), `${product} · ${labels.face(face.face)} · ${themeName(colour!.theme)}`],
-                      [b("pieces"), t.plural("plateSplit", plan.plates.length, { split: plan.plates.join(" + ") })],
-                      [b("serials"), b.plural("newSerials", plan.pieces)],
+                      [b("pieces"), [t.plural("pieceCount", plan.pieces), t.plural("printJobCount", plan.plates.length)].join(" · ")],
                       ...(organizations.length > 1 && organization ? [[t("organization"), organization.name]] : []),
                     ].map(([label, value]) => (
                       <div key={label}>
@@ -200,30 +201,27 @@ export function GenerateDialog({ option, models, onClose, onGenerated }: {
                       </div>
                     ))}
                   </dl>
-                  <p className="flex items-start gap-2 text-xs leading-relaxed text-white/50">
-                    <Info className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden="true" />
-                    {b("reviewHint")}
-                  </p>
+
                 </div>
               ) : null}
             </fieldset>
           </div>
           <footer className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-t border-white/[0.08] bg-[#111727] px-5 py-4 sm:px-6">
-            <span className="text-xs text-white/40">{tw("stepCount", { current: step + 1, total: STEPS.length })}</span>
+            <span className="max-w-[26rem] text-xs text-white/45">{step === 3 ? b("reviewNext") : tw("stepCount", { current: step + 1, total: STEPS.length })}</span>
             <div className="ml-auto flex gap-2">
               <Button type="button" variant="ghost" onClick={step === 0 ? onClose : () => setStep(step - 1)} disabled={busy}>
                 {step === 0 ? tc("cancel") : tw("back")}
               </Button>
-              {step < 3 ? (
+              {step === 2 ? (
                 <Button key="next" type="submit" variant="brand" accent="tags" disabled={!stepOk} data-testid="production-generate-next">
                   {tw("next")}
                   <ChevronRight className="h-4 w-4" aria-hidden="true" />
                 </Button>
-              ) : (
+              ) : step === 3 ? (
                 <Button key="go" type="submit" variant="brand" accent="tags" disabled={!stepOk} loading={busy} data-testid="production-generate-confirm">
                   {b.plural("generateCount", plan.pieces)}
                 </Button>
-              )}
+              ) : null}
             </div>
           </footer>
         </form>

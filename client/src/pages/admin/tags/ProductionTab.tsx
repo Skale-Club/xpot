@@ -29,7 +29,7 @@ import { BatchDetail } from "./BatchDetail";
 import { ProductionWizard } from "./production-wizard";
 import { ProductionBoard } from "./production-board";
 import { PendingBatches } from "./production-pending-batches";
-import { batchPrefixFromTitle, canPrintModel, productionPath, productionTabFor, slugFromTitle } from "./production-workflow";
+import { batchPrefixFromTitle, canPrintModel, orderedPath, productionPath, productionTabFor, slugFromTitle } from "./production-workflow";
 import { ProductionIdentity, useModelName } from "./production-identity";
 
 // Manage › Production (the Xpot admin's, docs/PRINT_EXECUTION_PLAN.md). The first screen is the board
@@ -156,7 +156,7 @@ function CatalogView({ go }: { go: Go }) {
       )}
 
       {creating && <NewModelDialog onClose={() => setCreating(false)} onCreated={(slug) => go(`${PRODUCTION_BASE}/models/${slug}`)} />}
-      {printing && <PrintDialog model={printing} onClose={() => setPrinting(null)} onOrdered={() => go(PRODUCTION_BASE)} />}
+      {printing && <PrintDialog model={printing} onClose={() => setPrinting(null)} onOrdered={(request) => go(orderedPath(request))} />}
     </div>
   );
 }

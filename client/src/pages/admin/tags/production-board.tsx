@@ -25,7 +25,7 @@ import { GenerateDialog } from "./production-generate";
 import { ToPrintList } from "./production-orders";
 import type { PreviewState } from "./production-preview-3d";
 import { PRODUCTION_BASE, minutesText, usePrintComputers, usePrintModels, usePrintRequests, useProductionAccess } from "./production-shared";
-import { boardGroups } from "./production-workflow";
+import { boardGroups, orderedPath } from "./production-workflow";
 import { formatDateTime } from "./api";
 
 // Tags › Production's first screen: how print production actually runs. The first thing on it is what to print now.
@@ -104,12 +104,12 @@ export function ProductionBoard({ go, onOtherWays }: { go: Go; onOtherWays?: () 
       </section> : null}
 
       {onOtherWays ? (
-        <button type="button" onClick={onOtherWays} className="text-xs text-white/50 underline underline-offset-2 hover:text-white" data-testid="production-other-ways">
+        <button type="button" onClick={onOtherWays} className="text-sm text-white/60 underline underline-offset-2 hover:text-white" data-testid="production-other-ways">
           {u("otherWays")}
         </button>
       ) : null}
 
-      {generating ? <GenerateDialog option={generating} models={bySlug} onClose={() => setGenerating(null)} /> : null}
+      {generating ? <GenerateDialog option={generating} models={bySlug} onClose={() => setGenerating(null)} onGenerated={(request) => go(orderedPath(request))} /> : null}
       {picking ? <PartFamilyDialog family={picking} onOpenModel={openModel} onClose={() => setPicking(null)} /> : null}
     </div>
   );

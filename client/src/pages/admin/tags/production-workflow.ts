@@ -238,3 +238,38 @@ export function pauseNeedsChips(text: string | null | undefined): boolean {
 export function chipsWritten(pieces: ReadonlyArray<{ chipWritten: boolean }>): { done: number; total: number } {
   return { done: pieces.filter((piece) => piece.chipWritten).length, total: pieces.length };
 }
+
+/** A title as the catalog typed it, without the note in parentheses ("Google G token · Large Stand (rounded relief v2)"). */
+export function plainTitle(title: string): string {
+  return title.replace(/\s*\([^)]*\)\s*$/, "").trim() || title;
+}
+
+/** Where to go once pieces were ordered: the one print job that came out of it, or the board when there are several. */
+export function orderedPath(request: Pick<PrintRequestItem, "plates">): string {
+  return request.plates.length === 1 ? `/production/jobs/${request.plates[0].id}` : "/production";
+}
+
+/** The filament colours of the model's first bed ("White PLA"). */
+export function filamentColours(model: Pick<PrintModelItem, "currentVersion"> | undefined): string[] {
+  return (model?.currentVersion?.beds[0]?.ams ?? []).map((slot) => slot.colour);
+}
+
+/** What one piece takes off the counts when assembled, by name ("1 Stand base · Large"), when the part is a model of the catalog. */
+export function assemblyParts(model: Pick<PrintModelItem, "currentVersion"> | undefined, models: ReadonlyMap<string, Pick<PrintModelItem, "title">>): string[] {
+  return (model?.currentVersion?.consumes ?? []).map((c) => `${c.perPiece} ${plainTitle(models.get(c.part)?.title ?? c.part)}`);
+}
+
+// ─── History ──────────────────────────────────────────────────────────────────────────────────────────────────
+
+/** "Tag 0XBAXB57 created" is written by the server in English; the object is a piece (the glossary never calls it a tag). */
+export function journeyTitle(title: string): string {
+  return title.replace(/^Tag (?=[A-Z0-9]{6,}\b)/, "Piece ");
+}
+
+/** A person's name for the log: the name they have, else what their e-mail says before the "@" ("jessica.alvarez@x" → "Jessica Alvarez"). Never the address itself. */
+export function personName(name: string | null | undefined, email: string | null | undefined): string | null {
+  if (name?.trim()) return name.trim();
+  const local = email?.split("@")[0]?.trim();
+  if (!local) return null;
+  return local.split(/[._\-+]+/).filter(Boolean).map((word) => word[0].toUpperCase() + word.slice(1)).join(" ") || null;
+}

@@ -169,6 +169,7 @@ export function ProvisionersTab(_props: { go: (path: string) => void }) {
                     <p className="flex flex-wrap items-center gap-2 text-sm font-semibold text-white">
                       <span className="truncate">{d.deviceName}</span>
                       <DevicePill status={d.status} />
+                      {d.status === "active" ? d.capabilities.map((capability) => <Pill key={capability} tone={capability === "print" ? "blue" : "violet"}>{t(capability === "print" ? "deviceMakesFiles" : "deviceWritesChips")}</Pill>) : null}
                       {organizations.length > 1 && organizationName(d.organizationId) ? <Pill tone="slate">{organizationName(d.organizationId)}</Pill> : null}
                     </p>
                     <p className="truncate text-xs text-white/40">
@@ -178,17 +179,15 @@ export function ProvisionersTab(_props: { go: (path: string) => void }) {
                           ? d.pairedAt
                             ? t("deviceRevokedPairedAt", { revoked: formatDateTime(d.revokedAt), paired: formatDateTime(d.pairedAt) })
                             : t("deviceRevokedAt", { revoked: formatDateTime(d.revokedAt) })
-                          : t(d.tokenPrefix ? "deviceSeenToken" : "deviceSeen", {
-                              platform: d.platform ?? t("unknownOs"),
-                              version: d.appVersion ?? "?",
+                          : t("deviceSeen", {
+                              platform: d.platform ? (["darwin", "win32", "linux"].includes(d.platform) ? t(`os_${d.platform}` as "os_linux") : d.platform) : t("unknownOs"),
                               date: formatDateTime(d.lastSeenAt),
-                              token: d.tokenPrefix ?? "",
                             })}
                     </p>
                   </div>
                 </div>
                 {d.status !== "revoked" && (
-                  <Button type="button" variant="danger" size="sm" className="min-h-10 shrink-0 self-start sm:self-auto" onClick={() => setRevoking(d)} disabled={revoke.isPending}>
+                  <Button type="button" variant="ghost" size="sm" className="min-h-10 shrink-0 self-start text-white/55 sm:self-auto" onClick={() => setRevoking(d)} disabled={revoke.isPending}>
                     {d.status === "pairing" ? t("cancelCode") : t("revoke")}
                   </Button>
                 )}

@@ -994,7 +994,7 @@ async function createSerializedPlate(model: PrintModelRow, version: Pick<Version
   const year = new Date().getUTCFullYear();
   const plate = ctx.plateCount > 1 ? ` · print job ${ctx.plateNumber}/${ctx.plateCount}` : "";
   // The maker named on the batch is whoever prints it: a branch's batch never reads as the company's.
-  const [maker] = await db.select({ name: organizations.name }).from(organizations).where(eq(organizations.id, ctx.organizationId)).limit(1);
+  const [maker] = await ctx.within.tx.select({ name: organizations.name }).from(organizations).where(eq(organizations.id, ctx.organizationId)).limit(1);
   for (let attempt = 1; ; attempt++) {
     // Read in the transaction: the batches of the request's earlier plates are not committed yet.
     const batchCode = nextPrintBatchCode(model.batchPrefix, year, await existingCodes(model.batchPrefix, year, ctx.within.tx));

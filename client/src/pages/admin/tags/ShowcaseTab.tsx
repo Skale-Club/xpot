@@ -103,12 +103,12 @@ function ShowcaseDialog({ item, open, onOpenChange }: { item: TagShowcaseItem | 
   const ready = form.title.trim().length > 0 && payload !== null && (!kit || payload.items.length > 0);
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-xl">
-        <DialogHeader>
+      <DialogContent className="flex max-h-[min(92dvh,760px)] max-w-xl flex-col gap-0 overflow-hidden p-0">
+        <DialogHeader className="shrink-0 border-b border-white/[0.08] px-5 py-4 pr-14">
           <DialogTitle>{item ? t("shopEdit") : t("shopNew")}</DialogTitle>
-          <DialogDescription>{t("shopDialogDesc")}</DialogDescription>
+          <DialogDescription className="sr-only">{t("shopDialogDesc")}</DialogDescription>
         </DialogHeader>
-        <div className="space-y-3">
+        <div className="min-h-0 flex-1 space-y-3 overflow-y-auto p-5">
           <div className="grid gap-3 sm:grid-cols-2">
             <Field label={t("shopFieldKind")}>
               <Select
@@ -159,7 +159,7 @@ function ShowcaseDialog({ item, open, onOpenChange }: { item: TagShowcaseItem | 
             testId="showcase-published"
           />
         </div>
-        <DialogFooter className="gap-2">
+        <DialogFooter className="shrink-0 gap-2 border-t border-white/[0.08] px-5 py-3">
           <Button type="button" variant="ghost" onClick={() => onOpenChange(false)}>
             {tc("cancel")}
           </Button>
@@ -221,12 +221,12 @@ export function ShowcaseTab() {
                 {item.imageUrl ? <img src={item.imageUrl} alt="" loading="lazy" decoding="async" className="h-full w-full object-cover" /> : <ImageOff className="h-5 w-5 text-white/20" aria-hidden="true" />}
               </span>
               <span className="min-w-0 flex-1">
-                <span className="block truncate text-sm font-semibold text-white">{item.title}</span>
+                <span className="block break-words text-sm font-semibold leading-snug text-white">{item.title}</span>
                 <span className="mt-1 flex flex-wrap items-center gap-1.5 text-xs text-white/45">
                   <Pill tone={item.kind === "kit" ? "violet" : "slate"}>{item.kind === "kit" ? t("shopKindKit") : t("shopKindModel")}</Pill>
                   <Pill tone={item.isPublished ? "green" : "muted"}>{item.isPublished ? t("shopPublished") : t("shopDraft")}</Pill>
-                  {item.items.length > 0 ? <span>{t("shopSkuCount", { count: item.items.length })}</span> : <span>{t("shopNoSku")}</span>}
-                  {item.referencePriceCents !== null && <span>{formatMoney(item.referencePriceCents, item.currency)}</span>}
+                  {item.items.length > 0 ? <span>{t.plural("shopItemsToCart", item.items.length)}</span> : <span>{t("shopNoSku")}</span>}
+                  {item.referencePriceCents !== null && <span>{t("shopPriceLine", { price: formatMoney(item.referencePriceCents, item.currency) })}</span>}
                 </span>
               </span>
               <Button type="button" variant="ghost" size="icon" aria-label={t("shopEdit")} onClick={() => setEditing(item)} data-testid="showcase-edit">

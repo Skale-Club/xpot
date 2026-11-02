@@ -2175,7 +2175,8 @@ export async function getOverview(now: Date = new Date(), timezoneOffsetMinutes 
   const [queueRow] = await rows<{ stuscle_orders: number; batches_not_received: number }>(sql`
     SELECT (SELECT count(*)::int FROM tag_acquisitions a WHERE a.status = 'pending' AND ${inOrganizations(sql`a.organization_id`, scope)}) AS stuscle_orders,
            (SELECT count(DISTINCT b.id)::int FROM tag_batches b JOIN tags t ON t.batch_id = b.id
-             WHERE b.status <> 'cancelled' AND ${stockMetricSql("notReceived")} AND ${inOrganizations(sql`b.organization_id`, scope)}) AS batches_not_received
+             WHERE b.status <> 'cancelled' AND ${stockMetricSql("notReceived")}
+               AND NOT EXISTS (SELECT 1 FROM print_jobs pj WHERE pj.id = b.print_job_id AND pj.status = 'cancelled') AND ${inOrganizations(sql`b.organization_id`, scope)}) AS batches_not_received
   `);
   const counts: TagOverview["counts"] = { total: 0, inventory: 0, assigned: 0, active: 0, disabled: 0, retired: 0, damaged: Number(stockRow?.damaged ?? 0) };
   const stock = { house: Number(stockRow?.house ?? 0), withResellers: Number(stockRow?.with_resellers ?? 0) };

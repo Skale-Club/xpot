@@ -19,6 +19,7 @@ import { Loading } from "./pieces-shared";
 import { groupJourneyRows, journeyValueKind } from "./journey-group";
 import { kitShort } from "@/components/piece/pieceView";
 import { useTagLabels } from "./labels";
+import { journeyTitle, personName } from "./production-workflow";
 import { NewEntryDialog, NewPlanDialog, PlanStatusDialog } from "./JourneyForms";
 import {
   EntryStatusBadge,
@@ -50,7 +51,7 @@ const LINK = "font-mono hover:text-white hover:underline";
 function ActorLabel({ entry }: { entry: TagJourneyEntryItem }) {
   const t = useT(manageTagsMessages);
   const Icon = entry.actor === "ai" ? Bot : entry.actor === "human" ? User : Cog;
-  const who = entry.actor === "ai" ? t("actorAi") : entry.actor === "human" ? entry.actorName ?? entry.actorEmail ?? t("actorAdmin") : t("actorSystem");
+  const who = entry.actor === "ai" ? t("actorAi") : entry.actor === "human" ? personName(entry.actorName, entry.actorEmail) ?? t("actorAdmin") : t("actorSystem");
   return (
     <span className="inline-flex items-center gap-1">
       <Icon className="h-3 w-3 shrink-0" />
@@ -112,7 +113,7 @@ function EntryRow({ entry, showScope }: { entry: TagJourneyEntryItem; showScope:
   // A piece's status or stock change reads as the names people see (Not set up → Live, In stock → Internal use).
   const valueKind = journeyValueKind(entry.action);
   const value = (v: string) => (valueKind === "status" ? tagLabels.status(v) : valueKind === "stock" ? tagLabels.stock(v) : v);
-  const actorName = entry.actor === "human" ? entry.actorName ?? entry.actorEmail : null;
+  const actorName = entry.actor === "human" ? personName(entry.actorName, entry.actorEmail) : null;
   const labelledAction = entry.action && LABELLED_ACTIONS.has(entry.action) ? entry.action : null;
   return (
     <li className={`group relative min-w-0 space-y-1 py-3 pl-5 ${dimmed ? "opacity-60" : ""}`} data-testid="journey-entry">
@@ -125,7 +126,7 @@ function EntryRow({ entry, showScope }: { entry: TagJourneyEntryItem; showScope:
           {entry.status !== "active" && <EntryStatusBadge status={entry.status} />}
         </div>
       )}
-      <p className="break-words font-medium text-white">{entry.title}</p>
+      <p className="break-words font-medium text-white">{journeyTitle(entry.title)}</p>
       {(entry.beforeValue || entry.afterValue) && (
         <p className="break-all text-sm">
           {entry.beforeValue && (
@@ -215,7 +216,7 @@ function EntryGroup({ entries, showScope }: { entries: TagJourneyEntryItem[]; sh
         <Layers className="h-3 w-3" aria-hidden="true" />
         {t("journeyGroup", { count: entries.length })}
       </p>
-      <p className="break-words font-medium text-white">{newest.title}</p>
+      <p className="break-words font-medium text-white">{journeyTitle(newest.title)}</p>
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-white/40">
         <span>
           {formatTime(oldest.occurredAt)} – {formatTime(newest.occurredAt)}
@@ -311,6 +312,7 @@ function JourneyPanelBody({ scope, filters, title, search = "" }: { scope: Journ
         icon={History}
         title={title ?? ts("manageJourney")}
         className="min-w-0"
+        testId="journey-timeline"
         actions={
           <Button type="button" variant="secondary" size="sm" className="min-h-10" onClick={() => setEntryOpen(true)} data-testid="journey-record">
             <Plus className="h-3.5 w-3.5" />
@@ -318,6 +320,10 @@ function JourneyPanelBody({ scope, filters, title, search = "" }: { scope: Journ
           </Button>
         }
       >
+        <button type="button" onClick={() => document.querySelector('[data-testid="journey-plans"]')?.scrollIntoView({ behavior: "smooth", block: "start" })} className="mb-3 inline-flex min-h-9 items-center gap-1.5 text-xs font-medium text-violet-300 underline underline-offset-2 lg:hidden" data-testid="journey-plans-link">
+          <ClipboardList className="h-3.5 w-3.5" aria-hidden="true" />
+          {t("plansLink", { count: data?.plans.length ?? 0 })}
+        </button>
         {isLoading ? (
           <Loading rows={4} />
         ) : isError ? (
@@ -351,7 +357,8 @@ function JourneyPanelBody({ scope, filters, title, search = "" }: { scope: Journ
         accent="tags"
         icon={ClipboardList}
         title={t("plans")}
-        className="h-fit min-w-0"
+        className="h-fit min-w-0 scroll-mt-20"
+        testId="journey-plans"
         bodyClassName="px-4 py-2"
         actions={
           <Button type="button" variant="secondary" size="sm" className="min-h-10" onClick={() => setPlanOpen(true)} data-testid="journey-new-plan">

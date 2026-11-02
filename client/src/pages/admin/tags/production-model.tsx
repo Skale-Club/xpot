@@ -26,7 +26,7 @@ import { PrintDialog, RequestList } from "./production-orders";
 import { PrintPreviewCard } from "./production-preview";
 import { useModelName } from "./production-identity";
 import { ModelStatusPill, PRODUCTION_BASE, bedSummary, formatBytes, uploadFile, useProductionAccess, useThemeOptions } from "./production-shared";
-import { canPrintModel } from "./production-workflow";
+import { canPrintModel, orderedPath } from "./production-workflow";
 import { catalogOptions, useTagCatalog } from "./batches-shared";
 
 // One print model: what it is, its versions (newest first, with what changed and why), the orders that printed it,
@@ -133,11 +133,18 @@ export function PrintModelPage({ slug, go }: { slug: string; go: Go }) {
       {model.description && !noVersion ? <p className="max-w-3xl whitespace-pre-line text-sm text-white/60">{model.description}</p> : null}
 
       {noVersion ? null : (
-        <div className="grid grid-cols-3 gap-2">
-          <Stat card label={part ? t("statOnHandPart") : t("statInHouse")} value={model.onHand} />
-          {!part ? <Stat card label={t("statWithResellers")} value={model.withResellers} /> : null}
-          <Stat card label={t("statOpenOrders")} value={model.openJobs} />
-        </div>
+        <dl className="grid grid-cols-3 gap-2">
+          {[
+            [part ? t("statOnHandPart") : t("statInHouse"), model.onHand],
+            ...(!part ? [[t("statWithResellers"), model.withResellers]] : []),
+            [t("statOpenOrders"), model.openJobs],
+          ].map(([label, value]) => (
+            <div key={label} className="min-w-0 rounded-2xl border border-white/[0.08] bg-white/[0.03] px-3 py-2.5">
+              <dt className="break-words text-[11px] font-semibold uppercase leading-tight tracking-wide text-white/45">{label}</dt>
+              <dd className="mt-1 text-xl font-semibold tabular-nums text-white">{value}</dd>
+            </div>
+          ))}
+        </dl>
       )}
 
       {/* Two columns on a computer: what was asked and how it is made on the left, the 3D view held in place on the
@@ -202,7 +209,7 @@ export function PrintModelPage({ slug, go }: { slug: string; go: Go }) {
         </div>
       </div>
 
-      {printing && <PrintDialog model={model} onClose={() => setPrinting(false)} />}
+      {printing && <PrintDialog model={model} onClose={() => setPrinting(false)} onOrdered={(request) => go(orderedPath(request))} />}
       {versioning && <VersionDialog model={model} fix={fix} onClose={() => { setVersioning(false); setFix(null); }} />}
       {editing && <EditModelDialog model={model} onClose={() => setEditing(false)} onRetire={() => { setEditing(false); setRetiring(true); }} />}
       {materials && <MaterialsDialog model={model} onClose={() => setMaterials(false)} />}

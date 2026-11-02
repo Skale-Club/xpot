@@ -7,6 +7,7 @@ import { productionBoardMessages } from "@/i18n/messages/productionBoard";
 import { unifiedProductionMessages } from "@/i18n/messages/unifiedProduction";
 import { useTagLabels } from "./labels";
 import { PRINT_THEMES } from "./production-shared";
+import { plainTitle } from "./production-workflow";
 
 export interface ProductionIdentityData {
   /** The catalog model's slug, when this is one (it picks the 3D picture; a new-batch form has none). */
@@ -17,11 +18,6 @@ export interface ProductionIdentityData {
   productType?: string | null;
   face?: string | null;
   theme?: string | null;
-}
-
-/** A title as the catalog typed it, without the note in parentheses ("Google G token · Large Stand (rounded relief v2)"). */
-export function plainTitle(title: string): string {
-  return title.replace(/s*([^)]*)s*$/, "").trim() || title;
 }
 
 /**

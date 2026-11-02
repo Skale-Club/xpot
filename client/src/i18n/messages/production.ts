@@ -310,6 +310,11 @@ const en = {
   printJobsMade_one: "{count} print job",
   printJobsMade_other: "{count} print jobs",
   shortNameLine: "Short name: {name}",
+  needFilament: "Filament",
+  needAssembly: "Also for assembly",
+  printTitle: "Print {model}",
+  printCount_one: "Print {count} piece",
+  printCount_other: "Print {count} pieces",
 };
 
 export const productionMessages: Dictionary<typeof en> = {
@@ -611,6 +616,11 @@ export const productionMessages: Dictionary<typeof en> = {
     printJobsMade_one: "{count} impressão",
     printJobsMade_other: "{count} impressões",
     shortNameLine: "Nome curto: {name}",
+    needFilament: "Filamento",
+    needAssembly: "Também para a montagem",
+    printTitle: "Imprimir {model}",
+    printCount_one: "Imprimir {count} peça",
+    printCount_other: "Imprimir {count} peças",
   },
   es: {
     productionNav: "Producción",
@@ -909,5 +919,10 @@ export const productionMessages: Dictionary<typeof en> = {
     printJobsMade_one: "{count} impresión",
     printJobsMade_other: "{count} impresiones",
     shortNameLine: "Nombre corto: {name}",
+    needFilament: "Filamento",
+    needAssembly: "También para el montaje",
+    printTitle: "Imprimir {model}",
+    printCount_one: "Imprimir {count} pieza",
+    printCount_other: "Imprimir {count} piezas",
   },
 };

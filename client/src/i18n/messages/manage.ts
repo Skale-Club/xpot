@@ -224,6 +224,8 @@ const en = {
   themeColor: "Installed app's bar color",
   backgroundColor: "Installed app's opening screen color",
   brandingCacheNote: "It can take up to 5 minutes to show everywhere.",
+  xpotTeamOnly: "This page is only for the Xpot team.",
+  goToToday: "Go to Today",
 };
 
 export type ManageKey = keyof typeof en;
@@ -440,6 +442,8 @@ export const manageMessages: Dictionary<typeof en> = {
     themeColor: "Cor da barra do app instalado",
     backgroundColor: "Cor da tela de abertura do app instalado",
     brandingCacheNote: "Pode levar até 5 minutos para aparecer em todo lugar.",
+    xpotTeamOnly: "Esta página é só para a equipe do Xpot.",
+    goToToday: "Ir para Hoje",
   },
   es: {
     accessRestricted: "Acceso restringido",
@@ -651,5 +655,7 @@ export const manageMessages: Dictionary<typeof en> = {
     themeColor: "Color de la barra de la app instalada",
     backgroundColor: "Color de la pantalla de apertura de la app instalada",
     brandingCacheNote: "Puede tardar hasta 5 minutos en verse en todas partes.",
+    xpotTeamOnly: "Esta página es solo para el equipo de Xpot.",
+    goToToday: "Ir a Hoy",
   },
 };

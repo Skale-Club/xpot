@@ -185,8 +185,10 @@ export function BatchReceiveStation({ batch, onRequestClose }: { batch: ReceiveB
             <span className="rounded-full bg-violet-400/10 px-3 py-1 text-sm font-semibold tabular-nums text-violet-200" data-testid="intake-progress">
               {issued ? tb("receivedCount", { received: counts.received, total: counts.total }) : tb("registeredCount", { count: counts.total })}
             </span>
-            <Button type="button" variant="ghost" size="icon" onClick={() => setFull((v) => !v)} aria-label={full ? t("exitFullScreen") : t("fullScreen")} aria-pressed={full}>
+            <Button type="button" variant="ghost" size="sm" onClick={() => setFull((v) => !v)} aria-pressed={full}>
               {full ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
+              <span className="hidden sm:inline">{full ? t("exitFullScreen") : t("fullScreen")}</span>
+              <span className="sr-only sm:hidden">{full ? t("exitFullScreen") : t("fullScreen")}</span>
             </Button>
           </span>
         </div>
@@ -228,6 +230,7 @@ export function BatchReceiveStation({ batch, onRequestClose }: { batch: ReceiveB
 
       {/* Close batch stays at hand, with what is still missing. */}
       {/* Above the phone's tab bar (components/xpot/MobileTabBar.tsx) unless full screen covers it. */}
+      {!onRequestClose && counts.total === 0 ? <p className="mx-auto mt-3 w-full max-w-3xl text-xs text-white/50">{t("scanFirstPiece")}</p> : null}
       {onRequestClose ? <div className="sticky bottom-[max(env(safe-area-inset-bottom),8px)] z-10 mx-auto mt-3 w-full max-w-3xl">
         <div className={`flex flex-wrap items-center justify-between gap-2 rounded-2xl ${GLASS_SUBTLE_CLASS} bg-background/95 px-3 py-2 backdrop-blur`}>
           <p className="text-xs text-white/60">{issued && pending ? <span className="text-amber-300">{t.plural("stillToReceive", pending)}</span> : t("closeWhenDone")}</p>

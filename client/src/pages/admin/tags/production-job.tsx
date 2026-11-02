@@ -17,7 +17,7 @@ import { ProductionIdentity } from "./production-identity";
 import { PrintPreviewCard } from "./production-preview";
 import { PrintedDialog } from "./production-printed-dialog";
 import { RedoDialog } from "./production-orders";
-import { canAssembleJob, chipsWritten, journeyProgress, pauseNeedsChips, pendingPieces, printedOutcome, redoEffect, showPlateNumber } from "./production-workflow";
+import { canAssembleJob, chipsWritten, plainTitle, journeyProgress, pauseNeedsChips, pendingPieces, printedOutcome, redoEffect, showPlateNumber } from "./production-workflow";
 
 // One print job, from file preparation through printing. Marking it printed puts its pieces in stock.
 
@@ -367,7 +367,7 @@ export function PrintJobPage({ id, go }: { id: string; go: Go }) {
         description={[
           t("confirmAssembledBody"),
           job.consumes.length
-            ? t("confirmAssembledConsumes", { list: job.consumes.map((c) => `${c.perPiece * (job.receivedCount ?? job.quantity)} × ${c.part}`).join(", ") })
+            ? t("confirmAssembledConsumes", { list: job.consumes.map((c) => `${c.perPiece * (job.receivedCount ?? job.quantity)} × ${plainTitle(models.find((m) => m.slug === c.part)?.title ?? c.part)}`).join(", ") })
             : "",
         ].filter(Boolean).join(" ")}
         confirmLabel={t("markAssembled")}
