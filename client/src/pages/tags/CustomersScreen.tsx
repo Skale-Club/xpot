@@ -1,7 +1,7 @@
 import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useLocation } from "wouter";
-import { Building2, ChevronRight } from "lucide-react";
+import { Building2, ChevronRight, ScanLine } from "lucide-react";
 import type { LeadTagSummary } from "@shared/tagsApi";
 import { useT } from "@/i18n";
 import { commonMessages } from "@/i18n/messages/common";
@@ -10,6 +10,7 @@ import { CompactDataTable, type CompactDataColumn } from "@/components/xpot/Comp
 import { FilterBar, FilterSearch } from "@/components/xpot/filters";
 import { useUrlFilters } from "@/hooks/use-url-filters";
 import { ListPager, usePagedList } from "@/components/xpot/pagination";
+import { Button } from "@/components/ui/button";
 import { EmptyState, ErrorState } from "@/components/xpot/EmptyState";
 import { ListSkeleton } from "@/components/xpot/ListSkeleton";
 import { GLASS_SUBTLE_CLASS } from "@/components/xpot/surface";
@@ -205,6 +206,12 @@ export default function CustomersScreen() {
                 icon={Building2}
                 title={customers.length ? t("customersNoMatch") : t("customersEmpty")}
                 hint={customers.length ? undefined : t("customersEmptyHint")}
+                action={customers.length ? undefined : (
+                  <Button type="button" variant="secondary" onClick={() => navigate(APP_BASE)} data-testid="customers-read-piece">
+                    <ScanLine />
+                    {t("readPiece")}
+                  </Button>
+                )}
               />
             </div>
           )}

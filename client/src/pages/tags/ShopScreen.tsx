@@ -23,6 +23,7 @@ import { commonMessages } from "@/i18n/messages/common";
 import { tagsMessages } from "@/i18n/messages/tags";
 import { errorText, tagsGet } from "./lib";
 import { CARD, EYEBROW_MUTED, TopBar } from "./ui";
+import { firstStepsOf } from "./whoToAsk";
 import { partnerLine, useWholesale, WholesaleCard } from "./WholesaleCard";
 
 // Tags › Shop: a showcase of what Skale Club sells, as a carousel. The pieces a reseller already has live in My pieces,
@@ -249,10 +250,12 @@ export default function ShopScreen() {
   });
   if (!buying) return <div className="space-y-5" data-testid="tags-shop"><EmptyState tone="tags" icon={ShoppingBag} title={t("shopProducerTitle")} hint={t("shopProducerHint")} /></div>;
   if (partner) {
+    // A member of a team gets pieces from the team (it hands them out); the partner is who the team orders from.
+    const company = profile === "member" ? firstStepsOf(me).company : null;
     return (
       <div className="space-y-5" data-testid="tags-shop">
         <div className="lg:hidden"><TopBar title={t("navShop")} /></div>
-        <EmptyState tone="tags" icon={ShoppingBag} title={<span data-testid="wholesale-partner">{partnerLine(t("wholesalePartner", { name: partner }))}</span>} />
+        <EmptyState tone="tags" icon={ShoppingBag} title={<span data-testid="wholesale-partner">{partnerLine(company ? t("shopFromCompany", { name: company }) : t("wholesalePartner", { name: partner }))}</span>} />
       </div>
     );
   }
