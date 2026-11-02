@@ -23,10 +23,10 @@ const en = {
 
   // Overview
   overviewLoadFailed: "Failed to load overview.",
-  metricActiveReps: "Active reps",
+  metricActiveReps: "Reps who visited",
   metricVisitsInProgress: "Visits in progress",
   metricCompletedVisits: "Finished visits",
-  metricOpenOpportunities: "Open opportunities",
+  metricOpenOpportunities: "Open deals",
   metricPendingTasks: "Pending tasks",
   syncStatus_pending: "Pending",
   syncStatus_synced: "Synced",
@@ -239,10 +239,10 @@ export const manageMessages: Dictionary<typeof en> = {
     disabled: "Desligada",
 
     overviewLoadFailed: "Não foi possível carregar a visão geral.",
-    metricActiveReps: "Vendedores ativos",
+    metricActiveReps: "Vendedores que visitaram",
     metricVisitsInProgress: "Visitas em andamento",
     metricCompletedVisits: "Visitas finalizadas",
-    metricOpenOpportunities: "Oportunidades abertas",
+    metricOpenOpportunities: "Negócios abertos",
     metricPendingTasks: "Tarefas pendentes",
     syncStatus_pending: "Pendente",
     syncStatus_synced: "Sincronizado",
@@ -445,10 +445,10 @@ export const manageMessages: Dictionary<typeof en> = {
     disabled: "Apagada",
 
     overviewLoadFailed: "No se pudo cargar el resumen.",
-    metricActiveReps: "Vendedores activos",
+    metricActiveReps: "Vendedores que visitaron",
     metricVisitsInProgress: "Visitas en curso",
     metricCompletedVisits: "Visitas finalizadas",
-    metricOpenOpportunities: "Oportunidades abiertas",
+    metricOpenOpportunities: "Negocios abiertos",
     metricPendingTasks: "Tareas pendientes",
     syncStatus_pending: "Pendiente",
     syncStatus_synced: "Sincronizado",

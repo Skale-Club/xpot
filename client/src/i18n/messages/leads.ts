@@ -8,6 +8,7 @@ const en = {
   // Tabs and list
   tabLeads: "Companies",
   tabMine: "My companies",
+  tabWorked: "Worked",
   tabProspects: "To visit",
   searchLeads: "Search companies...",
   noProspects: "No prospects yet",
@@ -41,7 +42,7 @@ const en = {
   chooseAnotherDate: "Choose another date or return to all dates",
 
   // Card actions
-  promote: "Convert to customer",
+  promote: "Mark as customer",
   checkIn: "Check in",
   delete: "Delete",
   deleteCompany: "Delete company",
@@ -117,7 +118,7 @@ const en = {
   googleProfileRemoved: "Google profile unlinked",
   googleProfileSaveFailed: "Could not update the Google profile",
   googleProfileSearchFailed: "Google search is unavailable right now.",
-  stateProspect: "Prospect",
+  stateProspect: "To visit",
   stateLead: "In talks",
   stateActive: "Customer",
   stateInactive: "Inactive",
@@ -145,6 +146,7 @@ export const leadsMessages: Dictionary<typeof en> = {
   pt: {
     tabLeads: "Empresas",
     tabMine: "Minhas empresas",
+    tabWorked: "Trabalhadas",
     tabProspects: "A visitar",
     searchLeads: "Buscar empresas...",
     noProspects: "Nenhum prospecto ainda",
@@ -177,7 +179,7 @@ export const leadsMessages: Dictionary<typeof en> = {
     noCompaniesOnDate: "Nenhuma empresa nesta data",
     chooseAnotherDate: "Escolha outra data ou volte para todas as datas",
 
-    promote: "Transformar em cliente",
+    promote: "Marcar como cliente",
     checkIn: "Fazer check-in",
     delete: "Excluir",
     deleteCompany: "Excluir empresa",
@@ -249,7 +251,7 @@ export const leadsMessages: Dictionary<typeof en> = {
     googleProfileRemoved: "Perfil do Google desvinculado",
     googleProfileSaveFailed: "Não foi possível atualizar o perfil do Google",
     googleProfileSearchFailed: "A busca do Google está indisponível no momento.",
-    stateProspect: "Prospecto",
+    stateProspect: "A visitar",
     stateLead: "Em conversa",
     stateActive: "Cliente",
     stateInactive: "Inativa",
@@ -274,6 +276,7 @@ export const leadsMessages: Dictionary<typeof en> = {
   es: {
     tabLeads: "Empresas",
     tabMine: "Mis empresas",
+    tabWorked: "Trabajadas",
     tabProspects: "Por visitar",
     searchLeads: "Buscar empresas...",
     noProspects: "Aún no hay prospectos",
@@ -306,7 +309,7 @@ export const leadsMessages: Dictionary<typeof en> = {
     noCompaniesOnDate: "No hay empresas en esta fecha",
     chooseAnotherDate: "Elige otra fecha o vuelve a todas las fechas",
 
-    promote: "Convertir en cliente",
+    promote: "Marcar como cliente",
     checkIn: "Hacer check-in",
     delete: "Eliminar",
     deleteCompany: "Eliminar empresa",
@@ -378,7 +381,7 @@ export const leadsMessages: Dictionary<typeof en> = {
     googleProfileRemoved: "Perfil de Google desvinculado",
     googleProfileSaveFailed: "No se pudo actualizar el perfil de Google",
     googleProfileSearchFailed: "La búsqueda de Google no está disponible en este momento.",
-    stateProspect: "Prospecto",
+    stateProspect: "Por visitar",
     stateLead: "En conversación",
     stateActive: "Cliente",
     stateInactive: "Inactiva",

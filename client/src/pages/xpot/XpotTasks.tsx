@@ -94,7 +94,9 @@ export function XpotTasks() {
   const organizationId = (reach === "organization"
     ? me?.organizations?.find((organization) => organization.membershipRole === "admin" && !organization.personal)
     : me?.organizations?.[0])?.id;
-  const team = canManage && filters.values.team === "1";
+  // Inside the management panel the list is the team's from the start (the tile that opens it counts the team's
+  // tasks), and "Only mine" narrows it; in My work the list is the person's own and "Whole team" widens it.
+  const team = canManage && (filters.values.team === "1" || (inPanel && filters.values.team !== "0"));
 
   const taskParams = new URLSearchParams({ status: status === "open" ? "pending,in_progress" : status });
   if (priority) taskParams.set("priority", priority);
@@ -203,7 +205,9 @@ export function XpotTasks() {
             icon={Flag}
             options={priorityOptions.map((option) => ({ value: option.value, label: t(option.labelKey) }))}
           />
-          {canManage ? <FilterToggle pressed={team} onChange={(on) => filters.set({ team: on ? "1" : null })} label={t("wholeTeam")} icon={Users} /> : null}
+          {canManage ? (inPanel
+            ? <FilterToggle pressed={!team} onChange={(on) => filters.set({ team: on ? "0" : null })} label={t("onlyMine")} icon={Users} />
+            : <FilterToggle pressed={team} onChange={(on) => filters.set({ team: on ? "1" : null })} label={t("wholeTeam")} icon={Users} />) : null}
         </>
       }
       secondary={
@@ -244,9 +248,20 @@ export function XpotTasks() {
               </span>
             </span>
           ) : (
-            <Button type="button" variant="secondary" size="sm" onClick={() => changeStatus.mutate({ id: task.id, action: "complete" })} loading={changeStatus.isPending && changeStatus.variables?.id === task.id} className="-mt-0.5 shrink-0 text-emerald-300" data-testid={`task-done-${task.id}`}>
-              <Check aria-hidden="true" /> {t("markDone")}
-            </Button>
+            // An empty circle, like the Dashboard's: a tick and "Done" read as a stamp on a task that is not done yet.
+            <button
+              type="button"
+              onClick={() => changeStatus.mutate({ id: task.id, action: "complete" })}
+              disabled={changeStatus.isPending && changeStatus.variables?.id === task.id}
+              aria-label={`${t("markDone")}: ${task.title}`}
+              title={t("markDone")}
+              className="group/done -ml-1.5 -mt-1.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-transparent transition-colors hover:text-emerald-300"
+              data-testid={`task-done-${task.id}`}
+            >
+              <span className="flex h-7 w-7 items-center justify-center rounded-full border border-white/20 transition-colors group-hover/done:border-white/35">
+                <Check className="h-3.5 w-3.5" aria-hidden="true" />
+              </span>
+            </button>
           )}
           <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-center gap-2">

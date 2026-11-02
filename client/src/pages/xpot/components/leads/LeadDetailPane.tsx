@@ -180,45 +180,49 @@ export function LeadDetailPane({ lead, pieces, visits, onClose, backLabel, onDel
                 <Phone className="h-3 w-3 shrink-0" aria-hidden="true" />{displayPhone(lead.phone)}
               </a>
             ) : null}
-            <div className="mt-3 flex flex-wrap gap-2">
-              <CompanyTaskButton lead={lead} />
-              <CompanyGoogleProfileButton lead={lead} />
-            </div>
           </div>
         </div>
-        <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap lg:pl-0">
+        <div className="flex flex-wrap gap-2 lg:pl-0">
           {openHere ? (
-            <Button type="button" variant="brand" onClick={() => navigate("/route/check-in")} className="min-h-11" data-testid="lead-back-to-visit">
+            <Button type="button" variant="brand" onClick={() => navigate("/route/check-in")} className="min-h-11 flex-1 sm:flex-none" data-testid="lead-back-to-visit">
               <MapPinCheck aria-hidden="true" />{t("backToVisit")}
             </Button>
           ) : openElsewhere ? null : (
-            <Button type="button" variant="brand" onClick={() => navigate(`/route/check-in?leadId=${lead.id}`)} className="min-h-11" data-testid="lead-check-in">
+            <Button type="button" variant="brand" onClick={() => navigate(`/route/check-in?leadId=${lead.id}`)} className="min-h-11 flex-1 sm:flex-none" data-testid="lead-check-in">
               <MapPinCheck aria-hidden="true" />{t("checkIn")}
             </Button>
           )}
           {routeUrl ? (
-            <Button asChild variant="secondary" className="min-h-11">
+            <Button asChild variant="secondary" className="min-h-11 flex-1 sm:flex-none">
               <a href={routeUrl} target="_blank" rel="noopener noreferrer"><Navigation aria-hidden="true" />{t("directions")}</a>
             </Button>
           ) : null}
         </div>
         {openElsewhere ? (
-          <p className="text-xs text-amber-200/80" data-testid="lead-finish-first">{t("finishVisitFirst", { name: openElsewhere.lead?.name ?? t("leadNumber", { id: openElsewhere.leadId }) })}</p>
+          <Link href="/route/check-in" className="text-xs font-medium text-amber-200/90 underline-offset-2 hover:underline" data-testid="lead-finish-first">
+            {t("finishVisitFirst", { name: openElsewhere.lead?.name ?? t("leadNumber", { id: openElsewhere.leadId }) })} →
+          </Link>
         ) : null}
       </header>
 
       {/* Sold and the visits are in the cards below; the shelf and the pieces are what to check on the way in. */}
-      <div className={`grid grid-cols-2 overflow-hidden rounded-2xl ${GLASS_SUBTLE_CLASS}`}>
-        <Metric icon={<PackageCheck className="h-3.5 w-3.5" aria-hidden="true" />} label={t("colShelf")} value={unitsOnShelf == null ? "—" : String(unitsOnShelf)} />
-        <Metric icon={<Nfc className="h-3.5 w-3.5" aria-hidden="true" />} label={t("sectionPieces")} value={String(pieces?.pieces ?? 0)} />
-      </div>
+      {/* Two zeros say nothing; with stock or pieces here the numbers are worth the room. */}
+      {(unitsOnShelf ?? 0) > 0 || (pieces?.pieces ?? 0) > 0 ? (
+        <div className={`grid grid-cols-2 overflow-hidden rounded-2xl ${GLASS_SUBTLE_CLASS}`}>
+          <Metric icon={<PackageCheck className="h-3.5 w-3.5" aria-hidden="true" />} label={t("colShelf")} value={unitsOnShelf == null ? "—" : String(unitsOnShelf)} />
+          <Metric icon={<Nfc className="h-3.5 w-3.5" aria-hidden="true" />} label={t("sectionPieces")} value={String(pieces?.pieces ?? 0)} />
+        </div>
+      ) : null}
 
       <div className="grid min-w-0 items-start gap-6 lg:grid-cols-[minmax(0,1.15fr)_minmax(360px,0.85fr)]">
         {/* On a phone the order is what to do on the spot: sell, then the history, then the people and the record. */}
         <div className="min-w-0 max-lg:contents lg:space-y-6">
           <div className="max-lg:order-5">
             {isDesktop ? (
-              <SectionCard title={t("sectionDetails")} icon={Building2} bodyClassName="p-4 sm:p-5"><CompanyInlineEditor lead={lead} /></SectionCard>
+              <SectionCard title={t("sectionDetails")} icon={Building2} bodyClassName="p-4 sm:p-5">
+                <CompanyInlineEditor lead={lead} />
+                <div className="mt-4 flex flex-wrap gap-2"><CompanyTaskButton lead={lead} /><CompanyGoogleProfileButton lead={lead} /></div>
+              </SectionCard>
             ) : (
               <details className={`group rounded-2xl ${GLASS_SUBTLE_CLASS}`} data-testid="lead-details-collapsed">
                 <summary className="flex min-h-12 cursor-pointer list-none items-center gap-2 px-4 text-sm font-semibold text-white/80 [&::-webkit-details-marker]:hidden">
@@ -226,7 +230,10 @@ export function LeadDetailPane({ lead, pieces, visits, onClose, backLabel, onDel
                   <span className="min-w-0 flex-1">{t("sectionDetails")}</span>
                   <ChevronDown className="h-4 w-4 text-white/40 transition-transform group-open:rotate-180" aria-hidden="true" />
                 </summary>
-                <div className="px-4 pb-4"><CompanyInlineEditor lead={lead} /></div>
+                <div className="px-4 pb-4">
+                  <CompanyInlineEditor lead={lead} />
+                  <div className="mt-4 flex flex-wrap gap-2"><CompanyTaskButton lead={lead} /><CompanyGoogleProfileButton lead={lead} /></div>
+                </div>
               </details>
             )}
           </div>
