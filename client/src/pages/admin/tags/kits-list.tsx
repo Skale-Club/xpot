@@ -19,6 +19,7 @@ import { usePieces } from "./batches-shared";
 import { Loading, LoadError } from "./pieces-shared";
 import { PieceTable } from "./piece-table";
 import { useTagLabels } from "./labels";
+import { describeGroups, useStockLabel, type StockDestination } from "./take-back-destination";
 import { ListPager, usePagedList } from "@/components/xpot/pagination";
 import { useT } from "@/i18n";
 import { commonMessages } from "@/i18n/messages/common";
@@ -26,17 +27,18 @@ import { manageTagsMessages } from "@/i18n/messages/manageTags";
 import { manageTagsBatchesMessages } from "@/i18n/messages/manageTagsBatches";
 import { adminTagsFlowMessages } from "@/i18n/messages/adminTagsFlow";
 
-/** Send unsold pieces back to house stock. Sold pieces are refused by the server (409). */
+/** Send unsold pieces back to the stock of the organization their kit came from. Sold pieces are refused by the server (409). */
 export function useReturnToHouse(onDone?: (returned: number) => void) {
   const { toast } = useToast();
   const t = useT(manageTagsBatchesMessages);
+  const stockLabel = useStockLabel();
   return useMutation({
     mutationFn: (codes: string[]) =>
-      sendJson<{ returned: number; alreadyInHouse: string[] }>("POST", "/api/xpot/admin/tag-kits/return", { codes }),
-    onSuccess: ({ returned, alreadyInHouse }) => {
+      sendJson<{ returned: number; alreadyInHouse: string[]; to: Array<StockDestination & { count: number }> }>("POST", "/api/xpot/admin/tag-kits/return", { codes }),
+    onSuccess: ({ returned, alreadyInHouse, to }) => {
       void invalidateAdminTags();
       const home = alreadyInHouse.length ? ` ${t("alreadyInHouse", { codes: alreadyInHouse.join(", ") })}` : "";
-      toast({ title: t("backInHouse"), description: `${t.plural("returnedCount", returned)}${home}` });
+      toast({ title: to.length ? t("backInHouse", { stock: describeGroups(to, stockLabel) }) : t("nothingToReturn"), description: `${t.plural("returnedCount", returned)}${home}` });
       onDone?.(returned);
     },
     onError: (err) => toast({ title: t("couldNotReturn"), description: errorMessage(err), variant: "destructive" }),
@@ -123,8 +125,17 @@ export function PackingListDialog({ kit, onOpenChange }: { kit: TagKitItem | nul
   );
 }
 
+/** The confirmation's text for a purchased kit: taking it back does not give the reseller's money back. */
+function BoughtNote({ kit }: { kit: TagKitItem }) {
+  const t = useT(manageTagsBatchesMessages);
+  if (kit.ownershipType !== "rep") return null;
+  return <span className="mt-2 block font-medium text-amber-200" data-testid="return-bought-note">{t("returnBoughtNote", { name: kit.repName ?? t("resellerNumber", { id: kit.repId }) })}</span>;
+}
+
 function KitPieces({ kit, go }: { kit: TagKitItem; go: (path: string) => void }) {
   const t = useT(manageTagsBatchesMessages);
+  const tf = useT(adminTagsFlowMessages);
+  const stock = useStockLabel()(kit.takeBackTo);
   const { data: pieces = [], isLoading, error, refetch } = usePieces({ kitId: kit.id });
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [confirm, setConfirm] = useState(false);
@@ -159,7 +170,7 @@ function KitPieces({ kit, go }: { kit: TagKitItem; go: (path: string) => void })
       />
       {pieces.some(returnable) && (
         <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
-          <p className="text-xs text-white/40">{t("tickToReturn")}</p>
+          <p className="text-xs text-white/40">{t("tickToReturn", { stock })}</p>
           <Button type="button" variant="secondary" disabled={codes.length === 0 || ret.isPending} onClick={() => setConfirm(true)}>
             <Undo2 className="h-4 w-4" />
             {codes.length ? t.plural("returnSelected", codes.length) : t("returnSelectedNone")}
@@ -171,8 +182,8 @@ function KitPieces({ kit, go }: { kit: TagKitItem; go: (path: string) => void })
         open={confirm}
         onOpenChange={setConfirm}
         title={t.plural("returnConfirmTitle", codes.length)}
-        description={kit.repName ? t("leaveKit", { name: kit.repName }) : t("leaveKitNoName")}
-        confirmLabel={t("returnToHouse")}
+        description={<>{kit.repName ? t("leaveKit", { name: kit.repName, stock }) : t("leaveKitNoName", { stock })}<BoughtNote kit={kit} /></>}
+        confirmLabel={tf("takeBackNone")}
         busy={ret.isPending}
         onConfirm={() => ret.mutate(codes)}
       />
@@ -208,6 +219,7 @@ function KitRow({ kit, go }: { kit: TagKitItem; go: (path: string) => void }) {
   const { toast } = useToast();
   const t = useT(manageTagsBatchesMessages);
   const tf = useT(adminTagsFlowMessages);
+  const stock = useStockLabel()(kit.takeBackTo);
   const ret = useReturnToHouse(() => setConfirm(false));
   // Unsold set-up pieces (a customer or a link) cannot go back until the customer is removed.
   const blockedBySetup = kit.unsoldCount > 0 && kit.returnableCount === 0;
@@ -246,7 +258,7 @@ function KitRow({ kit, go }: { kit: TagKitItem; go: (path: string) => void }) {
               <span className="font-mono text-violet-200" data-testid="kit-code">{kit.kitCode}</span>
               <span className="truncate">{kit.repName ?? t("resellerNumber", { id: kit.repId })}</span>
               {kit.ownershipType ? (
-                <Pill tone="slate" className="font-medium">{kit.ownershipType === "rep" ? tf("ownershipRep") : tf("ownershipCompany")}</Pill>
+                <Pill tone="slate" className="font-medium">{kit.ownershipType === "rep" ? tf("kitBought") : tf("ownershipCompany")}</Pill>
               ) : null}
             </p>
             <p className="truncate text-xs text-white/40">
@@ -271,7 +283,7 @@ function KitRow({ kit, go }: { kit: TagKitItem; go: (path: string) => void }) {
             aria-label={t("returnUnsold")}
             disabled={kit.returnableCount === 0 || ret.isPending || loadingCodes}
             onClick={() => setConfirm(true)}
-            title={blockedBySetup ? t("returnBlockedSetUp") : kit.returnableCount === 0 ? t("nothingToReturnDesc") : t("returnUnsoldTitle")}
+            title={blockedBySetup ? t("returnBlockedSetUp") : kit.returnableCount === 0 ? t("nothingToReturnDesc") : t("returnUnsoldTitle", { stock })}
           >
             <Undo2 className="h-4 w-4" />
             <span className="hidden sm:inline">{t("returnUnsold")}</span>
@@ -284,11 +296,14 @@ function KitRow({ kit, go }: { kit: TagKitItem; go: (path: string) => void }) {
         accent="tags"
         open={confirm}
         onOpenChange={setConfirm}
-        title={t("returnUnsoldConfirmTitle")}
+        title={t("returnUnsoldConfirmTitle", { stock })}
         description={
-          kit.repName
-            ? t.plural("returnUnsoldDesc", kit.returnableCount, { name: kit.repName })
-            : t.plural("returnUnsoldDescNoName", kit.returnableCount)
+          <>
+            {kit.repName
+              ? t.plural("returnUnsoldDesc", kit.returnableCount, { name: kit.repName, stock })
+              : t.plural("returnUnsoldDescNoName", kit.returnableCount, { stock })}
+            <BoughtNote kit={kit} />
+          </>
         }
         confirmLabel={t("returnUnsold")}
         busy={ret.isPending || loadingCodes}

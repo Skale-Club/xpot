@@ -11,11 +11,12 @@ import { readCode } from "./batches-model";
 import { CodeCheckList, useCodeCheck } from "./code-check-list";
 import { useReturnToHouse } from "./kits-list";
 import { CameraButton, CodeEntry, ContinuousCamera, feedback } from "./scan-station";
+import { describeGroups, destinationGroups, useStockLabel } from "./take-back-destination";
 
 /**
  * Distribution › Take back: a scan station for pieces a reseller hands back. Each code read or typed joins the list
- * with the server's answer (can it come back, and why not: "set up: remove the customer first", "sold", "not with a
- * reseller"); one action then takes back every piece that can.
+ * with the server's answer (can it come back, and whose stock it goes into, or why not: "set up: remove the customer
+ * first", "sold", "not with a reseller"); one action then takes back every piece that can.
  */
 export function ReturnsStation() {
   const t = useT(adminTagsFlowMessages);
@@ -27,6 +28,11 @@ export function ReturnsStation() {
   const check = useCodeCheck("takeBack", codes);
   const okCodes = useMemo(() => codes.filter((code) => check.data?.items.find((i) => i.code === code)?.ok), [codes, check.data]);
   const checked = !check.isFetching && !!check.data && codes.every((code) => check.data!.items.some((i) => i.code === code));
+  const stockLabel = useStockLabel();
+  const okItems = (check.data?.items ?? []).filter((i) => i.ok && okCodes.includes(i.code));
+  const where = describeGroups(destinationGroups(okItems.map((i) => i.goesTo)), stockLabel);
+  // Pieces a reseller bought are theirs: taking them back settles no money.
+  const boughtBy = Array.from(new Set(okItems.filter((i) => i.bought && i.repName).map((i) => i.repName!)));
   const ret = useReturnToHouse(() => {
     setConfirm(false);
     setCodes((list) => list.filter((code) => !okCodes.includes(code)));
@@ -86,21 +92,27 @@ export function ReturnsStation() {
         onClear={() => setCodes([])}
         testId="returns-code-list"
       />
-      {/* Above the phone's tab bar (components/xpot/MobileTabBar.tsx), at the bottom on desktop. */}
-      <div className="sticky bottom-[calc(env(safe-area-inset-bottom)+96px)] z-10 -mx-1 flex justify-end bg-gradient-to-t from-background via-background/90 to-transparent px-1 pb-1 pt-4 lg:bottom-0">
-
-        <Button type="button" variant="brand" accent="tags" disabled={!okCodes.length || !checked || ret.isPending} onClick={() => setConfirm(true)} data-testid="returns-take-back">
-          <Undo2 className="h-4 w-4" />
-          {okCodes.length ? t.plural("takeBackN", okCodes.length) : t("takeBackNone")}
-        </Button>
-      </div>
+      {/* Only when something can come back. Above the phone's tab bar (components/xpot/MobileTabBar.tsx), at the bottom on desktop. */}
+      {okCodes.length > 0 ? (
+        <div className="sticky bottom-[calc(env(safe-area-inset-bottom)+96px)] z-10 -mx-1 flex justify-end bg-gradient-to-t from-background via-background/90 to-transparent px-1 pb-1 pt-4 lg:bottom-0">
+          <Button type="button" variant="brand" accent="tags" disabled={!checked || ret.isPending} onClick={() => setConfirm(true)} data-testid="returns-take-back">
+            <Undo2 className="h-4 w-4" />
+            {t.plural("takeBackN", okCodes.length)}
+          </Button>
+        </div>
+      ) : null}
       <ConfirmDialog
         accent="tags"
         open={confirm}
         onOpenChange={setConfirm}
         title={tb.plural("returnConfirmTitle", okCodes.length)}
-        description={t("takeBackDesc")}
-        confirmLabel={tb("returnToHouse")}
+        description={
+          <>
+            {t("takeBackDesc", { stock: where })}
+            {boughtBy.length ? <span className="mt-2 block font-medium text-amber-200" data-testid="return-bought-note">{tb("returnBoughtNote", { name: boughtBy.join(", ") })}</span> : null}
+          </>
+        }
+        confirmLabel={t("takeBackNone")}
         busy={ret.isPending}
         onConfirm={() => ret.mutate(okCodes)}
       />

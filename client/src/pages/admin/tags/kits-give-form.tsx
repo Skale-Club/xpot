@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useMutation } from "@tanstack/react-query";
-import { Building2, Layers, PackagePlus, ScanLine, ShoppingBag, Type } from "lucide-react";
+import { Building2, ChevronRight, Layers, PackagePlus, ScanLine, ShoppingBag, Type } from "lucide-react";
 import type { TagKitItem } from "@shared/tagsApi";
 import type { DistributionCheck } from "@shared/tagDistribution";
 import { receiveBlockers } from "@shared/tagDistribution";
@@ -83,20 +83,16 @@ function Step({ n, title, done, disabled, children, testId }: { n: number; title
   );
 }
 
-/** What the chosen reseller's cost rule means, and whether they can receive pieces now. */
+/** What stops the chosen person from receiving pieces now; nothing at all in the normal case. */
 function ResellerCard({ rep }: { rep: Reseller }) {
   const t = useT(adminTagsFlowMessages);
   const ts = useT(shellMessages);
   const blockers = receiveBlockers(rep);
   const configured = !!rep.costPolicyConfiguredAt;
+  if (configured && blockers.length === 0) return null;
   return (
     <div className="mt-3 space-y-2" data-testid="handout-reseller-card">
-      <div className="flex flex-wrap items-center gap-2 text-sm">
-        <Pill tone="violet">{rep.costPolicy === "zero" ? t("policyZero") : t("policyAcquisition")}</Pill>
-        {!configured ? <Pill tone="amber">{t("policyNotSet")}</Pill> : null}
-        {blockers.length === 0 ? <Pill tone="slate">{t("canReceive")}</Pill> : null}
-      </div>
-      <p className="text-xs text-white/50">{rep.costPolicy === "zero" ? t("policyZeroHint") : t("policyAcquisitionHint")}</p>
+      {!configured ? <Pill tone="amber">{t("policyNotSet")}</Pill> : null}
       {blockers.map((b) => (
         <InlineAlert key={b} tone={b === "tags_off" ? "warning" : "error"}>
           {t(RECEIVE_BLOCKER_KEYS[b], { name: rep.displayName, screen: ts("orgPeople") })}
@@ -125,6 +121,7 @@ export function HandOutFlow() {
   const [ownershipChoice, setOwnershipChoice] = useState<KitOwnership | null>(null);
   const [unitCost, setUnitCost] = useState("");
   const [note, setNote] = useState("");
+  const priceRef = useRef<HTMLInputElement>(null);
   const [mode, setMode] = useState<PieceMode>(url.values.batch ? "batch" : "scan");
   const [camera, setCamera] = useState(false);
   const [codes, setCodes] = useState<string[]>([]);
@@ -140,12 +137,16 @@ export function HandOutFlow() {
   useEffect(() => setOwnershipChoice(null), [repId]);
   const ownership: KitOwnership = ownershipChoice ?? kitOwnership(policy);
   const costRequired = kitCostRequired(policy, ownership);
-  const cost = parseKitUnitCost(unitCost, costRequired);
+  // A price typed for a purchase is not kept when the choice goes back to "they pay when they sell".
+  const cost = parseKitUnitCost(costRequired ? unitCost : "", costRequired);
   const blockers = rep ? receiveBlockers(rep).filter((b) => b !== "tags_off") : [];
+  const repName = rep?.displayName ?? "";
 
   const check = useCodeCheck("handOut", codes);
   const okCodes = useMemo(() => codes.filter((code) => check.data?.items.find((i) => i.code === code)?.ok), [codes, check.data]);
   const checked = !check.isFetching && !!check.data && codes.every((code) => check.data!.items.some((i) => i.code === code));
+  // The price is only asked for once there is something to hand out; then it is the one thing missing.
+  const needPrice = !!rep && blockers.length === 0 && okCodes.length > 0 && !cost.ok && cost.reason === "required";
 
   const batchOptions = batches.filter((b) => b.handOutCount > 0 || b.id === batchId);
   const chosenBatch = batches.find((b) => b.id === batchId) ?? null;
@@ -206,12 +207,11 @@ export function HandOutFlow() {
 
   const left = codes.length - okCodes.length;
   const ready = !!rep && blockers.length === 0 && cost.ok && okCodes.length > 0 && checked && !give.isPending;
-  const repName = rep?.displayName ?? "";
 
   return (
     <div className="space-y-3" data-testid="admin-tags-hand-out">
       <Step n={1} title={t("stepReseller")} done={!!rep} testId="handout-step-reseller">
-        <Field label={tm("colReseller")}>
+        <Field label={<span className="sr-only">{tm("colReseller")}</span>}>
           <ResellerSelect value={repId} onChange={setRepId} />
         </Field>
         {rep ? <ResellerCard rep={rep} /> : null}
@@ -228,18 +228,22 @@ export function HandOutFlow() {
                 <input type="radio" name="ownership" value={value} checked={ownership === value} onChange={() => setOwnershipChoice(value)} className="h-4 w-4 accent-violet-500" />
                 {value === "company" ? <Building2 className="h-4 w-4 text-white/50" /> : <ShoppingBag className="h-4 w-4 text-white/50" />}
                 {value === "company" ? t("ownershipCompany") : t("ownershipRep")}
-                {value === kitOwnership(policy) ? <span className="text-xs font-normal text-white/40">{t("ownershipDefault")}</span> : null}
+                {value === kitOwnership(policy) ? <span className="text-xs font-normal text-white/40">{t("ownershipDefault", { name: repName })}</span> : null}
               </span>
-              <span className="mt-1 block text-xs text-white/45">{value === "company" ? t("ownershipCompanyHint") : t("ownershipRepHint")}</span>
+              <span className="mt-1 block text-xs text-white/45">
+                {value === "company" ? (kitCostRequired(policy, "company") ? t("ownershipCompanyNeedsPrice", { name: repName }) : t("ownershipCompanyHint")) : t("ownershipRepHint")}
+              </span>
             </label>
           ))}
         </div>
-        <div className="mt-3 grid gap-3 sm:grid-cols-2">
+        {costRequired ? (
           <Field
-            label={`${tb(costRequired ? "fieldUnitCost" : "fieldUnitCostOptional")} (${KIT_COST_CURRENCY})`}
-            hint={!cost.ok && cost.reason === "invalid" ? <span className="text-red-300">{tb("unitCostInvalid")}</span> : t(costRequired ? "costRequiredHint" : "costOptionalHint")}
+            className="mt-3 sm:max-w-xs"
+            label={`${t("pricePerPiece")} (${KIT_COST_CURRENCY})`}
+            error={!cost.ok && cost.reason === "invalid" ? tb("unitCostInvalid") : needPrice ? t("costMissing") : undefined}
           >
             <Input
+              ref={priceRef}
               type="number"
               min="0"
               step="0.01"
@@ -247,15 +251,12 @@ export function HandOutFlow() {
               value={unitCost}
               onChange={(e) => setUnitCost(e.target.value)}
               placeholder="0.00"
-              required={costRequired}
+              required
               className="tabular-nums"
               data-testid="input-kit-unit-cost"
             />
           </Field>
-          <Field label={tb("fieldNoteOptional")} hint={tb("noteHint")}>
-            <Input value={note} onChange={(e) => setNote(e.target.value)} maxLength={500} placeholder={tb("notePlaceholder")} />
-          </Field>
-        </div>
+        ) : null}
       </Step>
 
       <Step n={3} title={t("stepPieces")} done={okCodes.length > 0} disabled={!rep} testId="handout-step-pieces">
@@ -365,13 +366,21 @@ export function HandOutFlow() {
               {left > 0 ? <span className={MODULE_ACCENT.tags.text}>{` · ${t.plural("confirmLeftOut", left)}`}</span> : null}
             </p>
           </div>
-          <Button type="button" variant="brand" accent="tags" disabled={!ready} loading={give.isPending} onClick={() => give.mutate()} data-testid="admin-tags-give-kit-submit">
+          {/* Without the price the button says what is missing and takes the person to it. */}
+          <Button type="button" variant="brand" accent="tags" disabled={!ready && !needPrice} loading={give.isPending}
+            onClick={() => (needPrice ? priceRef.current?.focus() : give.mutate())} data-testid="admin-tags-give-kit-submit">
             <PackagePlus className="h-4 w-4" />
-            {okCodes.length ? t.plural("confirmButton", okCodes.length, { name: repName }) : t("confirmButtonNone")}
+            {needPrice ? t("costMissing") : okCodes.length ? t.plural("confirmButton", okCodes.length, { name: repName }) : t("confirmButtonNone")}
           </Button>
         </div>
         {blockers.length > 0 ? <p className="mt-2 text-xs text-red-300">{t("cannotReceive", { name: repName })}</p> : null}
-        {!cost.ok && cost.reason === "required" ? <p className="mt-2 text-xs text-amber-300">{t("costMissing")}</p> : null}
+        <details className="group mt-3">
+          <summary className="flex min-h-11 cursor-pointer list-none items-center gap-1.5 text-xs font-semibold text-white/60 [&::-webkit-details-marker]:hidden">
+            <ChevronRight className="h-3.5 w-3.5 transition-transform group-open:rotate-90" aria-hidden="true" />
+            {tb("fieldNoteOptional")}
+          </summary>
+          <Input value={note} onChange={(e) => setNote(e.target.value)} maxLength={500} placeholder={tb("notePlaceholder")} aria-label={tb("fieldNoteOptional")} className="mt-1 sm:max-w-md" />
+        </details>
       </Step>
 
       <PackingListDialog kit={packing} onOpenChange={(open) => { if (!open) setPacking(null); }} />
