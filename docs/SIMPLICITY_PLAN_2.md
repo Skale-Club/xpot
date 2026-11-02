@@ -75,3 +75,14 @@ Combinado: não esperar. Cada uma segue a recomendação do achado e pode ser de
 
 - **Privacidade:** qual contato publicar, e revisão jurídica da política (RCP-8, RCP-27).
 - O restante de decisões menores fica registrado em cada PR.
+
+## Resultado até agora
+
+| Rodada | Achados | Fechados | Onde |
+|---|---|---|---|
+| 1 | 45 S1, 149 S2, 99 S3, 33 S4 | 7 frentes, mais uma para o que ficou entre elas | `docs/simplicity/*.md` |
+| 2 | 19 S1, 82 S2, 64 S3, 19 S4 | S1: 19 de 19. S2: 78 de 82. S3: 7 de 64. S4: 2 de 19 | `docs/simplicity/rodada-2/` |
+
+Os S2 abertos da rodada 2 são do dono ou estão feitos em parte: R2-PE-19, R2-PE-24, R2-RCP-8, R2-RCP-9. Os S3 e S4 da rodada 2 ficaram para depois, de propósito, para conter o custo.
+
+Critério ainda não cumprido: nenhuma tela principal abaixo de 8. Não houve nova auditoria completa depois da rodada 2, só verificação por cliques.
