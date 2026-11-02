@@ -15,15 +15,14 @@ import { apiRequest } from "@/lib/queryClient";
 import { useT } from "@/i18n";
 import { commonMessages } from "@/i18n/messages/common";
 import { tagsMessages } from "@/i18n/messages/tags";
-import { pieceCustodyMessages } from "@/i18n/messages/pieceCustody";
 import { manageTagsPiecesMessages } from "@/i18n/messages/manageTagsPieces";
 import LeadPicker, { leadPayload, type LeadChoice } from "@/pages/tags/LeadPicker";
 import { GenerateReviewButton, ReviewLinkAssist } from "@/pages/tags/ReviewLinkSheet";
 import { ContentEditor, type ContentState } from "@/pages/tags/ContentEditor";
 import { errorText, getSellTo, haptic, shortUrl } from "@/pages/tags/lib";
 import { BottomSheet, CARD_ACCENT, CopyButton, EYEBROW, FieldLabel, INPUT_ACCENT, LinkInput, SheetActions } from "@/pages/tags/ui";
-import { usePiece, usePieceWrite } from "./PieceContext";
-import { pieceActionUrl, type PieceAction } from "./pieceView";
+import { usePiece, usePieceWrite, type PieceCommandsRef } from "./PieceContext";
+import { pieceActionUrl, pieceSituation, type PieceAction } from "./pieceView";
 
 // Customer & destination: whose piece it is, where a scan or tap sends people,
 // and whether it is live. One editor and one save for both screens: the reseller
@@ -38,10 +37,12 @@ const KIND_ICON = { url: Link2, email: Mail, phone: Phone, vcard: Contact } as c
 /** Lifecycle confirms: title, description and button are manageTagsPieces action_<action>_*. */
 type ConfirmAction = Extract<PieceAction, "activate" | "disable" | "unassign">;
 
-export function CustomerDestinationSection() {
+export function CustomerDestinationSection({ commands }: {
+  /** The body's main action button starts set-up and go-live from here (PieceCommands). */
+  commands?: PieceCommandsRef;
+}) {
   const { tag, viewer, notify, banner, refresh } = usePiece();
   const t = useT(tagsMessages);
-  const tcu = useT(pieceCustodyMessages);
   const tc = useT(commonMessages);
   const tm = useT(manageTagsPiecesMessages);
   const qc = useQueryClient();
@@ -220,6 +221,14 @@ export function CustomerDestinationSection() {
   const activatePlan = planTransition(tag, "activate");
   const canToggle = !retired && (live || (activatePlan.ok && (paused || tag.status === "assigned")));
   const canClearCustomer = !retired && !!tag.leadId && planTransition(tag, "unassign").ok;
+  // The body's main button carries set-up and go-live, so this section does not repeat them.
+  const mainAction = commands ? pieceSituation(tag, viewer).action?.kind : undefined;
+  const showToggle = canToggle && mainAction !== "goLive" && mainAction !== "reactivate";
+  useEffect(() => {
+    if (!commands) return;
+    commands.current.configure = () => openEditor(false);
+    commands.current.toggle = () => void toggle();
+  });
   const holderNote = tag.repId !== null
     ? tm("activateHolderRep", { name: tag.repName ?? tm("resellerNumber", { id: tag.repId }) })
     : tm("activateHolderHouse");
@@ -301,17 +310,14 @@ export function CustomerDestinationSection() {
       ) : (
         <>
           <p className="mt-2 text-lg font-bold text-white/55">{t("notYetWritten")}</p>
-          {/* The server refuses setting up a piece that is not in stock (shared/tags.ts planTransition). */}
-          {stock && (
+          {/* A piece not in stock yet says so in the header: no warning here, and no button that cannot work. */}
+          {stock && stock !== "pending" && (
             <div className="mt-2" data-testid="text-stock-blocked">
-              <InlineAlert tone="warning">
-                {/* The custody card above receives it (shared/tagCustody.ts): say so instead of "ask the admin". */}
-                {stock === "pending" && tag.custody?.receive && !tag.custody.receive.blocker ? tcu("pendingReceiveFirst") : t(`stockBlocked_${stock}`)}
-              </InlineAlert>
+              <InlineAlert tone="warning">{t(`stockBlocked_${stock}`)}</InlineAlert>
             </div>
           )}
-          {!retired && (
-            <Button type="button" variant="brand" accent="tags" size="lg" onClick={() => openEditor(false)} disabled={!!stock} className="mt-3 w-full" data-testid="button-setup-piece">
+          {!retired && !stock && mainAction !== "configure" && (
+            <Button type="button" variant="brand" accent="tags" size="lg" onClick={() => openEditor(false)} className="mt-3 w-full" data-testid="button-setup-piece">
               <Settings2 className="!size-5" />
               {t("configurePiece")}
             </Button>
@@ -320,9 +326,9 @@ export function CustomerDestinationSection() {
       )}
 
       {/* Live or not, and the customer: the same verbs on both screens. */}
-      {(canToggle || canClearCustomer || (tag.leadId && tag.saleId !== null)) && (
+      {(showToggle || canClearCustomer || (tag.leadId && tag.saleId !== null)) && (
         <div className="mt-3 flex flex-col gap-2 border-t border-white/[0.08] pt-3 sm:flex-row sm:flex-wrap">
-          {canToggle && (
+          {showToggle && (
             <Button type="button" variant="secondary" onClick={() => void toggle()} loading={toggling} disabled={toggling} className="w-full sm:w-auto" data-testid="button-toggle">
               <Power className={`!size-4 ${live ? "text-red-400" : "text-emerald-400"}`} />
               {live ? t("switchOff") : paused ? t("switchOn") : tm("action_activate_confirm")}

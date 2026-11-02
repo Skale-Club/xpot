@@ -9,7 +9,7 @@ import { EmptyState, ErrorState } from "@/components/xpot/EmptyState";
 import { useXpotModules } from "@/components/ModuleSwitch";
 import { PieceBody } from "@/components/piece/PieceBody";
 import { invalidatePieceViews, pieceSend, PieceProvider, type PieceContextValue } from "@/components/piece/PieceContext";
-import { PieceFacts, PieceModelLine, PieceStatusChips } from "@/components/piece/PieceHeader";
+import { PieceFacts, PieceModelLine, PieceSituationPill } from "@/components/piece/PieceHeader";
 import type { PieceViewer } from "@/components/piece/pieceView";
 import { useViewerAccess } from "@/lib/adminMode";
 import { useT } from "@/i18n";
@@ -174,7 +174,7 @@ export default function TagScreen({ code, onClose }: {
         sub={<PieceModelLine tag={tag} />}
       />
       <div className="-mt-1 mb-3 space-y-2" data-testid="piece-header">
-        <PieceStatusChips tag={tag} />
+        <PieceSituationPill />
         <PieceFacts tag={tag} />
       </div>
       <Banner banner={banner} />

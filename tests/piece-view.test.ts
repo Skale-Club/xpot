@@ -10,6 +10,7 @@ import {
   pieceIsSold,
   pieceLocation,
   pieceSections,
+  pieceSituation,
   pieceStatusChips,
   type PieceViewer,
 } from "../client/src/components/piece/pieceView";
@@ -204,5 +205,57 @@ describe("canCancelPieceSale", () => {
     expect(canCancelPieceSale({ ...seller, repId: 2 }, ownSale)).toBe(false);
     expect(canCancelPieceSale({ ...seller, repId: null }, ownSale)).toBe(false);
     expect(canCancelPieceSale(seller, undefined)).toBe(false);
+  });
+});
+
+describe("pieceSituation", () => {
+  const rep: PieceViewer = { surface: "field", canManage: false, isAdmin: false, hasVisits: false };
+  const manager: PieceViewer = { ...rep, canManage: true };
+  const admin: PieceViewer = { surface: "admin", canManage: true, isAdmin: true, hasVisits: true };
+  const base = {
+    status: "inventory", stockStatus: "available", nfcStatus: "not_programmed", saleId: null as number | null,
+    leadId: null as number | null, destinationUrl: null as string | null, destinationType: null as string | null,
+    batchId: null as string | null,
+  };
+  const set = { leadId: 4, destinationUrl: "https://a.test", destinationType: "website" };
+  const receivable = { receive: { targets: ["me" as const], blocker: null } };
+  const blocked = { receive: { targets: ["me" as const], blocker: "batch_closed" as const } };
+
+  const cases: Array<[string, Partial<typeof base> & { custody?: unknown }, PieceViewer, string, string, string | null]> = [
+    // [name, piece, viewer, key, tone, action]
+    ["damaged stock", { stockStatus: "damaged", status: "assigned", ...set }, rep, "damaged", "red", null],
+    ["lost stock", { stockStatus: "lost" }, admin, "lost", "red", null],
+    ["retired status", { status: "retired" }, rep, "retired", "muted", null],
+    ["retired stock", { stockStatus: "retired" }, rep, "retired", "muted", null],
+    ["a piece damaged and sold is damaged", { stockStatus: "damaged", saleId: 3 }, rep, "damaged", "red", null],
+    ["sale recorded", { status: "active", stockStatus: "sold", saleId: 9, ...set }, rep, "sold", "blue", null],
+    ["sale beats pending", { stockStatus: "pending", saleId: 9 }, rep, "sold", "blue", null],
+    ["pending, reseller who may receive", { stockStatus: "pending", custody: receivable }, rep, "pending", "amber", "receive"],
+    ["pending, receive blocked", { stockStatus: "pending", custody: blocked }, rep, "pending", "amber", null],
+    ["pending, no custody data", { stockStatus: "pending" }, rep, "pending", "amber", null],
+    ["pending, admin with a batch", { stockStatus: "pending", batchId: "b-1", custody: receivable }, admin, "pending", "amber", "openPrint"],
+    ["pending, admin without a batch falls back to receive", { stockStatus: "pending", custody: receivable }, admin, "pending", "amber", "receive"],
+    ["pending, manager who is not admin has no print screen", { stockStatus: "pending", batchId: "b-1" }, manager, "pending", "amber", null],
+    ["live", { status: "active", ...set }, rep, "live", "green", "viewPerformance"],
+    ["paused", { status: "disabled", ...set }, rep, "paused", "amber", "reactivate"],
+    ["paused but activation blocked: no action", { status: "disabled", leadId: 4 }, rep, "paused", "amber", null],
+    ["assigned, chip not written", { status: "assigned", nfcStatus: "not_programmed", ...set }, rep, "readyNoChip", "amber", "writeChip"],
+    ["assigned, chip write failed", { status: "assigned", nfcStatus: "failed", ...set }, rep, "readyNoChip", "amber", "writeChip"],
+    ["assigned, chip written", { status: "assigned", nfcStatus: "programmed", ...set }, rep, "readyOffline", "sky", "goLive"],
+    ["assigned, chip verified", { status: "assigned", nfcStatus: "verified", ...set }, rep, "readyOffline", "sky", "goLive"],
+    ["assigned, chip locked", { status: "assigned", nfcStatus: "locked", ...set }, rep, "readyOffline", "sky", "goLive"],
+    ["assigned but no link: go live is not offered", { status: "assigned", nfcStatus: "verified", leadId: 4 }, rep, "readyOffline", "sky", null],
+    ["in stock, no customer", { status: "inventory", stockStatus: "available" }, rep, "inStock", "slate", "configure"],
+    ["reserved stock is not offered for set-up", { status: "inventory", stockStatus: "reserved" }, rep, "other", "slate", null],
+    ["unknown status does not break", { status: "weird", stockStatus: "weird", nfcStatus: "weird" }, rep, "other", "slate", null],
+  ];
+  it.each(cases)("%s", (_name, piece, viewer, key, tone, action) => {
+    const got = pieceSituation({ ...base, ...piece } as Parameters<typeof pieceSituation>[0], viewer);
+    expect([got.key, got.tone, got.action?.kind ?? null]).toEqual([key, tone, action]);
+  });
+
+  it("links the print action to the batch page", () => {
+    const got = pieceSituation({ ...base, stockStatus: "pending", batchId: "b 1" }, admin);
+    expect(got.action).toEqual({ kind: "openPrint", href: "/admin/tags/batches/b%201" });
   });
 });

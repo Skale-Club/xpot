@@ -23,6 +23,20 @@ export interface PieceContextValue {
   banner?: BannerState;
 }
 
+/**
+ * What the main action button can start in the sections below it. Each section that owns one fills
+ * its entry on render; the body calls it. A ref object passed down as a prop, not shared state.
+ */
+export interface PieceCommands {
+  /** Open the set-up editor (customer and link). */
+  configure?: () => void;
+  /** Put live / pause: the same step as the section's own toggle. */
+  toggle?: () => void;
+  /** Start writing the chip (or open its steps). */
+  writeChip?: () => void;
+}
+export type PieceCommandsRef = { current: PieceCommands };
+
 const PieceContext = createContext<PieceContextValue | null>(null);
 
 export function PieceProvider({ value, children }: { value: PieceContextValue; children: ReactNode }) {
