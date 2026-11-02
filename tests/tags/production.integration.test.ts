@@ -624,7 +624,7 @@ describe("which NFC goes inside", () => {
   async function choiceModel(app: express.Express) {
     for (const slug of ["nfc-sticker-round-25", "nfc-sticker-10x20", "nfc-tag-round-25"]) {
       await request(app, "POST", "/api/xpot/admin/print-models", { slug, kind: "part", title: slug, version: { beds: [{ label: "bought", copies: 1 }] } });
-      await request(app, "POST", `/api/xpot/admin/print-models/${slug}/part-count`, { delta: 10, reason: "bought" });
+      await request(app, "POST", `/api/xpot/admin/print-models/${slug}/part-count`, { delta: 10, reason: "printed" });
     }
     const created = await request(app, "POST", "/api/xpot/admin/print-models", {
       slug: "plate-large-menu-white", kind: "serialized", title: "Plate Large · Menu · White", productType: "large_plate", face: "menu", theme: "white",
