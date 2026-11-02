@@ -1,5 +1,6 @@
 import { useQuery, keepPreviousData } from "@tanstack/react-query";
 import { ListChecks, X } from "lucide-react";
+import type { AcquisitionCheck } from "@shared/tagAcquisition";
 import type { DistributionCheck, DistributionCheckItem } from "@shared/tagDistribution";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/xpot/EmptyState";
@@ -28,6 +29,17 @@ export function useCodeCheck(kind: CheckKind, codes: readonly string[]) {
   return useQuery<DistributionCheck>({
     queryKey: [ADMIN_TAGS_KEY, "code-check", kind, codes.join(",")],
     queryFn: () => sendJson("POST", CHECK_URL[kind], { codes }),
+    enabled: codes.length > 0,
+    placeholderData: keepPreviousData,
+    staleTime: 5_000,
+  });
+}
+
+/** The dry run of a wholesale order's list: Hand out's answer, plus whether each piece belongs to the order. */
+export function useOrderCheck(orderId: string, codes: readonly string[]) {
+  return useQuery<AcquisitionCheck>({
+    queryKey: [ADMIN_TAGS_KEY, "code-check", "order", orderId, codes.join(",")],
+    queryFn: () => sendJson("POST", `/api/xpot/admin/tag-acquisitions/${orderId}/check`, { codes }),
     enabled: codes.length > 0,
     placeholderData: keepPreviousData,
     staleTime: 5_000,
@@ -114,7 +126,7 @@ export function CodeCheckList({
                   </Pill>
                 ) : (
                   <Pill tone={item.reason === "unknown" ? "red" : "amber"} className="!whitespace-normal text-left">
-                    {key ? t(key, { name: item.repName ?? "" }) : item.reason}
+                    {key ? t(key, { name: item.repName ?? "", product: labels.product(item.productType) }) : item.reason}
                   </Pill>
                 )}
               </span>

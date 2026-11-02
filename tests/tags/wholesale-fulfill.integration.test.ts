@@ -69,6 +69,15 @@ test.skipIf(!enabled)("wholesale orders: separating an order moves the pieces to
       const intake = await api("POST", `/api/xpot/admin/tag-batches/${batch.json.id}/scan`, { value: code, idempotencyKey: `wf-${code}` });
       assert.equal(intake.status, 201, intake.text);
     }
+    // A piece of another product (the order below does not have it).
+    const other = await one<{ id: number }>(sql`INSERT INTO sales_products (sku, name, kind, base_price_cents, is_active)
+      VALUES ('WF-TAGS-STAND', 'WF stand', 'physical', 4000, true)
+      ON CONFLICT (sku) DO UPDATE SET name = EXCLUDED.name RETURNING id`);
+    const otherBatch = await api("POST", "/api/xpot/admin/tag-batches", { name: "WF stand run", productType: "large_stand", salesProductId: other.id });
+    assert.equal(otherBatch.status, 201, otherBatch.text);
+    const standCode = "W0F00009";
+    const standIntake = await api("POST", `/api/xpot/admin/tag-batches/${otherBatch.json.id}/scan`, { value: standCode, idempotencyKey: `wf-${standCode}` });
+    assert.equal(standIntake.status, 201, standIntake.text);
 
     const order = await recordStuscleOrder({
       externalOrderId: "WF-10455",
@@ -100,6 +109,29 @@ test.skipIf(!enabled)("wholesale orders: separating an order moves the pieces to
     assert.match(damaged.json.message, new RegExp(codes[2]));
     await db.execute(sql`UPDATE tags SET stock_status = 'available' WHERE public_code = ${codes[2]}`);
 
+    // The screen's check says the same thing the server will: the stand is not part of this order, the plates are ready.
+    const check = await api("POST", `/api/xpot/admin/tag-acquisitions/${orderId}/check`, { codes: [codes[0], standCode, codes[1]] });
+    assert.equal(check.status, 200, check.text);
+    assert.deepEqual(check.json.items.map((i: any) => [i.code, i.ok, i.reason]), [[codes[0], true, null], [standCode, false, "not_in_order"], [codes[1], true, null]]);
+    assert.deepEqual(check.json.lines.map((l: any) => [l.quantity, l.filled]), [[2, 2]]);
+    // Too many of the right product: the third plate is refused as an excess, the first two stay ready.
+    const excess = await api("POST", `/api/xpot/admin/tag-acquisitions/${orderId}/check`, { codes });
+    assert.deepEqual(excess.json.items.map((i: any) => i.reason), [null, null, "order_full"]);
+    assert.equal((await api("POST", `/api/xpot/admin/tag-acquisitions/${orderId}/check`, { codes: [codes[0]] }, "wf-ana")).status, 403);
+
+    // A refused separation takes no kit number: K-numbers stay in step with the kits that exist.
+    // The last kit number handed out (0 before any).
+    const seq = async () => {
+      const row = await one<{ last_value: string; is_called: boolean }>(sql`SELECT last_value, is_called FROM tag_kits_kit_number_seq`);
+      return row.is_called ? Number(row.last_value) : 0;
+    };
+    const seqBefore = await seq();
+    const wrongProduct = await api("POST", `/api/xpot/admin/tag-acquisitions/${orderId}/fulfill`, { codes: [codes[0], standCode] });
+    assert.equal(wrongProduct.status, 409, wrongProduct.text);
+    assert.equal(wrongProduct.json.code, "acquisition_product_mismatch");
+    assert.equal((await one<{ n: number }>(sql`SELECT count(*)::int AS n FROM tag_kits`)).n, 0);
+    assert.equal(await seq(), seqBefore);
+
     // The exact pieces: the order is separated, the pieces go to the buyer and the order is fulfilled.
     const done = await api("POST", `/api/xpot/admin/tag-acquisitions/${orderId}/fulfill`, { codes: [codes[0], codes[1]] });
     assert.equal(done.status, 200, done.text);
@@ -110,6 +142,9 @@ test.skipIf(!enabled)("wholesale orders: separating an order moves the pieces to
     assert.deepEqual(moved.map((t) => [t.rep_id, t.ownership_type, t.kit_id === done.json.acquisition.kitId]), [[repId["wf-ana"], "rep", true], [repId["wf-ana"], "rep", true]]);
     const left = await one<{ rep_id: number | null }>(sql`SELECT rep_id FROM tags WHERE public_code = ${codes[2]}`);
     assert.equal(left.rep_id, null);
+    // The kit took the very next number after the refusals: nothing was used up on the way.
+    const kitNow = await one<{ kit_number: number }>(sql`SELECT kit_number FROM tag_kits WHERE id = ${done.json.acquisition.kitId}`);
+    assert.equal(Number(kitNow.kit_number), seqBefore + 1);
 
     // Separating twice changes nothing.
     const again = await api("POST", `/api/xpot/admin/tag-acquisitions/${orderId}/fulfill`, { codes: [codes[0], codes[1]] });

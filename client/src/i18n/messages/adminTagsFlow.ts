@@ -46,6 +46,8 @@ const en = {
   reasonNotWithReseller: "Not with a reseller (already in company stock)",
   reasonSetUpTakeBack: "Set up: remove the customer first",
   reasonNotInStockTakeBack: "Not in stock (damaged, lost or internal use)",
+  reasonNotInOrder: "Not in this order: {product}",
+  reasonOrderFull: "The order is already complete for {product}",
 
   // Distribution
   distributionTitle: "Hand out",
@@ -270,6 +272,8 @@ export const adminTagsFlowMessages: Dictionary<typeof en> = {
     reasonNotWithReseller: "Não está com revendedor (já está no estoque da empresa)",
     reasonSetUpTakeBack: "Configurada: remova o cliente antes",
     reasonNotInStockTakeBack: "Fora do estoque (estragada, perdida ou uso interno)",
+    reasonNotInOrder: "Fora deste pedido: {product}",
+    reasonOrderFull: "O pedido já está completo para {product}",
 
     distributionTitle: "Entregar peças",
     distributionIntro: "Peças do estoque da empresa para os revendedores, e de volta.",
@@ -483,6 +487,8 @@ export const adminTagsFlowMessages: Dictionary<typeof en> = {
     reasonNotWithReseller: "No está con un revendedor (ya está en el stock de la empresa)",
     reasonSetUpTakeBack: "Configurada: quita el cliente primero",
     reasonNotInStockTakeBack: "Fuera del stock (dañada, perdida o uso interno)",
+    reasonNotInOrder: "Fuera de este pedido: {product}",
+    reasonOrderFull: "El pedido ya está completo para {product}",
 
     distributionTitle: "Entregar piezas",
     distributionIntro: "Piezas del stock de la empresa a los revendedores, y de vuelta.",
