@@ -10,6 +10,7 @@ import { activeStore, discardFiles, parseAudioDataUrl, putPrivateFile } from "..
 import { finishVisitTransaction, startVisitTransaction } from "../../visit-workflow.js";
 import { saveVisitSummaryTransaction } from "../../visit-summary.js";
 import { evaluateCheckInGeofence } from "../../check-in-geofence.js";
+import { expireOverdueVisits } from "../../visit-timeout.js";
 import { transcriptionProviders } from "../../lib/providerChoice.js";
 
 export function createVisitsRouter() {
@@ -172,10 +173,15 @@ export function createVisitsRouter() {
     const actor = (req as any).xpotActor as Awaited<ReturnType<typeof ensureXpotRep>>;
     const visitId = Number(req.params.id);
     const input = xpotCheckOutSchema.parse(req.body);
+    await expireOverdueVisits(actor!.rep.id);
     const visit = await storage.getSalesVisit(visitId);
 
     if (!visit || visit.repId !== actor!.rep.id) {
       return res.status(404).json({ code: "visit_not_found", message: "Visit not found" });
+    }
+
+    if (visit.status !== "in_progress") {
+      return res.status(409).json({ code: visit.expiredAt ? "visit_expired" : "visit_not_active", message: "This visit is no longer active. Reload to start a new visit." });
     }
 
     const checkedOutAt = new Date();
@@ -191,8 +197,10 @@ export function createVisitsRouter() {
       checkOutLat: input.lat,
       checkOutLng: input.lng,
       updateLeadLastVisit: true,
+      requireActive: true,
     });
 
+    if (!updated) return res.status(409).json({ code: "visit_not_active", message: "This visit is no longer active. Reload to start a new visit." });
     res.json(updated);
 
     // Fire GHL sync after response — non-blocking, failure is logged to sync_events
@@ -208,6 +216,7 @@ export function createVisitsRouter() {
   router.post("/visits/:id/cancel", async (req, res) => {
     const actor = (req as any).xpotActor as Awaited<ReturnType<typeof ensureXpotRep>>;
     const visitId = Number(req.params.id);
+    await expireOverdueVisits(actor!.rep.id);
     const visit = await storage.getSalesVisit(visitId);
 
     if (!visit || visit.repId !== actor!.rep.id) {
@@ -219,18 +228,17 @@ export function createVisitsRouter() {
     }
 
     const checkedOutAt = new Date();
-    const checkedInAt = visit.checkedInAt ? new Date(visit.checkedInAt) : checkedOutAt;
-    const durationSeconds = Math.max(0, Math.round((checkedOutAt.getTime() - checkedInAt.getTime()) / 1000));
-
     const updated = await finishVisitTransaction({
       visitId: visit.id,
       leadId: visit.leadId,
       status: "cancelled",
       checkedOutAt,
-      durationSeconds,
+      durationSeconds: null,
       updateLeadLastVisit: false,
+      requireActive: true,
     });
 
+    if (!updated) return res.status(409).json({ code: "visit_not_active", message: "This visit is no longer active" });
     res.json(updated);
   });
 
@@ -242,6 +250,9 @@ export function createVisitsRouter() {
       return res.status(404).json({ code: "visit_not_found", message: "Visit not found" });
     }
     const { status } = req.body as { status?: SalesVisitStatus };
+    if (visit.expiredAt && status) {
+      return res.status(409).json({ code: "visit_expired", message: "An automatically closed visit has no recorded outcome. Start a new visit." });
+    }
     // A result belongs to a finished visit: set on one still open it would end up with no
     // check-out time, no duration and nothing sent to the CRM. Finishing goes through check-out.
     if (status && !visit.checkedOutAt) {

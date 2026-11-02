@@ -64,6 +64,7 @@ import { CreateLeadDialog } from "./components/CreateLeadDialog";
 import { CheckInOverrideDialog } from "./components/CheckInOverrideDialog";
 import { placeUrl } from "./prospectingMaps";
 import { currentPlatform } from "@/lib/device";
+import { VISIT_MAX_HOURS, VISIT_MAX_SECONDS, visitDeadline } from "@shared/visit-time-limit";
 
 const LOCATION_FIX = {
   ios: { step1: "iphoneStep1", path: "iphonePath", step2: "iphoneStep2", option: "iphoneOption" },
@@ -383,9 +384,21 @@ export function XpotCheckIn() {
     return () => clearInterval(interval);
   }, [activeVisit?.checkedInAt]);
 
-  const elapsedHours = Math.floor(elapsedSeconds / 3600);
-  const elapsedMins = Math.floor((elapsedSeconds % 3600) / 60);
-  const elapsedSecs = elapsedSeconds % 60;
+  useEffect(() => {
+    if (!activeVisit?.checkedInAt) return;
+    const remaining = visitDeadline(activeVisit.checkedInAt).getTime() - Date.now();
+    const timer = window.setTimeout(() => {
+      void queryClient.invalidateQueries({ queryKey: ["/api/xpot/me"] });
+      void queryClient.invalidateQueries({ queryKey: ["/api/xpot/visits"] });
+    }, Math.max(0, remaining));
+    return () => window.clearTimeout(timer);
+  }, [activeVisit?.checkedInAt]);
+
+  const limitReached = elapsedSeconds >= VISIT_MAX_SECONDS;
+  const visibleElapsed = Math.min(elapsedSeconds, VISIT_MAX_SECONDS);
+  const elapsedHours = Math.floor(visibleElapsed / 3600);
+  const elapsedMins = Math.floor((visibleElapsed % 3600) / 60);
+  const elapsedSecs = visibleElapsed % 60;
   const elapsedDisplay = elapsedHours > 0
     ? `${elapsedHours}:${String(elapsedMins).padStart(2, "0")}:${String(elapsedSecs).padStart(2, "0")}`
     : `${elapsedMins}:${String(elapsedSecs).padStart(2, "0")}`;
@@ -437,7 +450,7 @@ export function XpotCheckIn() {
           <div className="min-w-0">
             <div className="flex items-center gap-1.5">
               <span className="h-2 w-2 animate-pulse rounded-full bg-emerald-400 shadow-[0_0_10px_rgba(52,211,153,0.7)]" aria-hidden="true" />
-              <span className={`truncate ${EYEBROW} !text-blue-200`}>{t("visitInProgress")}</span>
+              <span className={`truncate ${EYEBROW} !text-blue-200`}>{t(limitReached ? "visitLimitReached" : "visitInProgress")}</span>
             </div>
             {activeVisit.checkedInAt && (
               <div className="mt-1 truncate text-[11px] text-white/40">{t("startedAt", { time: formatTime(activeVisit.checkedInAt) })}</div>
@@ -450,6 +463,8 @@ export function XpotCheckIn() {
             </div>
           </div>
         </div>
+
+        <p className="relative text-xs text-white/55" data-testid="visit-time-limit">{t("visitTimeLimit", { hours: VISIT_MAX_HOURS })}</p>
 
         {/* Company info */}
         <div
@@ -504,6 +519,7 @@ export function XpotCheckIn() {
           variant="brand"
           size="lg"
           onClick={() => { setCheckoutStatus((current) => defaultCheckoutStatus(current, visitHasSale) as VisitStatus | null); setActiveVisitPanel("checkout"); }}
+          disabled={limitReached}
           className="relative min-h-12 w-full text-base font-bold"
           data-testid="button-finish-visit"
         >

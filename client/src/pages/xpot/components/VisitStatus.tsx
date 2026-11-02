@@ -47,11 +47,11 @@ export function visitStatusLabel(t: Translate<typeof checkinMessages.en>, status
   return VISIT_STATUSES.find((s) => s.value === status)?.label ?? status;
 }
 
-export function StatusBadge({ status }: { status: string }) {
+export function StatusBadge({ status, expiredAt }: { status: string; expiredAt?: string | Date | null }) {
   const t = useT(checkinMessages);
   return (
     <Pill tone={visitStatusTone(status)} dot>
-      {visitStatusLabel(t, status)}
+      {expiredAt ? t("visitExpired") : visitStatusLabel(t, status)}
     </Pill>
   );
 }
