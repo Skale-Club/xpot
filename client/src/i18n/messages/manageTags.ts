@@ -84,6 +84,7 @@ const en = {
   colBatch: "Batch",
   colStatus: "Status",
   colReseller: "Reseller",
+  colWith: "With",
   colCustomer: "Customer",
   colSold: "Sold",
   house: "Company stock",
@@ -193,6 +194,7 @@ const en = {
   // Journey: entry kinds and statuses, plan kinds and statuses, production steps
   journeyKind_execution: "Execution",
   journeyKind_decision: "Decision",
+  journeyKind_plan: "Plan",
   journeyKind_insight: "Insight",
   journeyKind_observation: "Observation",
   journeyKind_risk: "Risk",
@@ -393,6 +395,7 @@ export const manageTagsMessages: Dictionary<typeof en> = {
     colBatch: "Lote",
     colStatus: "Status",
     colReseller: "Revendedor",
+    colWith: "Com",
     colCustomer: "Cliente",
     colSold: "Vendida",
     house: "Estoque da empresa",
@@ -495,6 +498,7 @@ export const manageTagsMessages: Dictionary<typeof en> = {
 
     journeyKind_execution: "Execução",
     journeyKind_decision: "Decisão",
+    journeyKind_plan: "Plano",
     journeyKind_insight: "Aprendizado",
     journeyKind_observation: "Observação",
     journeyKind_risk: "Risco",
@@ -689,6 +693,7 @@ export const manageTagsMessages: Dictionary<typeof en> = {
     colBatch: "Lote",
     colStatus: "Estado",
     colReseller: "Revendedor",
+    colWith: "Con",
     colCustomer: "Cliente",
     colSold: "Vendida",
     house: "Stock de la empresa",
@@ -791,6 +796,7 @@ export const manageTagsMessages: Dictionary<typeof en> = {
 
     journeyKind_execution: "Ejecución",
     journeyKind_decision: "Decisión",
+    journeyKind_plan: "Plan",
     journeyKind_insight: "Aprendizaje",
     journeyKind_observation: "Observación",
     journeyKind_risk: "Riesgo",

@@ -49,7 +49,7 @@ const en = {
 
   // Distribution
   distributionTitle: "Hand out",
-  distributionIntro: "Pieces from company stock to resellers, and back. Every hand-over is a kit with its own code and packing list.",
+  distributionIntro: "Pieces from company stock to resellers, and back.",
   viewHandOut: "Hand out",
   viewOrders: "Wholesale orders",
   pastHandOuts: "Past hand-outs",
@@ -76,9 +76,7 @@ const en = {
   costMissing: "Enter the price to continue",
   costEach: "{cost} each",
   modeScan: "Scan",
-  modeType: "Type or paste",
   modeBatch: "Next from a batch",
-  addToList: "Add to list",
   addNextN_one: "Add the next {count} piece",
   addNextN_other: "Add the next {count} pieces",
   addNext: "Add the next pieces",
@@ -154,6 +152,7 @@ const en = {
 
 
   analyticsTitle: "Scans",
+  filterButton: "Filter",
   activityTitle: "Activity",
   activityAll: "All",
   activityScans: "Scans",
@@ -273,7 +272,7 @@ export const adminTagsFlowMessages: Dictionary<typeof en> = {
     reasonNotInStockTakeBack: "Fora do estoque (estragada, perdida ou uso interno)",
 
     distributionTitle: "Entregar peças",
-    distributionIntro: "Peças do estoque da empresa para os revendedores, e de volta. Cada entrega é um kit com código e lista de separação.",
+    distributionIntro: "Peças do estoque da empresa para os revendedores, e de volta.",
     viewHandOut: "Entregar",
     viewOrders: "Pedidos de atacado",
     pastHandOuts: "Entregas anteriores",
@@ -299,9 +298,7 @@ export const adminTagsFlowMessages: Dictionary<typeof en> = {
     costMissing: "Informe o preço para continuar",
     costEach: "{cost} cada",
     modeScan: "Ler",
-    modeType: "Digitar ou colar",
     modeBatch: "Próximas de um lote",
-    addToList: "Adicionar à lista",
     addNextN_one: "Adicionar a próxima {count} peça",
     addNextN_other: "Adicionar as próximas {count} peças",
     addNext: "Adicionar as próximas peças",
@@ -374,6 +371,7 @@ export const adminTagsFlowMessages: Dictionary<typeof en> = {
 
 
     analyticsTitle: "Leituras",
+    filterButton: "Filtrar",
     activityTitle: "Atividade",
     activityAll: "Tudo",
     activityScans: "Leituras",
@@ -487,7 +485,7 @@ export const adminTagsFlowMessages: Dictionary<typeof en> = {
     reasonNotInStockTakeBack: "Fuera del stock (dañada, perdida o uso interno)",
 
     distributionTitle: "Entregar piezas",
-    distributionIntro: "Piezas del stock de la empresa a los revendedores, y de vuelta. Cada entrega es un kit con su código y su lista de empaque.",
+    distributionIntro: "Piezas del stock de la empresa a los revendedores, y de vuelta.",
     viewHandOut: "Entregar",
     viewOrders: "Pedidos mayoristas",
     pastHandOuts: "Entregas anteriores",
@@ -513,9 +511,7 @@ export const adminTagsFlowMessages: Dictionary<typeof en> = {
     costMissing: "Indica el precio para continuar",
     costEach: "{cost} c/u",
     modeScan: "Leer",
-    modeType: "Escribir o pegar",
     modeBatch: "Siguientes de un lote",
-    addToList: "Agregar a la lista",
     addNextN_one: "Agregar la siguiente {count} pieza",
     addNextN_other: "Agregar las siguientes {count} piezas",
     addNext: "Agregar las siguientes piezas",
@@ -588,6 +584,7 @@ export const adminTagsFlowMessages: Dictionary<typeof en> = {
 
 
     analyticsTitle: "Lecturas",
+    filterButton: "Filtrar",
     activityTitle: "Actividad",
     activityAll: "Todo",
     activityScans: "Lecturas",

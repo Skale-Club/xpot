@@ -310,19 +310,21 @@ async function historyFor(where: SQL, limit: number): Promise<Array<TagHistoryEn
   productType: string;
   face: string | null;
   batchCode: string | null;
+  leadName: string | null;
 }>> {
   const list = await rows<{
-    id: string; tag_id: string; public_code: string; product_type: string; face: string | null;
+    id: string; tag_id: string; public_code: string; product_type: string; face: string | null; lead_name: string | null;
     batch_face: string | null; batch_code: string | null; previous_url: string | null; new_url: string | null;
     previous_destination_type: string | null; new_destination_type: string | null;
     changed_by_user_id: string | null; changed_by_email: string | null; changed_by_name: string | null; reason: string | null; created_at: Date;
   }>(sql`
-    SELECT h.id, h.tag_id, t.public_code, t.product_type, t.face, b.face AS batch_face, b.batch_code,
+    SELECT h.id, h.tag_id, t.public_code, t.product_type, t.face, b.face AS batch_face, b.batch_code, l.name AS lead_name,
            h.previous_url, h.new_url, h.previous_destination_type,
            h.new_destination_type, h.changed_by_user_id, u.email AS changed_by_email, cr.display_name AS changed_by_name, h.reason, h.created_at
     FROM tag_destination_history h
     JOIN tags t ON t.id = h.tag_id
     LEFT JOIN tag_batches b ON b.id = t.batch_id
+    LEFT JOIN sales_leads l ON l.id = t.lead_id
     LEFT JOIN users u ON u.id = h.changed_by_user_id
     LEFT JOIN sales_reps cr ON cr.user_id = h.changed_by_user_id
     WHERE ${where}
@@ -336,6 +338,7 @@ async function historyFor(where: SQL, limit: number): Promise<Array<TagHistoryEn
     productType: h.product_type,
     face: faceOf(h),
     batchCode: h.batch_code,
+    leadName: h.lead_name,
     previousUrl: h.previous_url,
     newUrl: h.new_url,
     previousDestinationType: h.previous_destination_type,
@@ -378,7 +381,7 @@ export async function getTagDetail(id: string, baseUrl: string, actor?: TagActor
     disabledAt: iso(tag.disabledAt),
     updatedAt: iso(tag.updatedAt)!,
     ...buildTagUrls(baseUrl, tag.publicCode),
-    history: history.map(({ tagId: _t, publicCode: _p, productType: _pt, face: _f, batchCode: _b, ...h }) => h),
+    history: history.map(({ tagId: _t, publicCode: _p, productType: _pt, face: _f, batchCode: _b, leadName: _l, ...h }) => h),
     ...(custody !== undefined ? { custody } : {}),
   };
 }

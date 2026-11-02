@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useMutation } from "@tanstack/react-query";
-import { Building2, ChevronRight, Layers, PackagePlus, ScanLine, ShoppingBag, Type } from "lucide-react";
+import { Building2, ChevronRight, Layers, PackagePlus, ScanLine, ShoppingBag } from "lucide-react";
 import type { TagKitItem } from "@shared/tagsApi";
 import type { DistributionCheck } from "@shared/tagDistribution";
 import { receiveBlockers } from "@shared/tagDistribution";
@@ -61,7 +61,7 @@ export function parseCodes(text: string): { codes: string[]; invalid: string[] }
   return { codes, invalid };
 }
 
-type PieceMode = "scan" | "type" | "batch";
+type PieceMode = "scan" | "batch";
 /** A mode's icon over its name on a phone (the three share a narrow row and "Next from a batch" wraps), beside it from sm. */
 const MODE_LABEL = "inline-flex flex-col items-center gap-1 sm:flex-row sm:gap-1.5";
 
@@ -125,7 +125,6 @@ export function HandOutFlow() {
   const [mode, setMode] = useState<PieceMode>(url.values.batch ? "batch" : "scan");
   const [camera, setCamera] = useState(false);
   const [codes, setCodes] = useState<string[]>([]);
-  const [typed, setTyped] = useState("");
   const [batchId, setBatchId] = useState(url.values.batch);
   const [quantity, setQuantity] = useState("10");
   const [entryError, setEntryError] = useState<string | null>(null);
@@ -263,7 +262,6 @@ export function HandOutFlow() {
         <Segmented<PieceMode>
           items={[
             { id: "scan", label: <span className={MODE_LABEL}><ScanLine className="h-3.5 w-3.5" />{t("modeScan")}</span> },
-            { id: "type", label: <span className={MODE_LABEL}><Type className="h-3.5 w-3.5" />{t("modeType")}</span> },
             { id: "batch", label: <span className={MODE_LABEL}><Layers className="h-3.5 w-3.5" />{t("modeBatch")}</span> },
           ]}
           value={mode}
@@ -285,34 +283,6 @@ export function HandOutFlow() {
               <CameraButton on={camera} onToggle={() => setCamera((v) => !v)} />
             </div>
             {camera ? <ContinuousCamera onRead={(text) => addReads([text], true)} onClose={() => setCamera(false)} /> : null}
-          </div>
-        ) : mode === "type" ? (
-          <div className="space-y-2">
-            <Textarea
-              value={typed}
-              onChange={(e) => setTyped(e.target.value)}
-              rows={4}
-              placeholder={"A7K3P9X2\nB8M4Q1Z3, C9N5R2Y4"}
-              aria-label={tb("fieldCodes")}
-              className="font-mono"
-              autoCapitalize="characters"
-              autoCorrect="off"
-              spellCheck={false}
-            />
-            <div className="flex justify-end">
-              <Button
-                type="button"
-                variant="secondary"
-                disabled={!typed.trim()}
-                onClick={() => {
-                  const parsed = parseCodes(typed);
-                  addReads([...parsed.codes, ...parsed.invalid]);
-                  setTyped("");
-                }}
-              >
-                {t("addToList")}
-              </Button>
-            </div>
           </div>
         ) : (
           <div className="grid gap-3 sm:grid-cols-[1fr_140px]">

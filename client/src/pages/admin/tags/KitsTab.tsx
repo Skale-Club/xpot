@@ -51,7 +51,8 @@ function KitsView({ go, showAllFirst }: { go: (path: string) => void; showAllFir
         testId="kits-filters"
         controls={
           <>
-            <FilterSelect
+            {/* One reseller is not a choice: the filter waits for a second one (or stays while it is in use). */}
+            {resellers.length > 1 || repFilter ? <FilterSelect
               value={repFilter ? String(repFilter) : ""}
               onChange={(kitRep) => kitFilters.set({ kitRep })}
               placeholder={tm("allResellers")}
@@ -61,7 +62,7 @@ function KitsView({ go, showAllFirst }: { go: (path: string) => void; showAllFir
                 label: `${r.displayName}${r.team ? ` · ${r.team}` : ""}${!r.isActive ? tm("resellerInactive") : !hasTagsModule(r) ? tm("resellerNoTags") : ""}`,
               }))}
               testId="admin-tags-reseller-select"
-            />
+            /> : null}
             {canManage ? (
               <FilterSelect
                 value={orgFilter ? String(orgFilter) : ""}

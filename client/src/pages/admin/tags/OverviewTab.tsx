@@ -12,6 +12,7 @@ import {
   Network,
   Package,
   ScanLine,
+  SlidersHorizontal,
   UserRound,
   Users,
 } from "lucide-react";
@@ -21,7 +22,7 @@ import { TagPieceMention } from "@/components/xpot/TagProductThumbnail";
 import { useReasonText } from "@/components/piece/reasonText";
 import { KpiTile, SectionCard } from "@/components/xpot/DashboardKit";
 import { EmptyState } from "@/components/xpot/EmptyState";
-import { FilterBar, FilterChips, FilterSelect } from "@/components/xpot/filters";
+import { FilterBar, FilterChips, FilterSelect, FilterToggle } from "@/components/xpot/filters";
 import { MasterDetail } from "@/components/xpot/MasterDetail";
 import { BackLink } from "@/components/xpot/PageHeader";
 import { Pill } from "@/components/xpot/StatusPill";
@@ -69,22 +70,30 @@ function FleetAnalytics({ go }: { go: Go }) {
   const { data: leads = [] } = useLeads();
   const { data: batches = [] } = useBatchOptions();
   const scope = { productType: product || undefined, repId: rep || undefined, leadId: lead || undefined, batchId: batch || undefined };
+  // The filters wait behind one button until one is in use, and a filter with one choice is not offered.
+  const [filtersOpen, setFiltersOpen] = useState(false);
+  const showFilters = filtersOpen || filters.activeCount() > 0;
+  const resellerOptions = uniqueOptions(reps.map((r) => ({ value: String(r.id), label: labels.repOption(r) })));
+  const customerOptions = uniqueOptions(leads.map((l) => ({ value: String(l.id), label: l.name })));
+  const batchOptions = uniqueOptions(batches.map((b) => ({ value: b.id, label: b.batchCode })));
+  const choice = (selected: string, options: readonly unknown[]) => selected !== "" || options.length > 1;
   return (
     <SectionCard accent="tags" icon={BarChart3} title={tf("analyticsTitle")} actions={<RangePicker value={range} onChange={setRange} />} testId="overview-analytics">
       <div className="min-w-0 space-y-4">
         <FilterBar
           testId="admin-overview-analytics-filters"
-          controls={
+          actions={<FilterToggle pressed={showFilters} onChange={setFiltersOpen} label={tf("filterButton")} icon={SlidersHorizontal} testId="overview-filters-toggle" />}
+          controls={!showFilters ? undefined : (
             <>
-              <FilterSelect value={product} onChange={(next) => filters.set({ product: next })} placeholder={t("allProducts")} options={labels.productOptions} icon={Package} />
-              <FilterSelect value={rep} onChange={(next) => filters.set({ rep: next })} placeholder={t("allResellers")} options={uniqueOptions(reps.map((r) => ({ value: String(r.id), label: labels.repOption(r) })))} icon={Users} />
-              <FilterSelect value={lead} onChange={(next) => filters.set({ lead: next })} placeholder={t("allCustomers")} options={uniqueOptions(leads.map((l) => ({ value: String(l.id), label: l.name })))} icon={Building2} />
-              <FilterSelect value={batch} onChange={(next) => filters.set({ batch: next })} placeholder={t("allBatches")} options={uniqueOptions(batches.map((b) => ({ value: b.id, label: b.batchCode })))} icon={Layers} />
+              {choice(product, labels.productOptions) ? <FilterSelect value={product} onChange={(next) => filters.set({ product: next })} placeholder={t("allProducts")} options={labels.productOptions} icon={Package} /> : null}
+              {choice(rep, resellerOptions) ? <FilterSelect value={rep} onChange={(next) => filters.set({ rep: next })} placeholder={t("allResellers")} options={resellerOptions} icon={Users} /> : null}
+              {choice(lead, customerOptions) ? <FilterSelect value={lead} onChange={(next) => filters.set({ lead: next })} placeholder={t("allCustomers")} options={customerOptions} icon={Building2} /> : null}
+              {choice(batch, batchOptions) ? <FilterSelect value={batch} onChange={(next) => filters.set({ batch: next })} placeholder={t("allBatches")} options={batchOptions} icon={Layers} /> : null}
             </>
-          }
+          )}
           summary={{ active: filters.activeCount() > 0, onClear: () => filters.reset() }}
         />
-        <AnalyticsPanel scopeUrl="/api/xpot/admin/tags/analytics" scope={scope} range={range} showTopTags onOpenTag={(id) => go(`/pieces/${id}`)} />
+        <AnalyticsPanel scopeUrl="/api/xpot/admin/tags/analytics" scope={scope} range={range} showTopTags onOpenTag={(id) => go(`/pieces/${id}`)} onOpenNotLive={() => go("/overview/scannedNotLive")} />
       </div>
     </SectionCard>
   );
@@ -152,7 +161,7 @@ function ActivityFeed({ overview, go }: { overview: TagOverview; go: Go }) {
                 </button>
               ) : (
                 <button type="button" className={`${FEED_ROW} flex-wrap`} onClick={() => go(`/pieces/${item.change.tagId}`)}>
-                  <TagPieceMention publicCode={item.change.publicCode} productType={item.change.productType} face={item.change.face} batchCode={item.change.batchCode} className="min-w-0 flex-1" />
+                  <TagPieceMention publicCode={item.change.publicCode} productType={item.change.productType} face={item.change.face} batchCode={item.change.batchCode} customer={item.change.leadName} className="min-w-0 flex-1" />
                   <span className="flex shrink-0 flex-col items-end gap-1">
                     <Pill tone="slate">{tf("activityDestinationPill")}</Pill>
                     <span className={FEED_DATE}>{feedDate(item.at)}</span>
