@@ -105,6 +105,25 @@ class BuilderTest(unittest.TestCase):
                 build_piece(builder, tag, 0, params, '.')
 
 
+class NfcMountTest(unittest.TestCase):
+    def test_each_type_pauses_at_its_own_layer(self):
+        from builders import nfc_mounts as nfc
+        self.assertEqual(nfc.POCKET_D, 28.4)
+        self.assertEqual(nfc.pause_z(nfc.ROUND_STICKER, 'white'), 1.8)
+        self.assertEqual(nfc.pause_z(nfc.ROUND_STICKER, 'black'), 1.32)
+        self.assertEqual(nfc.pause_z(nfc.ROUND_STICKER, 'black', behind_g=True), 2.28)
+        self.assertEqual(nfc.pause_z(nfc.RECT_STICKER, 'white'), 1.8)
+        self.assertEqual(nfc.pause_z(nfc.ROUND_TAG, 'black'), 2.76)
+        with self.assertRaises(ValueError):
+            nfc.pause_z('sticker_round_99', 'white')
+
+    def test_every_type_names_its_part_and_pause(self):
+        from builders import nfc_mounts as nfc
+        for mount in nfc.NFC_MOUNTS:
+            self.assertTrue(nfc.PARTS[mount].startswith('nfc-'))
+            self.assertIn('resume', nfc.PAUSE_TEXT[mount])
+
+
 class CatalogTest(unittest.TestCase):
     def test_every_ready_model_has_a_buildable_v1(self):
         catalog = json.loads((ROOT / 'catalog' / 'catalog.json').read_text(encoding='utf-8'))

@@ -41,10 +41,18 @@ def artwork(code, size='large'):
     d = MENU_SIZES[size]
     cx, margin, tap_h = d['size'] / 2, d['margin'], d['tap'][0]
     tap, _ = fa.tap_row_geom(cx, dict(icon_h=tap_h, cap=d['tap'][1], gap=d['tap'][2], label='Tap here', y=margin))
-    prop = composition._font(composition.MENU_FONTS[FONT][0])
+    fontfile, upper, tracking = composition.MENU_FONTS[FONT]
+    prop = composition._font(fontfile)
     ref = TextPath((0, 0), 'H', size=100, prop=prop).get_extents().height
-    path = TextPath((0, 0), 'Menu', size=100, prop=prop)
-    ext = path.get_extents()
+    # A font with tracking (Metropolis, MENU in spaced capitals): one letter at a time, each after the last one's ink.
+    rings, pen = [], 0.0
+    for letter in ('MENU' if upper else ['Menu']):
+        tp = TextPath((0, 0), letter, size=100, prop=prop)
+        rings += [[(x + pen - (tp.get_extents().x0 if upper else 0), y) for x, y in ring] for ring in tp.to_polygons(closed_only=True)]
+        pen += tp.get_extents().width + tracking * ref
+    xs = [x for ring in rings for x, _ in ring]
+    class ext:
+        x0, width = min(xs), max(xs) - min(xs)
     scale = min(d['title_cap'] / ref, d['title_w'] / ext.width)
     cap = ref * scale
     qr_size, border = d['qr'], d['border']
@@ -55,7 +63,7 @@ def artwork(code, size='large'):
     title_top = margin + tap_h + space
     title = fa.even_odd([[(cx - ext.width * scale / 2 + (x-ext.x0)*scale,
                            title_top + cap - y*scale) for x,y in ring]
-                         for ring in path.to_polygons(closed_only=True)])
+                         for ring in rings])
     sub, width = fa.text_geom('Scan or tap to view', d['sub'], cx, title_top + cap + d['gap'] + d['sub'])
     assert width < d['size'] - 2 * margin
     dark, _, qr = fa.qr_geom(dict(x=cx-qr_size/2, y=qr_top, size=qr_size, modules=25), fa.QR_BASE+code)

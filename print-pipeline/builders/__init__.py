@@ -96,6 +96,8 @@ def plate_google(tag, index, params, out_dir):
 
 # Menu title fonts the Menu layout draws as-is (Metropolis's spaced capitals need their own layout first).
 MENU_FONTS_READY = ('Inria Serif Bold', 'Inria Serif Bold Italic')
+# The Plate also lays out Metropolis's spaced capitals (build_menu_batch.artwork); the Stand's card has no layout for them.
+PLATE_MENU_FONTS = MENU_FONTS_READY + ('Metropolis Medium, MENU spaced',)
 
 
 def plate_menu(tag, index, params, out_dir):
@@ -103,8 +105,8 @@ def plate_menu(tag, index, params, out_dir):
     import build_menu_sticker_test as sticker
     theme = _theme(params, index)
     font = params.get('font', 'Inria Serif Bold')
-    if font not in MENU_FONTS_READY:
-        raise BuildError(f'menu font {font!r} has no layout yet: one of {", ".join(MENU_FONTS_READY)}')
+    if font not in PLATE_MENU_FONTS:
+        raise BuildError(f'menu font {font!r} has no layout yet: one of {", ".join(PLATE_MENU_FONTS)}')
     size = params.get('size', 'large')
     if size not in build_menu_batch.MENU_SIZES:
         raise BuildError(f'menu size {size!r}: one of {", ".join(build_menu_batch.MENU_SIZES)}')
@@ -128,6 +130,25 @@ def plate_venmo(tag, index, params, out_dir):
     body_slot, ink_slot = (1, 2) if theme == 'white' else (2, 1)
     return report, [(f'{body} - Venmo Plate', body_stl, body_slot), (f'{ink} - Venmo Art', ink_stl, ink_slot),
                     ('Blue - Venmo Logo', logo_stl, 3)]
+
+
+def plate_pay(tag, index, params, out_dir):
+    import build_pay_plate as pay
+    theme = _theme(params, index)
+    brand = params.get('brand')
+    if brand not in pay.BRANDS:
+        raise BuildError(f'brand {brand!r}: one of {", ".join(pay.BRANDS)}')
+    report = pay.build_one(tag['public_code'], Path(out_dir), brand, theme, _mount(params, nfc_mounts.DEFAULT_MOUNT))
+    _check_url((report.get('qr') or {}).get('url'), tag)
+    body_stl, ink_stl, logo_stl = pay.stl_names(brand, theme)
+    body, ink = _pair(theme)
+    name = pay.BRANDS[brand]['name']
+    # slot 1 white, slot 2 black, slot 3 the brand's colour, whatever the plate's colour
+    body_slot, ink_slot = (1, 2) if theme == 'white' else (2, 1)
+    parts = [(f'{body} - {name} Plate', body_stl, body_slot), (f'{ink} - {name} Art', ink_stl, ink_slot)]
+    if (Path(out_dir) / logo_stl).exists():
+        parts.append((f'{name} - Logo', logo_stl, 3))
+    return report, parts
 
 
 def _stand(module_name, face, tag, index, params, out_dir, batch):
@@ -184,6 +205,7 @@ BUILDERS = {
     'plate.google': plate_google,
     'plate.menu': plate_menu,
     'plate.venmo': plate_venmo,
+    'plate.pay': plate_pay,
     'stand.google': stand_google,
     'stand.instagram': stand_instagram,
     'stand.menu': stand_menu,

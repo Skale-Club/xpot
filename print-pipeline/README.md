@@ -70,7 +70,7 @@ in `.xpot-print-now.json`: anything else in the folder is never touched.
 | `bench.py` | the bench (pair, run, folder, sync, build, doctor, ticket, attach, attach-bed, fail) |
 | `pipeline.py` | one plate → meshes, `.3mf`, slice, checks, serial map, `report.json` |
 | `print_now.py` | the Print Now folder: Xpot's plates by status and request (standard library only) |
-| `builders/` | the builder ids a version names (`plate.instagram`, `plate.google`, `plate.menu`, `plate.venmo`, `stand.google`, `stand.instagram`, `stand.menu`): one code → that piece's meshes and parts |
+| `builders/` | the builder ids a version names (`plate.instagram`, `plate.google`, `plate.menu`, `plate.venmo`, `plate.pay`, `stand.google`, `stand.instagram`, `stand.menu`): one code → that piece's meshes and parts |
 | `nfc/Stand/source/design/`, `nfc/Plate/source/` | the geometry, copied from the 3D Printing repo (`NFC Signs/*/source/`) on 2026-10-22 |
 | `nfc/*/source/mesh/` | the Fusion sample meshes the Stand cards and the G tokens start from: `large/` the Large card and base; `small/` the retired Small card (Fusion v8) and its G token, with the live Small base (Fusion `small-v9`), copied on 2026-10-31 |
 | `library/scripts/` | `build-3mf-from-fusion.py` (the 3MF assembler), `gcode-qr-check.py`, `gcode-verify.py` |
@@ -110,9 +110,11 @@ wanted. A missing combination is a gap to fill (the builder grows a size or them
 modules straight on the black body, no white panel (`qr: inverted` in the version's params; the Stand's Google and
 Instagram cards always were). Versions without it keep the panel only so printed batches can be rebuilt.
 
-**Project rule: every new model uses the 10 x 20 NFC sticker** (user, 2026-10-31), Small sizes included: the
-standard 23 x 13 x 0.48 pocket (0.68 behind a black face, 1.16 behind a white one) and `consumes:
-nfc-sticker-10x20`, never the 25 mm round tag. If a builder has no sticker pocket for a size, give it one.
+**Project rule: every print asks which NFC goes inside** (user, 2026-11-02), because each type is a different print
+file, and every serialized model offers all three (`nfcVariants` on its version; `nfc/Stand/source/design/nfc_mounts.py`
+holds the measures): the 1 inch round NTAG215 sticker, the default (28.4 x 0.48 pocket, 17.2 mm below the top edge; behind
+the G pocket on Google faces); the 10 x 20 sticker (23 x 13 x 0.48); the 25 mm round tag (25.6 x 0.96). If a builder cannot
+make a type for a size, extend the builder. `catalog/nfc_versions.py` writes the versions from the catalog.
 
 ```bash
 XPOT_MCP_TOKEN=... python print-pipeline/preview.py version.json preview.glb --upload <model-slug> --version-id <uuid>
