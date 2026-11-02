@@ -43,7 +43,7 @@ const en = {
   // Access (Settings › Administration, management mode on)
   role: "Role",
   role_rep: "Rep",
-  role_admin: "Platform",
+  role_admin: "Platform team",
 
   saveFailed: "Failed to save",
 

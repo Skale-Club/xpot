@@ -41,7 +41,7 @@ export const quickCheckInMessages: Dictionary<typeof en> = {
   },
   es: {
     title: "Iniciar visita",
-    subtitle: "Encuentra una empresa guardada o cualquier negocio en Google",
+    subtitle: "Encuentra una empresa guardada o cualquier empresa en Google",
     placeholder: "Buscar empresa o lugar para el check-in...",
     locLocating: "Ubicando…",
     locPrecise: "Ubicación precisa · ±{accuracy}",

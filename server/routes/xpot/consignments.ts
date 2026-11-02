@@ -82,7 +82,7 @@ export function createConsignmentsRouter() {
     if (!priced) return res.status(404).json({ code: "product_not_found", message: "Product not found" });
     if (!priced.product.isActive) return res.status(400).json({ code: "product_not_sold", message: `${priced.product.name} is no longer sold`, params: { product: priced.product.name } });
     if (!priced.product.consignable) {
-      return res.status(400).json({ code: "product_not_consignable", message: `${priced.product.name} is not set up for consignment. Enable it in Admin › Products.`, params: { product: priced.product.name } });
+      return res.status(400).json({ code: "product_not_consignable", message: `${priced.product.name} is not set up for consignment. Enable it in Platform › Administration › Products.`, params: { product: priced.product.name } });
     }
 
     const result = await salesStorage.runDeposit({

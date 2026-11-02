@@ -319,7 +319,7 @@ export const leadsMessages: Dictionary<typeof en> = {
     fieldPhone: "Teléfono",
     fieldEmail: "Correo",
     fieldWebsite: "Sitio web",
-    fieldIndustry: "Tipo de negocio",
+    fieldIndustry: "Tipo de empresa",
     fieldAddress: "Dirección",
     fieldStreet: "Calle y número",
     fieldCity: "Ciudad",

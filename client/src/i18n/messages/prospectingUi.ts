@@ -72,7 +72,7 @@ export const prospectingUiMessages: Dictionary<typeof en> = {
     routeLine: "{status} · duración prevista {duration} · {distance}",
     routeDetailLine: "{count} paradas · cerca de {duration} · {distance}",
     noEligibleTitle: "No se encontraron lugares elegibles",
-    noEligibleHint: "Todos los negocios encontrados aquí ya son clientes, ya fueron visitados o chocan con otra ruta. Prueba otra ciudad o más tipos de negocio.",
+    noEligibleHint: "Todas las empresas encontradas aquí ya son clientes, ya fueron visitadas o chocan con otra ruta. Prueba otra ciudad o más tipos de empresa.",
     shortRoute: "Ruta más corta: no hay suficientes lugares elegibles cerca para llenar tus horas.",
     fullRoute: "Ruta completa para hoy.",
     mapLoading: "Cargando mapa…",

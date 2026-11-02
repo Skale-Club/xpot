@@ -63,7 +63,7 @@ const en = {
   stepOwnership: "Who pays for them?",
   stepPieces: "Pieces",
   stepConfirm: "Confirm",
-  policyNotSet: "Cost rule not set",
+  policyNotSet: "Payment for pieces not set",
   receiveBlocked: "{name} is blocked: they can't receive pieces.",
   receiveInactive: "{name} has not been approved yet: they can't receive pieces.",
   receiveTagsOff: "Tags is off for {name}: they won't see these pieces in the app until you turn it on in {screen}.",
@@ -171,7 +171,7 @@ const en = {
   // Resellers
   sellBlocked: "Blocked",
   sellTagsOff: "Tags off",
-  sellNoCostRule: "Cost rule not set",
+  sellNoCostRule: "Payment for pieces not set",
   sellNoWholesaleCode: "No wholesale code",
 
   // Batches
@@ -287,7 +287,7 @@ export const adminTagsFlowMessages: Dictionary<typeof en> = {
     stepOwnership: "Quem paga por elas?",
     stepPieces: "Peças",
     stepConfirm: "Confirmar",
-    policyNotSet: "Regra de custo não definida",
+    policyNotSet: "Pagamento das peças não definido",
     receiveBlocked: "{name} está bloqueado: não pode receber peças.",
     receiveInactive: "{name} ainda não foi aprovado: não pode receber peças.",
     receiveTagsOff: "O Tags está desligado para {name}: ele não verá estas peças no app até você ligar em {screen}.",
@@ -391,7 +391,7 @@ export const adminTagsFlowMessages: Dictionary<typeof en> = {
 
     sellBlocked: "Bloqueado",
     sellTagsOff: "Tags desligado",
-    sellNoCostRule: "Regra de custo não definida",
+    sellNoCostRule: "Pagamento das peças não definido",
     sellNoWholesaleCode: "Sem código de atacado",
 
     tabSummary: "Resumo",
@@ -502,7 +502,7 @@ export const adminTagsFlowMessages: Dictionary<typeof en> = {
     stepOwnership: "¿Quién las paga?",
     stepPieces: "Piezas",
     stepConfirm: "Confirmar",
-    policyNotSet: "Regla de costo sin definir",
+    policyNotSet: "Pago de las piezas sin definir",
     receiveBlocked: "{name} está bloqueado: no puede recibir piezas.",
     receiveInactive: "{name} aún no fue aprobado: no puede recibir piezas.",
     receiveTagsOff: "Tags está apagado para {name}: no verá estas piezas en la app hasta que lo enciendas en {screen}.",
@@ -606,7 +606,7 @@ export const adminTagsFlowMessages: Dictionary<typeof en> = {
 
     sellBlocked: "Bloqueado",
     sellTagsOff: "Tags apagado",
-    sellNoCostRule: "Regla de costo sin definir",
+    sellNoCostRule: "Pago de las piezas sin definir",
     sellNoWholesaleCode: "Sin código mayorista",
 
     tabSummary: "Resumen",
