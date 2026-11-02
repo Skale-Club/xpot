@@ -3,6 +3,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Building2, Check, Contact, ExternalLink, Link2, Mail, Pencil, Phone, Power, Settings2, Unlink, UserRound } from "lucide-react";
 import { defaultUtmEnabled, planTransition, stockBlock, TAG_DESTINATION_TYPES, type TagDestinationType } from "@shared/tags";
 import { contentKindOf, contentSummary, validateChipContent, type ChipContentKind } from "@shared/chipContent";
+import { destinationNotPrinted } from "@shared/tagFace";
 import { chipNeedsWriting, guessDestinationType, normalizeUrlInput } from "@shared/tagApp";
 import { buildReviewUrl } from "@shared/reviewLink";
 import type { FullSalesLead } from "@/pages/xpot/types";
@@ -127,6 +128,12 @@ export function CustomerDestinationSection({ commands }: {
   const value = check?.ok ? check.value : null;
   const destinationType = value ? (kind === "url" ? guessDestinationType(value) : kind) : null;
   const utm = utmTouched ? utmEnabled : destinationType && destinationType !== tag.destinationType ? defaultUtmEnabled(destinationType) : utmEnabled;
+
+  // The link in the form, or the saved one, against what is printed on the piece: a warning, never a block.
+  const wrongKind = (url: string | null) => {
+    const opens = destinationNotPrinted(tag.face, url);
+    return opens && tag.face ? t("printedForOther", { printed: t(`face_${tag.face}` as "face_none"), opens: t(`dest_${opens}` as "dest_website") }) : null;
+  };
 
   // A disabled Save says what is missing, in the order the form asks for it.
   const saveBlocker = saving || blockedByLive ? null
@@ -308,6 +315,7 @@ export function CustomerDestinationSection({ commands }: {
       ) : null}
 
       {dest ? (
+        <>
         <div className="mt-2 flex items-center gap-3">
           <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-violet-500/20 text-violet-200">
             <KindIcon className="h-5 w-5" />
@@ -325,6 +333,8 @@ export function CustomerDestinationSection({ commands }: {
           </div>
           {destKind !== "vcard" && <CopyButton text={dest} label={t("copyLink")} />}
         </div>
+        {wrongKind(dest) ? <div className="mt-2" data-testid="printed-for-other-saved"><InlineAlert tone="warning">{wrongKind(dest)}</InlineAlert></div> : null}
+        </>
       ) : (
         <>
           <p className="mt-2 text-lg font-bold text-white/55">{t("notYetWritten")}</p>
@@ -416,6 +426,7 @@ export function CustomerDestinationSection({ commands }: {
               <div>
                 <FieldLabel>{t("linkField")}</FieldLabel>
                 <LinkInput value={link} onChange={setLink} face={tag.face} placeholder={t("linkPlaceholder")} onPasteFailed={() => notify({ tone: "error", text: tc("pasteFailed") })} />
+                {kind === "url" && wrongKind(value) ? <div className="mt-2" data-testid="printed-for-other"><InlineAlert tone="warning">{wrongKind(value)}</InlineAlert></div> : null}
                 <ReviewLinkAssist
                   link={link}
                   onPick={(place) => {
