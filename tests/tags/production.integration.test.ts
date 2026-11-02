@@ -475,7 +475,7 @@ describe("print requests", () => {
     const partial = (await request(app, "GET", `/api/xpot/admin/print-jobs/${asked.body.plates[2].id}`)).body;
     expect(partial.pieces.map((p: any) => [p.serialNumber, p.position])).toEqual([[1, "front-left"], [2, "front-right"]]);
     const batch = (await request(app, "GET", "/api/xpot/admin/tag-batches")).body.find((b: any) => b.id === partial.batchId);
-    expect(batch.name).toBe("Plate Large · Menu · White · v1 · plate 3/3 · 2 of x4");
+    expect(batch.name).toBe("Plate Large · Menu · White · print job 3/3");
 
     const bench = await pairDevice(app, "Bench PC", ["print"]);
     const tickets = [];

@@ -1,5 +1,5 @@
 import { Suspense, lazy, useMemo, useState } from "react";
-import { ChevronRight, Download, Info, Loader2, Shapes } from "lucide-react";
+import { ChevronRight, Download, Loader2, Shapes } from "lucide-react";
 import {
   isAlwaysReadyPart,
   printGenerateOptions,
@@ -22,16 +22,19 @@ import { unifiedProductionMessages } from "@/i18n/messages/unifiedProduction";
 import { useTagLabels } from "./labels";
 import { Loading, LoadError } from "./pieces-shared";
 import { GenerateDialog } from "./production-generate";
-import { RequestList } from "./production-orders";
+import { ToPrintList } from "./production-orders";
 import type { PreviewState } from "./production-preview-3d";
-import { PRODUCTION_BASE, bedSummary, minutesText, usePrintModels, useProductionAccess } from "./production-shared";
+import { PRODUCTION_BASE, minutesText, usePrintComputers, usePrintModels, usePrintRequests, useProductionAccess } from "./production-shared";
+import { boardGroups } from "./production-workflow";
+import { formatDateTime } from "./api";
 
-// Tags › Production's first screen: how print production actually runs.
+// Tags › Production's first screen: how print production actually runs. The first thing on it is what to print now.
+//   To print        the print jobs not printed yet (and the failed ones), by what each needs: its file, the printer,
+//                   "mark printed". Failed first; a print computer line says whether the files are being made.
 //   To generate     serialized pieces (Stands, Plates): a short step-by-step (colour → face → quantity) asks for new
-//                   pieces; each plate gets its own batch of fresh serials, pending in inventory until it is printed.
+//                   pieces; each print job gets its own batch of fresh serials, pending in stock until it is printed.
 //   Always ready    parts with no serial (Stand bases, G tokens), one card per piece: the next step asks which version,
-//                   with a 3D view and the fixed file to download, any time; nothing is generated or recorded.
-//   Waiting         the generated plates not printed yet, with their files and "mark printed".
+//                   with a 3D view and the fixed file to download, any time.
 
 type Go = (path: string) => void;
 
@@ -51,6 +54,8 @@ export function ProductionBoard({ go, onOtherWays }: { go: Go; onOtherWays?: () 
   const families = printPartFamilies(parts);
   const options = useMemo(() => printGenerateOptions(data ?? []), [data]);
   const bySlug = new Map(models.map((model) => [model.slug, model]));
+  const { data: requests } = usePrintRequests("all");
+  const waiting = boardGroups(requests ?? []).some((group) => group.group === "waiting");
   const openModel = (model: PrintModelItem) => go(`${PRODUCTION_BASE}/models/${model.slug}`);
 
   if (error && !data) return <LoadError what={t("catalogWhat")} error={error} onRetry={() => void refetch()} />;
@@ -58,6 +63,18 @@ export function ProductionBoard({ go, onOtherWays }: { go: Go; onOtherWays?: () 
 
   return (
     <div className="space-y-8" data-testid="production-board">
+      <section className="space-y-3" aria-labelledby="production-pending-title" data-testid="production-pending-area">
+        <div className="flex flex-wrap items-end justify-between gap-2">
+          <SectionHeading id="production-pending-title" title={b("pendingTitle")} />
+          <Button type="button" variant="ghost" size="sm" onClick={() => go(`${PRODUCTION_BASE}/queue`)}>
+            {b("allOrders")}
+            <ChevronRight />
+          </Button>
+        </div>
+        <PrintComputerLine go={go} waiting={waiting} />
+        <ToPrintList go={go} emptyHint={b("pendingEmptyHint")} />
+      </section>
+
       <section className="space-y-3" aria-labelledby="production-generate-title" data-testid="production-generate-area">
         <SectionHeading id="production-generate-title" title={b("generateTitle")} intro={b("generateIntro")} />
         {options.length ? (
@@ -86,21 +103,6 @@ export function ProductionBoard({ go, onOtherWays }: { go: Go; onOtherWays?: () 
         )}
       </section> : null}
 
-      <section className="space-y-3" aria-labelledby="production-pending-title" data-testid="production-pending-area">
-        <div className="flex flex-wrap items-end justify-between gap-2">
-          <SectionHeading id="production-pending-title" title={b("pendingTitle")} intro={b("pendingIntro")} />
-          <Button type="button" variant="ghost" size="sm" onClick={() => go(`${PRODUCTION_BASE}/queue`)}>
-            {b("allOrders")}
-            <ChevronRight />
-          </Button>
-        </div>
-        <RequestList filter="open" go={go} emptyHint={b("pendingEmptyHint")} />
-        <p className="flex items-start gap-2 text-xs leading-relaxed text-white/45">
-          <Info className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden="true" />
-          {b("benchHint")}
-        </p>
-      </section>
-
       {onOtherWays ? (
         <button type="button" onClick={onOtherWays} className="text-xs text-white/50 underline underline-offset-2 hover:text-white" data-testid="production-other-ways">
           {u("otherWays")}
@@ -113,12 +115,39 @@ export function ProductionBoard({ go, onOtherWays }: { go: Go; onOtherWays?: () 
   );
 }
 
-function SectionHeading({ id, title, intro }: { id: string; title: string; intro: string }) {
+function SectionHeading({ id, title, intro }: { id: string; title: string; intro?: string }) {
   return (
     <div className="min-w-0 max-w-2xl">
       <h2 id={id} className="text-base font-semibold text-white">{title}</h2>
-      <p className="mt-0.5 text-sm text-white/55">{intro}</p>
+      {intro ? <p className="mt-0.5 text-sm text-white/55">{intro}</p> : null}
     </div>
+  );
+}
+
+/** Whether the print computer is making the files: one line per computer, amber only when something is waiting for it. */
+function PrintComputerLine({ go, waiting }: { go: Go; waiting: boolean }) {
+  const b = useT(productionBoardMessages);
+  const { loaded, computers } = usePrintComputers();
+  if (!loaded) return null;
+  if (!computers.length) {
+    return (
+      <p className="text-xs text-white/55" data-testid="production-computer-none">
+        {b("computerNone")}{" "}
+        <button type="button" onClick={() => go("/provisioners")} className="underline underline-offset-2 hover:text-white">{b("computerPair")}</button>
+      </p>
+    );
+  }
+  return (
+    <ul className="space-y-1" data-testid="production-computers">
+      {computers.map((computer) => (
+        <li key={computer.name} className={`flex items-center gap-2 text-xs ${computer.on ? "text-white/60" : waiting ? "text-amber-200" : "text-white/50"}`}>
+          <span className={`h-2 w-2 shrink-0 rounded-full ${computer.on ? "bg-emerald-400" : waiting ? "bg-amber-400" : "bg-white/30"}`} aria-hidden="true" />
+          {computer.on
+            ? b("computerOn", { name: computer.name })
+            : computer.lastSeenAt ? b(waiting ? "computerOffWaiting" : "computerOff", { name: computer.name, time: formatDateTime(computer.lastSeenAt) }) : b("computerNever", { name: computer.name })}
+        </li>
+      ))}
+    </ul>
   );
 }
 
@@ -136,7 +165,7 @@ function ProductCard({ option, model, onOpen }: { option: PrintGenerateOption; m
         className="flex h-full w-full flex-col items-center gap-3 rounded-2xl border border-white/[0.08] bg-white/[0.03] p-3 text-center transition-colors hover:border-violet-400/40 hover:bg-violet-500/[0.06] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-400/60"
         data-testid="production-generate-product"
       >
-        <span className="flex h-28 w-full items-center justify-center rounded-xl bg-white/[0.16]">
+        <span className="flex h-40 w-full items-center justify-center rounded-xl bg-white/[0.16]">
           <TagPieceVisual productType={option.productType} face={sample.face} theme={model?.theme} modelSlug={sample.slug} size="lg" still />
         </span>
         <span className="space-y-0.5">
@@ -207,7 +236,7 @@ function PartFamilyDialog({ family, onOpenModel, onClose }: { family: PrintPartF
           <DialogTitle className="text-white">{family.name}</DialogTitle>
           <DialogDescription className="mt-2">{b("partPickIntro")}</DialogDescription>
         </div>
-        <ul className="grid min-h-0 flex-1 grid-cols-1 gap-2 overflow-y-auto p-5 sm:p-6" data-testid="production-ready-family-options">
+        <ul className="grid min-h-0 flex-1 grid-cols-1 content-start gap-2 overflow-y-auto p-5 sm:p-6" data-testid="production-ready-family-options">
           {family.models.map((model) => (
             <PartCard key={model.id} model={model} title={printPartVariant(model.title)} onOpen={onOpenModel} />
           ))}
@@ -237,19 +266,15 @@ function PartCard({ model, title, onOpen: open }: { model: PrintModelItem; title
         {ready.length ? (
           <ul className="mt-auto space-y-1">
             {ready.map((bed) => (
-              <li key={bed.label} className="flex items-center justify-between gap-2">
-                <span className="min-w-0 truncate text-xs text-white/60" title={bedSummary(bed, t)}>
-                  {t.plural("pieceCount", bed.copies)}{bed.minutes ? ` · ${minutesText(bed.minutes)}` : ""}
-                </span>
-                <Button asChild variant="secondary" size="sm" className="shrink-0">
+              <li key={bed.label}>
+                <Button asChild variant="secondary" size="sm" className="w-full justify-start">
                   <a
                     href={`/api/xpot/admin/print-models/${encodeURIComponent(model.slug)}/print-file?bed=${encodeURIComponent(bed.label)}`}
                     download
-                    aria-label={`${b("download")} ${model.title} · ${bed.label}`}
                     data-testid="production-ready-download"
                   >
                     <Download />
-                    {b("download")}
+                    {b("downloadBed", { pieces: t.plural("pieceCount", bed.copies), time: bed.minutes ? ` · ${minutesText(bed.minutes)}` : "" })}
                   </a>
                 </Button>
               </li>

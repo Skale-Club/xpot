@@ -509,6 +509,8 @@ export interface PrintJobItem {
   /** Serialized orders: pieces still pending (a plate printed before stock followed "printed" may still have some). */
   pendingCount: number | null;
   pieceCount: number | null;
+  /** Serialized orders: pieces marked damaged when the plate was printed. */
+  damagedCount: number | null;
   deviceName: string | null;
   notes: string | null;
   /** Why a failed plate failed, as a code (`build_failed`, `qr_check_failed`, `failed` when marked by hand). */
@@ -563,6 +565,8 @@ export interface PrintJobPiece {
   qrUrl: string;
   nfcUrl: string;
   stockStatus: string;
+  /** Its chip was written (programmed, verified or locked). */
+  chipWritten: boolean;
 }
 
 export interface PrintJobDetail extends PrintJobItem {
@@ -758,4 +762,10 @@ export function pickGenerateFace(options: readonly PrintGenerateOption[], choice
   const colours = options.find((option) => option.productType === choice.productType)?.colours ?? [];
   const faces = colours.find((colour) => sameTheme(colour.theme, choice.theme))?.faces ?? [];
   return faces.find((face) => face.face === choice.face) ?? null;
+}
+
+/** A part that is only bought (its one bed is "bought"): nothing to print, only a count to keep right. */
+export function isBoughtPart(model: Pick<PrintModelItem, "kind" | "currentVersion">): boolean {
+  const beds = model.currentVersion?.beds ?? [];
+  return model.kind === "part" && beds.length > 0 && beds.every((bed) => bed.label.toLowerCase() === PRINT_BOUGHT_BED);
 }

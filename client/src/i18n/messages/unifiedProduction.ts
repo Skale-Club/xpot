@@ -33,7 +33,6 @@ const en = {
   prepareExisting: "Prepare {code} for printing",
   existingCodes: "Existing batch",
   supplierFiles: "Codes and QR images for the supplier",
-  queueIntro: "Follow file generation, download each print job and mark it printed: its good pieces go into stock.",
 };
 
 export const unifiedProductionMessages: Dictionary<typeof en> = {
@@ -71,7 +70,6 @@ export const unifiedProductionMessages: Dictionary<typeof en> = {
     prepareExisting: "Preparar {code} para impressão",
     existingCodes: "Lote existente",
     supplierFiles: "Códigos e imagens QR para o fornecedor",
-    queueIntro: "Acompanhe a geração, baixe cada impressão e marque como impressa: as peças boas entram no estoque.",
   },
   es: {
     title: "Producción",
@@ -106,6 +104,5 @@ export const unifiedProductionMessages: Dictionary<typeof en> = {
     prepareExisting: "Preparar {code} para impresión",
     existingCodes: "Lote existente",
     supplierFiles: "Códigos e imágenes QR para el proveedor",
-    queueIntro: "Sigue la generación, descarga cada impresión y márcala como impresa: sus piezas buenas entran al stock.",
   },
 };

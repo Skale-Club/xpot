@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { Download, FileUp, History, Layers, PackageCheck, Pencil, Printer, ShoppingBasket } from "lucide-react";
-import { PRINT_PART_REASONS, type PrintBed, type PrintModelDetail, type PrintModelVersionItem } from "@shared/printProduction";
+import { PRINT_PART_REASONS, isBoughtPart, type PrintBed, type PrintModelDetail, type PrintModelVersionItem } from "@shared/printProduction";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { ConfirmDialog } from "@/components/xpot/ConfirmDialog";
@@ -11,20 +11,21 @@ import { InlineAlert } from "@/components/xpot/InlineAlert";
 import { BackLink } from "@/components/xpot/PageHeader";
 import { Pill } from "@/components/xpot/StatusPill";
 import { Stat } from "@/components/xpot/Stat";
-import { TagFaceIcon } from "@/components/xpot/TagFaceIcon";
 import { TagPieceVisual } from "@/components/xpot/TagProductThumbnail";
 import { useToast } from "@/hooks/use-toast";
 import { useT } from "@/i18n";
 import { commonMessages } from "@/i18n/messages/common";
 import { partnerMaterialsMessages } from "@/i18n/messages/partnerMaterials";
 import { productionMessages } from "@/i18n/messages/production";
-import { ADMIN_TAGS_KEY, STALE_MS, errorMessage, formatDate, getJson, invalidateAdminTags, sendJson } from "./api";
+import { AdminHttpError, ADMIN_TAGS_KEY, STALE_MS, errorMessage, formatDate, getJson, invalidateAdminTags, sendJson } from "./api";
 import { useTagLabels } from "./labels";
+import { EmptyState } from "@/components/xpot/EmptyState";
 import { Loading, LoadError } from "./pieces-shared";
 import { MaterialsDialog, MaterialsNeeded } from "./production-materials";
 import { PrintDialog, RequestList } from "./production-orders";
 import { PrintPreviewCard } from "./production-preview";
-import { KindPill, ModelStatusPill, PRODUCTION_BASE, bedSummary, formatBytes, uploadFile, useProductionAccess, useThemeOptions } from "./production-shared";
+import { useModelName } from "./production-identity";
+import { ModelStatusPill, PRODUCTION_BASE, bedSummary, formatBytes, uploadFile, useProductionAccess, useThemeOptions } from "./production-shared";
 import { canPrintModel } from "./production-workflow";
 import { catalogOptions, useTagCatalog } from "./batches-shared";
 
@@ -36,7 +37,7 @@ type Go = (path: string) => void;
 export function PrintModelPage({ slug, go }: { slug: string; go: Go }) {
   const t = useT(productionMessages);
   const pm = useT(partnerMaterialsMessages);
-  const labels = useTagLabels();
+  const nameOf = useModelName();
   const { toast } = useToast();
   const [printing, setPrinting] = useState(false);
   const [materials, setMaterials] = useState(false);
@@ -71,10 +72,18 @@ export function PrintModelPage({ slug, go }: { slug: string; go: Go }) {
   });
 
   const back = <BackLink onBack={() => go(`${PRODUCTION_BASE}/models`)}>{t("tabCatalog")}</BackLink>;
+  // A model that is not yours is not an error to try again: it is just not there for you.
+  if (error instanceof AdminHttpError && (error.status === 404 || error.status === 403) && !model) return <div className="space-y-4">{back}<EmptyState tone="tags" icon={Layers} title={t("modelNotAvailable")} /></div>;
   if (error && !model) return <div className="space-y-4">{back}<LoadError what={t("modelWhat")} error={error} onRetry={() => void refetch()} /></div>;
   if (isLoading || !model) return <div className="space-y-4">{back}<Loading rows={4} /></div>;
 
   const part = model.kind === "part";
+  const bought = isBoughtPart(model);
+  const retired = model.status === "retired";
+  const printable = canPrintModel(model);
+  const noVersion = !model.currentVersion;
+  // A partner reads the version in use and nothing of how it was made; the platform reads them all.
+  const versions = isAdmin ? model.versions : model.versions.filter((version) => version.status === "current");
   return (
     <div className="space-y-5" data-testid="production-model">
       {back}
@@ -82,73 +91,67 @@ export function PrintModelPage({ slug, go }: { slug: string; go: Go }) {
         <div className="flex min-w-0 items-start gap-3">
           {!part ? <TagPieceVisual productType={model.productType ?? "custom"} face={model.face} theme={model.theme} modelSlug={model.slug} size="lg" /> : null}
           <div className="min-w-0">
-            <h1 className="truncate text-xl font-semibold text-white">{model.title}</h1>
+            <h1 className="break-words text-xl font-semibold leading-snug text-white">{nameOf(model)}</h1>
             <p className="mt-1 flex flex-wrap items-center gap-1.5 text-xs text-white/45">
-              <KindPill kind={model.kind} />
-              <ModelStatusPill status={model.status} />
-              {model.face ? <><TagFaceIcon face={model.face} size="xs" /><span>{labels.face(model.face)}</span></> : null}
+              {model.status !== "ready" ? <ModelStatusPill status={model.status} /> : null}
+              {bought ? <Pill tone="slate">{t("modelBought")}</Pill> : null}
               {model.lowStock ? <Pill tone="amber">{t("lowStock", { count: model.partReorderAt ?? 0 })}</Pill> : null}
-              <span className="font-mono">{model.slug}</span>
-              {model.productType ? <span>{labels.product(model.productType)}</span> : null}
-              {model.theme ? <span>{model.theme}</span> : null}
-              {model.batchPrefix ? <span className="font-mono">{model.batchPrefix}-…</span> : null}
             </p>
           </div>
         </div>
         <div className="flex flex-wrap gap-2">
-          {isAdmin ? <>
+          {isAdmin && retired ? (
+            <Button type="button" variant="brand" accent="tags" size="sm" loading={retire.isPending} onClick={() => retire.mutate(false)} data-testid="production-reactivate">
+              {t("restore")}
+            </Button>
+          ) : null}
+          {isAdmin && !retired ? <>
             <Button type="button" variant="ghost" size="sm" onClick={() => setEditing(true)}>
               <Pencil />
               {t("edit")}
             </Button>
-            <Button type="button" variant="secondary" size="sm" onClick={() => setVersioning(true)} data-testid="production-new-version">
-              <History />
-              {model.currentVersion ? t("newVersion") : t("firstVersion")}
-            </Button>
+            {!bought ? (
+              <Button type="button" variant={noVersion ? "brand" : "secondary"} accent={noVersion ? "tags" : undefined} size="sm" onClick={() => setVersioning(true)} data-testid="production-new-version">
+                <History />
+                {model.currentVersion ? t("newVersion") : t("firstVersion")}
+              </Button>
+            ) : null}
+            {bought ? (
+              <Button type="button" variant="brand" accent="tags" size="sm" onClick={() => setCounting(true)}>{t("adjustCount")}</Button>
+            ) : null}
           </> : null}
-          <Button type="button" variant="brand" accent="tags" size="sm" disabled={!canPrintModel(model)} onClick={() => setPrinting(true)}>
-            <Printer />
-            {t("print")}
-          </Button>
+          {printable ? (
+            <Button type="button" variant="brand" accent="tags" size="sm" onClick={() => setPrinting(true)}>
+              <Printer />
+              {t("print")}
+            </Button>
+          ) : null}
         </div>
       </header>
 
-      {model.status === "design_needed" ? <InlineAlert tone="warning" title={t("designNeededTitle")}>{t("designNeededBody", { slug: model.slug })}</InlineAlert> : null}
-      {model.description ? <p className="max-w-3xl whitespace-pre-line text-sm text-white/60">{model.description}</p> : null}
+      {model.status === "design_needed" ? <InlineAlert tone="warning">{isAdmin ? t("designNeededBody") : t("designNeededPartner")}</InlineAlert> : null}
+      {model.description && !noVersion ? <p className="max-w-3xl whitespace-pre-line text-sm text-white/60">{model.description}</p> : null}
 
-      <div className="grid gap-2 sm:grid-cols-3">
-        <Stat card label={part ? t("statOnHandPart") : t("statInHouse")} value={model.onHand} />
-        {!part ? <Stat card label={t("statWithResellers")} value={model.withResellers} /> : null}
-        <Stat card label={t("statOpenOrders")} value={model.openJobs} />
-      </div>
+      {noVersion ? null : (
+        <div className="grid grid-cols-3 gap-2">
+          <Stat card label={part ? t("statOnHandPart") : t("statInHouse")} value={model.onHand} />
+          {!part ? <Stat card label={t("statWithResellers")} value={model.withResellers} /> : null}
+          <Stat card label={t("statOpenOrders")} value={model.openJobs} />
+        </div>
+      )}
 
       {/* Two columns on a computer: what was asked and how it is made on the left, the 3D view held in place on the
           right. A phone stacks them, the 3D first. */}
       <div className={!part && model.currentVersion ? "grid items-start gap-5 lg:grid-cols-2" : ""}>
         {!part && model.currentVersion ? (
           <div className="lg:sticky lg:top-4 lg:order-2">
-            <PrintPreviewCard modelSlug={model.slug} versionId={model.currentVersion.id} preview={model.currentVersion.preview} />
+            <PrintPreviewCard modelSlug={model.slug} versionId={model.currentVersion.id} preview={model.currentVersion.preview} canUpload={isAdmin} />
           </div>
         ) : null}
 
         <div className="min-w-0 space-y-5 lg:order-1">
-          <section className="space-y-2">
-            <h2 className="text-xs font-semibold uppercase tracking-wide text-white/40">{t("ordersTitle")}</h2>
-            <RequestList filter="all" model={model.slug} go={go} emptyHint={t("ordersEmptyHint")} />
-          </section>
-
-          {!part ? (
-            // The platform writes what the model needs; a partner reads it as "What you need".
-            isAdmin ? (
-              <SectionCard title={pm("materialsTitle")} icon={ShoppingBasket} accent="tags" actions={<Button type="button" variant="secondary" size="sm" onClick={() => setMaterials(true)} data-testid="production-materials-edit">{pm("materialsEdit")}</Button>}>
-                <p className="mb-3 text-xs text-white/45">{pm("materialsIntro")}</p>
-                {model.materials.length ? <MaterialsNeeded materials={model.materials} /> : <p className="text-sm text-white/50">{pm("materialsEmpty")}</p>}
-              </SectionCard>
-            ) : <MaterialsNeeded materials={model.materials} />
-          ) : null}
-
           {part ? (
-            <SectionCard title={t("partCountTitle")} icon={PackageCheck} accent="tags" actions={<Button type="button" variant="secondary" size="sm" onClick={() => setCounting(true)}>{t("adjustCount")}</Button>}>
+            <SectionCard title={t("partCountTitle")} icon={PackageCheck} accent="tags" actions={isAdmin ? <Button type="button" variant={bought ? "brand" : "secondary"} accent={bought ? "tags" : undefined} size="sm" onClick={() => setCounting(true)}>{t("adjustCount")}</Button> : null}>
               {model.partMovements.length ? (
                 <ul className="divide-y divide-white/[0.06] text-sm">
                   {model.partMovements.map((m) => (
@@ -170,17 +173,32 @@ export function PrintModelPage({ slug, go }: { slug: string; go: Go }) {
             </SectionCard>
           ) : null}
 
-          <SectionCard title={t("versionsTitle")} icon={Layers} accent="tags" bodyClassName="p-0">
-            {model.versions.length ? (
+          {!bought && !noVersion ? (
+            <section className="space-y-2">
+              <h2 className="text-xs font-semibold uppercase tracking-wide text-white/40">{t("ordersTitle")}</h2>
+              <RequestList filter="all" model={model.slug} go={go} emptyHint={t("ordersEmptyHint")} />
+            </section>
+          ) : null}
+
+          {!part ? (
+            // The platform writes what the model needs; a partner reads it as "What you need".
+            isAdmin ? (
+              <SectionCard title={pm("materialsTitle")} icon={ShoppingBasket} accent="tags" actions={<Button type="button" variant="secondary" size="sm" onClick={() => setMaterials(true)} data-testid="production-materials-edit">{pm("materialsEdit")}</Button>}>
+                <p className="mb-3 text-xs text-white/45">{pm("materialsIntro")}</p>
+                {model.materials.length ? <MaterialsNeeded materials={model.materials} /> : <p className="text-sm text-white/50">{pm("materialsEmpty")}</p>}
+              </SectionCard>
+            ) : <MaterialsNeeded materials={model.materials} />
+          ) : null}
+
+          {!noVersion && !bought && versions.length ? (
+            <SectionCard title={t("versionsTitle")} icon={Layers} accent="tags" bodyClassName="p-0">
               <ul className="divide-y divide-white/[0.06]">
-                {model.versions.map((version) => (
-                  <VersionRow key={version.id} model={model} version={version} />
+                {versions.map((version) => (
+                  <VersionRow key={version.id} model={model} version={version} admin={isAdmin} retired={retired} />
                 ))}
               </ul>
-            ) : (
-              <p className="p-4 text-sm text-white/50">{t("versionsEmpty")}</p>
-            )}
-          </SectionCard>
+            </SectionCard>
+          ) : null}
         </div>
       </div>
 
@@ -202,7 +220,7 @@ export function PrintModelPage({ slug, go }: { slug: string; go: Go }) {
   );
 }
 
-function VersionRow({ model, version }: { model: PrintModelDetail; version: PrintModelVersionItem }) {
+function VersionRow({ model, version, admin, retired }: { model: PrintModelDetail; version: PrintModelVersionItem; admin: boolean; retired: boolean }) {
   const t = useT(productionMessages);
   const { toast } = useToast();
   const input = useRef<HTMLInputElement>(null);
@@ -221,12 +239,11 @@ function VersionRow({ model, version }: { model: PrintModelDetail; version: Prin
     <li className="space-y-2 p-4" data-testid="production-version">
       <div className="flex flex-wrap items-center gap-2">
         <span className="text-sm font-semibold text-white">v{version.version}</span>
-        <Pill tone={version.status === "current" ? "green" : "muted"}>{t(`versionStatus_${version.status}` as never)}</Pill>
-        {version.builder ? <span className="font-mono text-xs text-white/50">{version.builder}</span> : null}
-        <span className="text-xs text-white/40">{formatDate(version.createdAt)} · {t(`source_${version.source}` as never)} · {t.plural("orderCount", version.jobCount)}</span>
+        <Pill tone={version.status === "current" && !retired ? "green" : "muted"}>{version.status === "current" && retired ? t("versionStatus_lastUsed") : t(`versionStatus_${version.status}` as never)}</Pill>
+        <span className="text-xs text-white/40">{formatDate(version.createdAt)} · {t.plural("printJobsMade", version.jobCount)}</span>
         {version.fixesBatchCode ? <Pill tone="amber">{t("fixes", { batch: version.fixesBatchCode })}</Pill> : null}
       </div>
-      {version.changelog ? <p className="whitespace-pre-line text-sm text-white/70">{version.changelog}</p> : null}
+      {admin && version.changelog ? <p className="whitespace-pre-line text-sm text-white/70">{version.changelog}</p> : null}
       <ul className="space-y-1.5">
         {version.beds.map((bed) => (
           <li key={bed.label} className="flex flex-wrap items-center gap-2 rounded-xl bg-white/[0.03] px-3 py-2 text-xs text-white/60">
@@ -251,7 +268,7 @@ function VersionRow({ model, version }: { model: PrintModelDetail; version: Prin
           </li>
         ))}
       </ul>
-      {Object.keys(version.params).length || Object.keys(version.recipe).length ? (
+      {admin && (Object.keys(version.params).length || Object.keys(version.recipe).length) ? (
         <details className="text-xs text-white/50">
           <summary className="cursor-pointer select-none">{t("showRecipe")}</summary>
           <pre className="mt-2 overflow-x-auto rounded-xl bg-black/30 p-3 text-[11px] leading-relaxed text-white/70">{JSON.stringify({ params: version.params, recipe: version.recipe, consumes: version.consumes }, null, 2)}</pre>
@@ -423,6 +440,7 @@ function EditModelDialog({ model, onClose, onRetire }: { model: PrintModelDetail
           <Field label={t("fieldTitle")} required className="sm:col-span-2">
             <Input value={form.title} maxLength={120} onChange={(e) => setForm({ ...form, title: e.target.value })} />
           </Field>
+          <p className="text-xs text-white/45 sm:col-span-2">{t("shortNameLine", { name: model.slug })}</p>
           <Field label={t("fieldTheme")} required={serialized}>
             <Select value={form.theme} onChange={(e) => setForm({ ...form, theme: e.target.value })} placeholder={t("choose")} options={themeOptions} />
           </Field>
@@ -431,13 +449,13 @@ function EditModelDialog({ model, onClose, onRetire }: { model: PrintModelDetail
           </Field>
           {serialized ? (
             <>
-              <Field label={t("fieldProduct")} required hint={productLocked || faceLocked ? t("productFaceLocked") : undefined}>
+              <Field label={t("fieldType")} required hint={productLocked || faceLocked ? t("productFaceLocked") : undefined}>
                 <Select value={form.productType} disabled={productLocked} onChange={(e) => setForm({ ...form, productType: e.target.value })} placeholder={t("choose")} options={labels.productOptions} />
               </Field>
               <Field label={t("fieldFace")} required>
                 <Select value={form.face} disabled={faceLocked} onChange={(e) => setForm({ ...form, face: e.target.value })} placeholder={t("choose")} options={labels.faceOptions} />
               </Field>
-              <Field label={t("fieldSalesProduct")} required>
+              <Field label={t("fieldSoldAs")} hint={t("fieldSoldAsHint")} required>
                 <Select value={form.salesProductId} onChange={(e) => setForm({ ...form, salesProductId: e.target.value })} placeholder={t("choose")} options={catalogOptions(catalog)} />
               </Field>
               <Field label={t("fieldBatchPrefix")} hint={t("fieldBatchPrefixHint")} required>
