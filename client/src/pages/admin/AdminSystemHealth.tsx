@@ -1,8 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useLocation, useSearchParams } from "wouter";
-import { Activity, AlertTriangle, Ban, ChevronRight, Cpu, History, ListOrdered, RotateCw, ScrollText } from "lucide-react";
-import { EYEBROW } from "@/components/xpot/surface";
+import { Activity, AlertTriangle, Ban, ChevronDown, ChevronRight, Cpu, History, ListOrdered, RotateCw, ScrollText } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { describeApiError } from "@/lib/apiErrors";
 import { platformAdminMessages } from "@/i18n/messages/platformAdmin";
@@ -76,11 +75,6 @@ export function AdminSystemHealth() {
 }
 
 
-/** A short heading between the parts of the page. */
-function PartTitle({ children }: { children: string }) {
-  return <h2 className={`${EYEBROW} px-1 pt-2`}>{children}</h2>;
-}
-
 /** Asks the route builder again for a search that finished without a route, whoever owns it. */
 function RetryRouteButton({ job }: { job: StuckJob }) {
   const tp = useT(platformAdminMessages);
@@ -145,6 +139,8 @@ function SystemHealthOverview() {
   const [, setNow] = useState(0);
   const [fingerprint, setFingerprint] = useState<string | null>(null);
   const [runFilter, setRunFilter] = useState<number | null>(null);
+  const [logOpen, setLogOpen] = useState(false);
+  const pane = useEventPane();
   const health = useQuery<SystemHealthSnapshot>({
     queryKey: ["/api/xpot/admin/system-health"],
     refetchInterval: REFRESH_MS,
@@ -173,6 +169,13 @@ function SystemHealthOverview() {
   // The banner weighs the prospecting pipeline, the services and the CRM sync, and says which one.
   const overview = statusOverview(data, services.data?.services ?? [], syncProblems.data?.problems.length ?? 0);
   const overallTone = verdictTone(overview.verdict);
+  // Prospecting nobody set up has no queue or searches to show: its card says so.
+  const prospectingOff = worker.verdict === "off" && !queue.activeRuns.length && !queue.queuedRuns && !queue.stuckJobs.length;
+  const showLog = (after?: () => void) => {
+    setLogOpen(true);
+    after?.();
+    setTimeout(() => document.getElementById("system-event-log")?.scrollIntoView({ behavior: "smooth", block: "start" }), 50);
+  };
   const jumpTo = (cause: StatusCause) => document.getElementById(CAUSE_ANCHOR[cause])?.scrollIntoView({ behavior: "smooth", block: "start" });
 
   return (
@@ -180,7 +183,7 @@ function SystemHealthOverview() {
       <div className={`flex flex-wrap items-center justify-between gap-3 rounded-2xl border px-4 py-3 ${VERDICT_BANNER[overallTone]}`} data-testid="status-banner">
         <div className="min-w-0">
           <div className="flex items-center gap-3">
-            <span className={`h-2.5 w-2.5 shrink-0 rounded-full ${PILL_DOTS[overallTone]} ${overview.verdict === "healthy" ? "" : "animate-pulse"}`} />
+            <span className={`h-2.5 w-2.5 shrink-0 rounded-full ${PILL_DOTS[overallTone]} ${overview.verdict === "healthy" || overview.verdict === "off" ? "" : "animate-pulse"}`} />
             <p className="font-semibold">{t(`overall_${overview.verdict}`)}</p>
           </div>
           {overview.causes.length > 0 && (
@@ -213,16 +216,17 @@ function SystemHealthOverview() {
 
       <ServicesSection query={services} />
 
-      <PartTitle>{tp("pipelineTitle")}</PartTitle>
-      <div className="grid gap-4 lg:grid-cols-2">
+      <div className={prospectingOff ? "" : "grid gap-4 lg:grid-cols-2"}>
         <div id={CAUSE_ANCHOR.worker} className="scroll-mt-24">
           <Card title={t("workerTitle")} icon={Cpu} right={<VerdictChip verdict={worker.verdict} t={t} />}>
             <HealthReason t={t} code={worker.reasonCode} fallback={worker.reason} />
-            <p className="mt-2 text-xs text-white/45">
-              {t("workerLastTick", { time: ago(worker.lastTickFinishedAt) })}
-              {worker.lastTickDurationMs !== null && ` · ${t("workerTickTook", { duration: formatDuration(worker.lastTickDurationMs) })}`}
-              {` · ${t("workerEvery", { seconds: Math.round(worker.pollMs / 1000) })}`}
-            </p>
+            {worker.verdict !== "off" && (
+              <p className="mt-2 text-xs text-white/45">
+                {t("workerLastTick", { time: ago(worker.lastTickFinishedAt) })}
+                {worker.lastTickDurationMs !== null && ` · ${t("workerTickTook", { duration: formatDuration(worker.lastTickDurationMs) })}`}
+                {` · ${t("workerEvery", { seconds: Math.round(worker.pollMs / 1000) })}`}
+              </p>
+            )}
             {worker.lastError && (
               <p className="mt-2 break-words text-xs text-red-300/80">
                 {t("workerLastError", { time: ago(worker.lastError.at), message: worker.lastError.message })}
@@ -231,6 +235,7 @@ function SystemHealthOverview() {
           </Card>
         </div>
 
+        {!prospectingOff && (
         <Card title={t("queueTitle")} icon={ListOrdered}>
           <div className="grid grid-cols-3 gap-3">
             <Stat label={t("queueQueued")} value={queue.queuedRuns} />
@@ -243,8 +248,10 @@ function SystemHealthOverview() {
             <p className="mt-2 text-xs text-white/45">{t("queueOldest", { duration: formatDuration(queue.oldestQueuedMs) })}</p>
           )}
         </Card>
+        )}
       </div>
 
+      {!prospectingOff && (
       <div id={CAUSE_ANCHOR.runs} className="scroll-mt-24">
         <Card title={t("activeRunsTitle")} icon={Activity}>
           {queue.activeRuns.length === 0 ? (
@@ -312,21 +319,19 @@ function SystemHealthOverview() {
           )}
         </Card>
       </div>
+      )}
 
-      <RecentSearches
-        runs={queue.recentRuns}
-        t={t}
-        ago={ago}
-        onShowEvents={(runId) => {
-          setRunFilter(runId);
-          document.getElementById("system-event-log")?.scrollIntoView({ behavior: "smooth", block: "start" });
-        }}
-      />
+      {!prospectingOff && (
+        <RecentSearches
+          runs={queue.recentRuns}
+          t={t}
+          ago={ago}
+          onShowEvents={(runId) => showLog(() => setRunFilter(runId))}
+        />
+      )}
 
-      <PartTitle>{tp("cause_sync")}</PartTitle>
       <SyncProblemsSection query={syncProblems} />
 
-      <PartTitle>{t("errorsTitle")}</PartTitle>
       <Card title={t("errorsTitle")} icon={AlertTriangle}>
         <div className="grid grid-cols-2 gap-3">
           <Stat label={t("errors24h")} value={events.errors24h} tone={events.errors24h ? "bad" : undefined} />
@@ -342,10 +347,12 @@ function SystemHealthOverview() {
           </div>
         )}
       </Card>
-      <ProblemGroups groups={events.groups} t={t} ago={ago} onPick={setFingerprint} />
+      <ProblemGroups groups={events.groups} t={t} ago={ago} onPick={(fp) => showLog(() => setFingerprint(fp))} />
       <EventLog
         t={t}
         ago={ago}
+        open={logOpen || pane.id !== null}
+        onToggle={() => setLogOpen((v) => !v)}
         fingerprint={fingerprint}
         onClearFingerprint={() => setFingerprint(null)}
         runId={runFilter}
@@ -466,10 +473,7 @@ function ProblemGroups({ groups, t, ago, onPick }: { groups: EventGroup[]; t: T;
             <li key={group.fingerprint}>
               <button
                 type="button"
-                onClick={() => {
-                  onPick(group.fingerprint);
-                  document.getElementById("system-event-log")?.scrollIntoView({ behavior: "smooth", block: "start" });
-                }}
+                onClick={() => onPick(group.fingerprint)}
                 className="flex min-h-11 w-full items-start gap-3 py-2.5 text-left hover:bg-white/[0.02]"
                 title={t("showOccurrences")}
               >
@@ -494,9 +498,11 @@ function ProblemGroups({ groups, t, ago, onPick }: { groups: EventGroup[]; t: T;
 
 type EventsPage = { events: SystemEventRow[]; nextBefore: number | null };
 
-function EventLog({ t, ago, fingerprint, onClearFingerprint, runId, onClearRun }: {
+function EventLog({ t, ago, open, onToggle, fingerprint, onClearFingerprint, runId, onClearRun }: {
   t: T;
   ago: (v: string | null) => string;
+  open: boolean;
+  onToggle: () => void;
   fingerprint: string | null;
   onClearFingerprint: () => void;
   runId: number | null;
@@ -522,6 +528,7 @@ function EventLog({ t, ago, fingerprint, onClearFingerprint, runId, onClearRun }
       (await apiRequest("GET", pageParam ? `${base}&before=${pageParam}` : base)).json(),
     getNextPageParam: (last) => last.nextBefore,
     refetchInterval: REFRESH_MS,
+    enabled: open,
   });
   const rows = events.data?.pages.flatMap((page) => page.events) ?? [];
   const isDesktop = useIsDesktop();
@@ -529,7 +536,11 @@ function EventLog({ t, ago, fingerprint, onClearFingerprint, runId, onClearRun }
   const pane = useEventPane();
 
   const card = (
-    <Card title={t("eventsTitle")} icon={ScrollText}>
+    <Card
+      title={t("eventsTitle")}
+      icon={ScrollText}
+      right={<Button variant="ghost" size="sm" onClick={onToggle} className="text-xs text-white/55">{t("hideLog")}</Button>}
+    >
       <FilterBar
         className="mb-3"
         search={<FilterSearch value={query} onChange={setQ} debounceMs={300} placeholder={t("searchPlaceholder")} shortcut={false} />}
@@ -606,9 +617,27 @@ function EventLog({ t, ago, fingerprint, onClearFingerprint, runId, onClearRun }
     </Card>
   );
 
+  if (!open) {
+    return (
+      <div id="system-event-log" className="scroll-mt-4">
+        <button
+          type="button"
+          onClick={onToggle}
+          className="flex min-h-12 w-full items-center gap-3 rounded-2xl border border-white/10 bg-white/[0.02] px-4 text-left text-sm font-semibold text-white/80 hover:bg-white/[0.04]"
+          data-testid="status-show-log"
+        >
+          <ScrollText className="h-4 w-4 text-white/45" aria-hidden="true" />
+          <span className="flex-1">{t("eventsTitle")}</span>
+          <span className="text-xs font-medium text-white/45">{t("showLog")}</span>
+          <ChevronDown className="h-4 w-4 text-white/40" aria-hidden="true" />
+        </button>
+      </div>
+    );
+  }
+
   return (
     <div id="system-event-log" className="scroll-mt-4">
-      {isDesktop ? (
+      {isDesktop && pane.id ? (
         <MasterDetail
           closeLabel={tc("close")}
           onClose={pane.close}

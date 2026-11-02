@@ -1,3 +1,4 @@
+import { useEffect, useRef } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "wouter";
 import { AlertTriangle, Clock, FileText, History, Search } from "lucide-react";
@@ -33,6 +34,11 @@ export function AdminSystemEventDetail({ id, onClose, onOpen }: { id: number; on
   const ago = useAgo(t);
   const query = useQuery<SystemEventDetail>({ queryKey: [`/api/xpot/admin/system-events/${id}`], retry: false });
   const pane = Boolean(onClose);
+  const currentRef = useRef<HTMLLIElement>(null);
+  // The list is long and boxed: keep the open occurrence in view.
+  useEffect(() => {
+    currentRef.current?.scrollIntoView({ block: "nearest" });
+  }, [query.data]);
 
   const back = onClose
     ? <PaneBar fullHref={`/admin/health/events/${id}`} onClose={onClose} testId="system-event-pane" />
@@ -91,17 +97,18 @@ export function AdminSystemEventDetail({ id, onClose, onOpen }: { id: number; on
           {summary}
         </p>
         <p className="mt-1 text-xs text-white/45">{formatDateTime(event.createdAt)}</p>
+        <p className="mt-3 text-sm text-white/70" data-testid="system-event-next">{group.count > 1 ? t("nextRepeat") : t("nextOnce")}</p>
       </section>
 
-      <div className={`grid gap-4 ${pane ? "" : "lg:grid-cols-3"}`}>
+      <div className={`grid gap-4 ${pane ? "" : run ? "lg:grid-cols-3" : "lg:grid-cols-2"}`}>
         <Card title={t("detailFrequency")} icon={History}>
           <p className="text-2xl font-bold tabular-nums">{t("groupCount", { count: group.count })}</p>
           <p className="mt-1 text-xs text-white/50">{t("detailFirstSeen", { time: ago(group.firstSeenAt) })}</p>
           <p className="text-xs text-white/50">{t("detailLastSeen", { time: ago(group.lastSeenAt) })}</p>
         </Card>
 
-        <Card title={t("detailSearch")} icon={Search} right={run ? <RunStatusChip status={run.status} t={t} /> : undefined}>
-          {run ? (
+        {run && (
+          <Card title={t("detailSearch")} icon={Search} right={<RunStatusChip status={run.status} t={t} />}>
             <div className="text-sm">
               <p className="font-semibold">{run.query} · {run.location}</p>
               <p className="text-xs text-white/45">
@@ -112,15 +119,13 @@ export function AdminSystemEventDetail({ id, onClose, onOpen }: { id: number; on
               </p>
               {run.errorMessage && <p className="mt-1 break-words text-xs text-red-300">{run.errorMessage}</p>}
             </div>
-          ) : (
-            <p className="text-sm text-white/45">{t("detailNoSearch")}</p>
-          )}
-        </Card>
+          </Card>
+        )}
 
         <Card title={t("detailOccurrences")} icon={Clock}>
           <ul className="max-h-40 space-y-1 overflow-y-auto text-xs">
-            {occurrences.map((item) => (
-              <li key={item.id}>
+            {[...occurrences].sort((a, b) => b.createdAt.localeCompare(a.createdAt)).map((item) => (
+              <li key={item.id} ref={item.id === event.id ? currentRef : undefined}>
                 <Link
                   href={`/admin/health/events/${item.id}`}
                   onClick={(e) => {
@@ -185,11 +190,6 @@ export function AdminSystemEventDetail({ id, onClose, onOpen }: { id: number; on
         </div>
       </details>
 
-      {!pane && (
-        <p className="text-center text-xs text-white/35">
-          <Link href="/admin/health" className="hover:text-white/60">{t("backToHealth")}</Link>
-        </p>
-      )}
     </div>
   );
 }

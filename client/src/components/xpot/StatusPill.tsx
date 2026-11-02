@@ -251,6 +251,7 @@ export const HEALTH_TONE: Record<string, PillTone> = {
   running: "blue",
   starting: "blue",
   slow: "amber",
+  off: "amber",
   stuck: "amber",
   failed: "red",
   stalled: "red",
