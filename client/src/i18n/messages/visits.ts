@@ -5,7 +5,6 @@ import type { Dictionary } from "../index";
 
 const en = {
   // List and filters
-  allVisits: "All visits",
   byDay: "By day",
   filterAll: "All",
   filterByStatus: "Filter by result",
@@ -82,7 +81,6 @@ const en = {
   colCompany: "Company",
   colOutcome: "Result",
   colDuration: "Duration",
-  colNotes: "Notes",
   hasAudio: "Voice note",
   hasSummary: "AI summary",
   visitNotFound: "This visit was not found. It may have been deleted.",
@@ -102,7 +100,6 @@ const en = {
 export const visitsMessages: Dictionary<typeof en> = {
   en,
   pt: {
-    allVisits: "Todas as visitas",
     byDay: "Por dia",
     filterAll: "Todas",
     filterByStatus: "Filtrar por resultado",
@@ -177,7 +174,6 @@ export const visitsMessages: Dictionary<typeof en> = {
     colCompany: "Empresa",
     colOutcome: "Resultado",
     colDuration: "Duração",
-    colNotes: "Anotações",
     hasAudio: "Nota de voz",
     hasSummary: "Resumo da IA",
     visitNotFound: "Esta visita não foi encontrada. Ela pode ter sido excluída.",
@@ -194,7 +190,6 @@ export const visitsMessages: Dictionary<typeof en> = {
     removeSocial: "Remover rede social",
   },
   es: {
-    allVisits: "Todas las visitas",
     byDay: "Por día",
     filterAll: "Todas",
     filterByStatus: "Filtrar por resultado",
@@ -269,7 +264,6 @@ export const visitsMessages: Dictionary<typeof en> = {
     colCompany: "Empresa",
     colOutcome: "Resultado",
     colDuration: "Duración",
-    colNotes: "Notas",
     hasAudio: "Nota de voz",
     hasSummary: "Resumen de IA",
     visitNotFound: "No se encontró esta visita. Puede que la hayan eliminado.",

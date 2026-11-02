@@ -13,10 +13,9 @@ import { useIsDesktop } from "@/hooks/use-is-desktop";
 import type { EnrichedSalesVisit } from "./types";
 import { useT, type Translate } from "@/i18n";
 import { visitsMessages } from "@/i18n/messages/visits";
-import { Segmented } from "@/components/xpot/Segmented";
 import { EmptyState, ErrorState } from "@/components/xpot/EmptyState";
 import { ListSkeleton } from "@/components/xpot/ListSkeleton";
-import { FilterBar, FilterChips, FilterDay, FilterSelect, fromDayKey, toDayKey } from "@/components/xpot/filters";
+import { FilterBar, FilterChips, FilterDay, FilterSelect, fromDayKey, toDayKey, FilterToggle } from "@/components/xpot/filters";
 import { useViewerAccess } from "@/lib/adminMode";
 import { apiRequest } from "@/lib/queryClient";
 import { currentSearch, useUrlFilters } from "@/hooks/use-url-filters";
@@ -192,19 +191,20 @@ export function XpotVisits({ basePath = "/dashboard/history" }: { basePath?: str
     );
   }
 
+  // No visit yet: one message and the way to the first one, with no filters over nothing.
+  if (!visitsQuery.isLoading && !visitsQuery.isError && allVisits.length === 0) return <div className="space-y-4">{emptyVisits}</div>;
+
   return (
     <div className="space-y-4">
       <FilterBar
         testId="visits-filters"
         controls={<>
-          <Segmented
-            className="col-span-2 sm:w-72"
-            items={[
-              { id: "all" as const, label: t("allVisits"), count: allVisits.length },
-              { id: "day" as const, label: t("byDay"), count: visitsForDay.length },
-            ]}
-            value={viewMode}
-            onChange={(view) => filters.set({ view, day: view === "day" ? filters.values.day : null })}
+          <FilterToggle
+            pressed={viewMode === "day"}
+            onChange={(on) => filters.set({ view: on ? "day" : "all", day: on ? filters.values.day : null })}
+            label={t("byDay")}
+            icon={CalendarDays}
+            testId="visits-filter-day"
           />
           {canManage ? (
             <FilterSelect

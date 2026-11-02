@@ -1202,7 +1202,7 @@ export function XpotProspecting() {
               <DialogDescription className="sr-only">{planningBodies[planningStep]}</DialogDescription>
               {/* On a phone the planner fills the visible screen (phoneSheet) and its
                   footer sits at the bottom; a fixed minimum height only from sm. */}
-              <div className="flex flex-col p-4 sm:min-h-[500px] sm:p-8">
+              <div className="flex min-w-0 flex-col p-4 sm:min-h-[500px] sm:p-8">
           <div className="flex items-center justify-between gap-4">
             <div className="flex items-center gap-3">
               <span className="flex h-10 w-10 items-center justify-center rounded-2xl bg-indigo-500/15 text-indigo-300"><Radar className="h-5 w-5" /></span>
@@ -1211,14 +1211,13 @@ export function XpotProspecting() {
                 <p className="text-xs font-medium text-white/45">{t("setupProgress", { current: planningStep + 1, total: 4 })}</p>
               </div>
             </div>
-            <span className="text-sm font-bold tabular-nums text-indigo-200">{planningStep + 1}/4</span>
           </div>
 
           <div className="mt-5 grid grid-cols-4 gap-2" aria-hidden="true">
             {[0, 1, 2, 3].map((step) => <span key={step} className={`h-1 rounded-full transition-colors ${step <= planningStep ? "bg-gradient-to-r from-indigo-400 to-sky-400" : "bg-white/10"}`} />)}
           </div>
 
-          <form className="flex flex-1 flex-col sm:min-h-[390px]" onSubmit={submitPlanningStep}>
+          <form className="flex min-w-0 flex-1 flex-col sm:min-h-[390px]" onSubmit={submitPlanningStep}>
             {/* While the keyboard is up the step's explanation steps aside, so the
                 field, its suggestions and the chips fit in what stays visible. */}
             <div className="flex-1 py-6 sm:py-12 [html[data-keyboard=open]_&]:py-4">

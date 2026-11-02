@@ -1,5 +1,8 @@
 import { useEffect, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
+import { useIsDesktop } from "@/hooks/use-is-desktop";
+import { prospectingMessages } from "@/i18n/messages/prospecting";
+import { localDateKey, routeStopFocus, todayRouteOf } from "./prospectingUi";
 import {
   Building2,
   MapPinned,
@@ -357,6 +360,29 @@ export function XpotCheckIn() {
     return Number.isFinite(Number(loc.lat)) && Number.isFinite(Number(loc.lng)) ? loc : null;
   })();
 
+  // With a route open today, its next stop is one tap away: no searching for the company the route already names.
+  const tp = useT(prospectingMessages);
+  const isDesktop = useIsDesktop();
+  const routesQuery = useQuery<Array<{ id: number; routeDate: string; status: string }>>({ queryKey: ["/api/xpot/prospecting/routes"], enabled: !activeVisit });
+  const openRoute = todayRouteOf(routesQuery.data, localDateKey());
+  const routeDetailQuery = useQuery<{ stops: Array<{ id: number; name: string; status: string }> }>({
+    queryKey: ["/api/xpot/prospecting/routes", openRoute?.id],
+    enabled: Boolean(openRoute) && !activeVisit,
+  });
+  const nextRouteStop = routeStopFocus(routeDetailQuery.data?.stops ?? []).next;
+  const pickNextStop = useMutation({
+    mutationFn: async (stop: { id: number; name: string }) => {
+      const response = await apiRequest("POST", `/api/xpot/prospecting/routes/${openRoute!.id}/stops/${stop.id}/prepare-check-in`, {});
+      return { ...(await response.json() as { leadId: number }), name: stop.name };
+    },
+    onSuccess: async ({ leadId, name }) => {
+      await queryClient.invalidateQueries({ queryKey: ["/api/xpot/leads"] });
+      setSelectedLeadId(leadId);
+      setCheckInSearch(name);
+    },
+    onError: (error: Error) => toast({ title: tp("checkInUnavailable"), description: error.message, variant: "destructive" }),
+  });
+
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const [editLeadOpen, setEditLeadOpen] = useState(false);
   const [checkoutStatus, setCheckoutStatus] = useState<VisitStatus>("completed");
@@ -584,6 +610,18 @@ export function XpotCheckIn() {
       <div className={`px-1 ${EYEBROW}`}>{t("checkInHeading")}</div>
       <div className="rounded-2xl" style={GLASS_RAISED}>
         <div className="px-4 py-5 space-y-5 sm:px-6">
+          {nextRouteStop && !selectedLead ? (
+            <button
+              type="button"
+              onClick={() => pickNextStop.mutate(nextRouteStop)}
+              disabled={pickNextStop.isPending}
+              className="flex min-h-12 w-full min-w-0 items-center gap-2.5 rounded-2xl border border-blue-400/25 bg-blue-500/[0.1] px-4 text-left text-sm font-semibold text-blue-100 transition active:scale-[0.99]"
+              data-testid="check-in-next-stop"
+            >
+              <MapPinCheck className="h-4 w-4 shrink-0" aria-hidden="true" />
+              <span className="min-w-0 truncate">{tp("stopNext", { name: nextRouteStop.name })}</span>
+            </button>
+          ) : null}
           <PlaceLeadSearch
             value={checkInSearch}
             onChange={(next) => { setCheckInSearch(next); if (!next) setSelectedLeadId(""); }}
@@ -674,17 +712,30 @@ export function XpotCheckIn() {
 
           {/* Slider */}
           <div className={checkInDropdownOpen ? "pointer-events-none" : ""}>
-            <ConfirmSlider
-              label={selectedLead ? t("slideToCheckIn") : t("selectLeadFirst")}
-              helperText={selectedLead ? t("confirmVisitStart", { name: selectedLead.name }) : t("chooseLeadHint")}
-              loading={checkInMutation.isPending || createLeadMutation.isPending}
-              disabled={!selectedLeadId || createLeadMutation.isPending}
-              onConfirm={() => {
+            {(() => {
+              const startCheckIn = () => {
                 const input = { leadId: Number(selectedLeadId), lat: geoState.lat, lng: geoState.lng, gpsAccuracyMeters: geoState.accuracy };
                 if (!hasLocation) setOverridePrompt({ input, miss: null });
                 else checkInMutation.mutate(input);
-              }}
-            />
+              };
+              // A mouse has no use for a slider: on a computer it is a button, shown once a company is chosen.
+              if (isDesktop) {
+                return selectedLead ? (
+                  <Button type="button" variant="brand" size="lg" onClick={startCheckIn} loading={checkInMutation.isPending || createLeadMutation.isPending} className="w-full font-bold" data-testid="check-in-button">
+                    <MapPinCheck aria-hidden="true" />{t("checkInAt", { name: selectedLead.name })}
+                  </Button>
+                ) : <p className="text-sm text-white/45">{t("chooseLeadHint")}</p>;
+              }
+              return selectedLead ? (
+                <ConfirmSlider
+                  label={t("slideToCheckIn")}
+                  helperText={t("confirmVisitStart", { name: selectedLead.name })}
+                  loading={checkInMutation.isPending || createLeadMutation.isPending}
+                  disabled={!selectedLeadId || createLeadMutation.isPending}
+                  onConfirm={startCheckIn}
+                />
+              ) : <p className="text-sm text-white/45">{t("chooseLeadHint")}</p>;
+            })()}
           </div>
         </div>
       </div>
