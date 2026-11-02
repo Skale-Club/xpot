@@ -4,7 +4,7 @@ Contexto: o dono do Xpot abriu o sistema e disse: "Eu não faço ideia do que s�
 
 Quem usa: dono de negócio pequeno, revendedor na rua pelo celular, vendedor em campo, quem opera a impressora. Nenhum deles conhece o banco nem o código. Pense como a pessoa, não como o programador.
 
-Imagens: `C:\Users\Vanildo\Dev\xp-fix\.lab\shots\r0\<perfil>\<lang>-<device>\<tela>.png` (abra com a ferramenta Read). Lista: `.lab\shots\r0\screens-by-profile.txt`. Técnico: `.lab\shots\r0\report.json`. Código: `C:\Users\Vanildo\Dev\xp-fix\client\src` (só leitura, para achar o arquivo e a causa). Glossário: `docs/MODULES.md` §5. Plano antigo: `docs/SIMPLICITY_AUDIT.md`.
+Imagens: `.lab/shots/<round>/<perfil>/<lang>-<device>/<tela>.png` (abra com a ferramenta Read). Lista: `.lab/shots/<round>/screens-by-profile.txt`. Técnico: `.lab/shots/<round>/report.json`. Código: `client/src` (só leitura, para achar o arquivo e a causa). Glossário: `docs/MODULES.md` §5. Plano antigo: `docs/SIMPLICITY_AUDIT.md`.
 
 ## Perguntas para CADA tela
 
@@ -30,7 +30,7 @@ Limitações do laboratório, que NÃO são achados: sem previews 3D (figura 2D)
 
 ## Entrega
 
-Grave em `C:\Users\Vanildo\Dev\xp-fix\.lab\findings\<área>.md`. Sem achado genérico: "simplificar a tela" não vale. Cada achado na forma:
+Grave em `docs/simplicity/<área>.md`. Sem achado genérico: "simplificar a tela" não vale. Cada achado na forma:
 
 ```
 ### <ID da área>-<n> [S1|S2|S3|S4] <título curto>
