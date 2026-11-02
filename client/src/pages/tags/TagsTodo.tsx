@@ -9,13 +9,14 @@ import { tagsMessages } from "@/i18n/messages/tags";
 import { ErrorState } from "@/components/xpot/EmptyState";
 import { useViewerAccess } from "@/lib/adminMode";
 import { FirstSteps } from "./FirstSteps";
+import { TagsDashboard } from "./TagsDashboard";
 import { APP_BASE, errorText, myPiecesQuery } from "./lib";
 import { CARD, EYEBROW_MUTED } from "./ui";
 
 // What a reseller does next, under "Read a piece" on Home: the pieces waiting for them, one row per kind, each
 // opening the list already filtered; or one line saying nothing is. The numbers come from the same list as
 // "My pieces" (lib.ts myPiecesQuery), through resellerTodo, so a row always opens as many pieces as it counted.
-// Results (scans, top pieces and customers) sit one link away: they are a report, not a task.
+// The numbers and scans (TagsDashboard) follow below; "See results" is the same report on its own screen.
 
 function Row({ icon: Icon, tone, title, hint, to, testId }: { icon: LucideIcon; tone: "amber" | "neutral"; title: string; hint?: ReactNode; to: string; testId: string }) {
   const [, navigate] = useLocation();
@@ -45,7 +46,7 @@ export function TagsTodo() {
   const pending = todo ? todo.finish + todo.noCustomer + todo.paused : 0;
 
   return (
-    <div className="space-y-3" data-testid="tags-todo">
+    <div className="space-y-5" data-testid="tags-todo">
       {error && !data ? (
         <ErrorState message={errorText(error, tc("requestFailed"))} onRetry={() => void refetch()} />
       ) : todo && data && data.length > 0 ? (
@@ -81,6 +82,8 @@ export function TagsTodo() {
           {t("seeResults")}
         </button>
       )}
+      {/* A new reseller has nothing to count yet: only the first steps. */}
+      {data && data.length > 0 && <TagsDashboard afterTodo />}
     </div>
   );
 }

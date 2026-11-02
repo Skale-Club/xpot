@@ -13,6 +13,7 @@ import { manageTagsMessages } from "@/i18n/messages/manageTags";
 import { manageTagsPiecesMessages } from "@/i18n/messages/manageTagsPieces";
 import { pieceScreenMessages } from "@/i18n/messages/pieceScreen";
 import { tagsMessages } from "@/i18n/messages/tags";
+import { useTagLabels } from "./labels";
 import { pieceChipState, pieceStatus } from "@/components/piece/pieceStatus";
 import { matchesStockMetric } from "@shared/tagMetrics";
 import { pieceHasLocation } from "@/components/piece/pieceView";
@@ -22,10 +23,10 @@ import { pieceHasLocation } from "@/components/piece/pieceView";
 // same words as its pop-up and the reseller's app, components/piece/pieceStatus.ts) and the columns the caller
 // picks. The chip only speaks when it is something to do. Text and pills align left, counts right.
 
-/** Optional columns, always drawn in this order after Code and Status. */
-export type PieceColumn = "organization" | "customer" | "reseller" | "chip" | "scans" | "scanned" | "sold" | "batch";
+/** Optional columns, always drawn in this order after Code and Status; "destination" is a line under the customer. */
+export type PieceColumn = "organization" | "customer" | "destination" | "reseller" | "chip" | "scans" | "scanned" | "sold" | "batch";
 
-const ORDER: readonly PieceColumn[] = ["organization", "customer", "reseller", "chip", "scans", "scanned", "sold", "batch"];
+const ORDER: readonly Exclude<PieceColumn, "destination">[] = ["organization", "customer", "reseller", "chip", "scans", "scanned", "sold", "batch"];
 
 export interface PieceSelection {
   /** Which pieces can be ticked (e.g. the ones a return accepts). */
@@ -37,8 +38,8 @@ export interface PieceSelection {
 }
 
 /** The one status pill of a piece: the same words and colour as its pop-up, its page and the reseller's app. */
-export function WherePill({ piece }: { piece: TagListItem }) {
-  return <PieceStatusPill piece={piece} />;
+export function WherePill({ piece, className }: { piece: TagListItem; className?: string }) {
+  return <PieceStatusPill piece={piece} className={className} />;
 }
 
 const SHORT_DAY: Intl.DateTimeFormatOptions = { month: "short", day: "numeric" };
@@ -100,6 +101,7 @@ export function PieceTable({
 }) {
   const tm = useT(manageTagsMessages);
   const tp = useT(manageTagsPiecesMessages);
+  const labels = useTagLabels();
   const tps = useT(pieceScreenMessages);
   // A new list (another filter) starts from the first page again.
   const paged = usePagedList(pieces, { pageSize: pageSize ?? Math.max(pieces.length, 1), resetKey: `${pieces.length}:${pieces[0]?.id ?? ""}` });
@@ -113,6 +115,10 @@ export function PieceTable({
   const selectableCodes = selection ? pieces.filter(selection.canSelect).map((p) => p.publicCode) : [];
   const allOn = selectableCodes.length > 0 && selectableCodes.every((c) => selection?.selected.has(c));
   const none = <span className="text-white/30">—</span>;
+  // Many columns (Stock with its Batch): tighter cells and the model name under the code, so the table fits in any language.
+  const crowded = columns.length >= 5;
+  // A long label (Spanish: "Falló la grabación del chip") wraps in its pill instead of widening the column.
+  const wrapPill = crowded ? "max-w-[120px] !whitespace-normal !rounded-xl !leading-tight" : undefined;
   // "Company stock" is the same set the "In company stock" chip counts (shared/tagMetrics.ts house): not reserved, for internal
   // use, sold, lost or already set up for a customer. Those say what they are in the Status column.
   const heldBy = (p: TagListItem): string | null => p.repName ?? (pieceHasLocation(p) && matchesStockMetric(p, "house") ? tp("houseStock") : null);
@@ -123,29 +129,34 @@ export function PieceTable({
   const scansOf = (p: TagListItem) => p.qrInteractions + p.nfcInteractions;
   const day = (at: string | null) => formatDate(at, SHORT_DAY);
 
-  const cells: Record<PieceColumn, CompactDataColumn<TagListItem>> = {
+  const cells: Record<(typeof ORDER)[number], CompactDataColumn<TagListItem>> = {
     organization: {
       key: "organization",
       label: tm("colCompany"),
-      cellClassName: "max-w-[130px] truncate text-white/70",
+      cellClassName: "max-w-[96px] truncate text-white/70",
       render: (p) => p.organizationName ?? none,
     },
     customer: {
       key: "customer",
       label: tm("colCustomer"),
-      cellClassName: "max-w-[170px] truncate text-white/80",
-      render: (p) => p.leadName ?? (noCustomerText(p) ? <span className="text-white/40">{noCustomerText(p)}</span> : none),
+      cellClassName: "max-w-[160px]",
+      render: (p) => (
+        <span className="block min-w-0">
+          <span className="block truncate text-white/80">{p.leadName ?? (noCustomerText(p) ? <span className="text-white/40">{noCustomerText(p)}</span> : none)}</span>
+          {has("destination") && p.destinationType ? <span className="block truncate text-xs text-white/40">{labels.destination(p.destinationType)}</span> : null}
+        </span>
+      ),
     },
     reseller: {
       key: "reseller",
       label: tm("colWith"),
-      cellClassName: "max-w-[140px] truncate text-white/70",
+      cellClassName: "max-w-[108px] truncate text-white/70",
       render: (p) => heldBy(p) ?? none,
     },
     chip: {
       key: "chip",
       label: tp("colChip"),
-      render: (p) => (pieceChipState(p) === "none" ? none : <PieceChipPill piece={p} />),
+      render: (p) => (pieceChipState(p) === "none" ? none : <PieceChipPill piece={p} className={wrapPill} />),
     },
     scans: {
       key: "scans",
@@ -153,9 +164,12 @@ export function PieceTable({
       align: "right",
       cellClassName: "whitespace-nowrap text-white/80",
       render: (p) => (
-        <span title={`QR ${p.qrInteractions} · NFC ${p.nfcInteractions}`}>
-          {scansOf(p) > 0 ? <>{scansOf(p)}<span className="text-white/40"> · {day(p.lastInteractionAt)}</span></> : none}
-        </span>
+        scansOf(p) > 0 ? (
+          <span className="block">
+            <span className="block">{scansOf(p)}<span className="text-white/40"> · {day(p.lastInteractionAt)}</span></span>
+            <span className="block text-[11px] leading-tight text-white/40">QR {p.qrInteractions} · NFC {p.nfcInteractions}</span>
+          </span>
+        ) : none
       ),
     },
     scanned: {
@@ -203,9 +217,9 @@ export function PieceTable({
       key: "code",
       label: tm("colCode"),
       cellClassName: "max-w-[300px] !py-2",
-      render: (p) => <PieceCell piece={p} />,
+      render: (p) => <PieceCell piece={p} stacked={crowded} />,
     },
-    { key: "status", label: tm("colStatus"), render: (p) => (noCustomerText(p) ? null : <WherePill piece={p} />) },
+    { key: "status", label: tm("colStatus"), render: (p) => (noCustomerText(p) ? null : <WherePill piece={p} className={wrapPill} />) },
     ...ORDER.filter(has).map((column) => cells[column]),
   ];
 
@@ -215,7 +229,8 @@ export function PieceTable({
       <ul className="space-y-2 md:hidden">
         {shown.map((p) => {
           const meta = [has("organization") ? p.organizationName : null, has("customer") ? p.leadName ?? noCustomerText(p) : null, has("reseller") ? heldBy(p) : null].filter(Boolean).join(" · ");
-          const scans = has("scans") && scansOf(p) > 0 ? `${tp("colScans")} ${scansOf(p)} · ${day(p.lastInteractionAt)}` : null;
+          const batch = has("batch") ? p.batchCode : null;
+          const scans = has("scans") && scansOf(p) > 0 ? tp("cardStats", { qr: p.qrInteractions, nfc: p.nfcInteractions, last: day(p.lastInteractionAt) }) : null;
           const scanned = has("scanned") && p.lastInventoryScanAt ? tp("cardScanned", { date: day(p.lastInventoryScanAt) }) : null;
           return (
             <li key={p.id} className={`flex items-start gap-2 rounded-2xl ${GLASS_CLASS} p-3`}>
@@ -231,7 +246,7 @@ export function PieceTable({
                   {/* A status that already says "Chip to write" / "Chip write failed" is not said twice on a card. */}
                   {has("chip") && !chipSaidByStatus(p) ? <PieceChipPill piece={p} quiet="none" /> : null}
                 </div>
-                {meta ? <p className="mt-1.5 break-words text-xs text-white/60">{meta}</p> : null}
+                {meta || batch ? <p className="mt-1.5 break-words text-xs text-white/60">{meta}{meta && batch ? " · " : ""}{batch ? <span className="whitespace-nowrap">{batch}</span> : null}</p> : null}
                 {scans || scanned ? <p className="mt-0.5 text-xs tabular-nums text-white/40">{scanned ?? scans}</p> : null}
               </button>
             </li>
@@ -251,6 +266,7 @@ export function PieceTable({
         selectedKey={selectedId}
         isRowSelected={selection ? (p) => selection.selected.has(p.publicCode) : undefined}
         stickyHeadTop={headTop}
+        dense={crowded}
       />
 
       {pageSize ? <ListPager shown={paged.shown} total={paged.total} hasMore={paged.hasMore} onMore={paged.showMore} pageSize={pageSize} auto={false} /> : null}

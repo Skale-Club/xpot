@@ -35,8 +35,8 @@ import { manageTagsBatchesMessages } from "@/i18n/messages/manageTagsBatches";
 /** Pieces per server page; the next page loads as you reach the end. */
 const PAGE = 100;
 
-// Batch is in the piece and in the batch filter; the stock list keeps what a person asks of a piece: whose, with whom, chip, scans.
-const COLUMNS: readonly PieceColumn[] = ["customer", "reseller", "chip", "scans"];
+// What a person asks of a piece: whose, where its link goes, with whom, chip, scans. The platform and partners also trace production, so they read the batch.
+const COLUMNS: readonly PieceColumn[] = ["customer", "destination", "reseller", "chip", "scans"];
 
 /** Whether a piece is open in the pane now (the next open replaces it in history). */
 const current = () => new URLSearchParams(window.location.search).has("piece");
@@ -170,7 +170,7 @@ export function PiecesTab({ go }: { go: (path: string) => void }) {
   const { data: leads = [] } = useLeads();
   const { data: batches = [] } = useBatchOptions();
   // The organization filter is platform management's (?org=, also the Organizations page's "See all in Inventory").
-  const { canManage, me } = useViewerAccess();
+  const { canManage, me, profile } = useViewerAccess();
   // Whoever runs several organizations gets the filter and the organization of each piece too, not only the platform.
   const spansOrganizations = canManage || ownedOrganizations(me?.organizations).length > 1;
   const { data: organizations = [] } = useOrganizations(spansOrganizations);
@@ -296,6 +296,7 @@ export function PiecesTab({ go }: { go: (path: string) => void }) {
 
   // Platform management sees every company's pieces, so it reads whose each is. In company stock every row says "Company stock": no column.
   const columns = COLUMNS.filter((c) => !(c === "reseller" && (where === "house" || where === "withCustomer")));
+  if (profile === "platform" || profile === "partner") columns.push("batch");
   // Someone who runs several organizations (or the platform with "All organizations") sees whose piece each is.
   if (spansOrganizations && !filters.org && orgOptions.length > 1) columns.unshift("organization");
 
