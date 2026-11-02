@@ -13,6 +13,7 @@ import { manageTagsMessages } from "@/i18n/messages/manageTags";
 import { manageTagsPiecesMessages } from "@/i18n/messages/manageTagsPieces";
 import { pieceScreenMessages } from "@/i18n/messages/pieceScreen";
 import { tagsMessages } from "@/i18n/messages/tags";
+import { useTagLabels } from "./labels";
 import { pieceChipState, pieceStatus } from "@/components/piece/pieceStatus";
 import { matchesStockMetric } from "@shared/tagMetrics";
 import { pieceHasLocation } from "@/components/piece/pieceView";
@@ -22,10 +23,10 @@ import { pieceHasLocation } from "@/components/piece/pieceView";
 // same words as its pop-up and the reseller's app, components/piece/pieceStatus.ts) and the columns the caller
 // picks. The chip only speaks when it is something to do. Text and pills align left, counts right.
 
-/** Optional columns, always drawn in this order after Code and Status. */
-export type PieceColumn = "organization" | "customer" | "reseller" | "chip" | "scans" | "scanned" | "sold" | "batch";
+/** Optional columns, always drawn in this order after Code and Status; "destination" is a line under the customer. */
+export type PieceColumn = "organization" | "customer" | "destination" | "reseller" | "chip" | "scans" | "scanned" | "sold" | "batch";
 
-const ORDER: readonly PieceColumn[] = ["organization", "customer", "reseller", "chip", "scans", "scanned", "sold", "batch"];
+const ORDER: readonly Exclude<PieceColumn, "destination">[] = ["organization", "customer", "reseller", "chip", "scans", "scanned", "sold", "batch"];
 
 export interface PieceSelection {
   /** Which pieces can be ticked (e.g. the ones a return accepts). */
@@ -101,6 +102,7 @@ export function PieceTable({
   const tm = useT(manageTagsMessages);
   const tp = useT(manageTagsPiecesMessages);
   const modelName = useTagModelName();
+  const labels = useTagLabels();
   const tps = useT(pieceScreenMessages);
   // A new list (another filter) starts from the first page again.
   const paged = usePagedList(pieces, { pageSize: pageSize ?? Math.max(pieces.length, 1), resetKey: `${pieces.length}:${pieces[0]?.id ?? ""}` });
@@ -124,7 +126,7 @@ export function PieceTable({
   const scansOf = (p: TagListItem) => p.qrInteractions + p.nfcInteractions;
   const day = (at: string | null) => formatDate(at, SHORT_DAY);
 
-  const cells: Record<PieceColumn, CompactDataColumn<TagListItem>> = {
+  const cells: Record<(typeof ORDER)[number], CompactDataColumn<TagListItem>> = {
     organization: {
       key: "organization",
       label: tm("colCompany"),
@@ -134,8 +136,13 @@ export function PieceTable({
     customer: {
       key: "customer",
       label: tm("colCustomer"),
-      cellClassName: "max-w-[170px] truncate text-white/80",
-      render: (p) => p.leadName ?? (noCustomerText(p) ? <span className="text-white/40">{noCustomerText(p)}</span> : none),
+      cellClassName: "max-w-[200px]",
+      render: (p) => (
+        <span className="block min-w-0">
+          <span className="block truncate text-white/80">{p.leadName ?? (noCustomerText(p) ? <span className="text-white/40">{noCustomerText(p)}</span> : none)}</span>
+          {has("destination") && p.destinationType ? <span className="block truncate text-xs text-white/40">{labels.destination(p.destinationType)}</span> : null}
+        </span>
+      ),
     },
     reseller: {
       key: "reseller",
@@ -154,9 +161,12 @@ export function PieceTable({
       align: "right",
       cellClassName: "whitespace-nowrap text-white/80",
       render: (p) => (
-        <span title={`QR ${p.qrInteractions} · NFC ${p.nfcInteractions}`}>
-          {scansOf(p) > 0 ? <>{scansOf(p)}<span className="text-white/40"> · {day(p.lastInteractionAt)}</span></> : none}
-        </span>
+        scansOf(p) > 0 ? (
+          <span className="block">
+            <span className="block">{scansOf(p)}<span className="text-white/40"> · {day(p.lastInteractionAt)}</span></span>
+            <span className="block text-[11px] leading-tight text-white/40">QR {p.qrInteractions} · NFC {p.nfcInteractions}</span>
+          </span>
+        ) : none
       ),
     },
     scanned: {
@@ -215,8 +225,8 @@ export function PieceTable({
       {/* Phones: tappable cards */}
       <ul className="space-y-2 md:hidden">
         {shown.map((p) => {
-          const meta = [has("organization") ? p.organizationName : null, has("customer") ? p.leadName ?? noCustomerText(p) : null, has("reseller") ? heldBy(p) : null].filter(Boolean).join(" · ");
-          const scans = has("scans") && scansOf(p) > 0 ? `${tp("colScans")} ${scansOf(p)} · ${day(p.lastInteractionAt)}` : null;
+          const meta = [has("organization") ? p.organizationName : null, has("customer") ? p.leadName ?? noCustomerText(p) : null, has("reseller") ? heldBy(p) : null, has("batch") ? p.batchCode : null].filter(Boolean).join(" · ");
+          const scans = has("scans") && scansOf(p) > 0 ? tp("cardStats", { qr: p.qrInteractions, nfc: p.nfcInteractions, last: day(p.lastInteractionAt) }) : null;
           const scanned = has("scanned") && p.lastInventoryScanAt ? tp("cardScanned", { date: day(p.lastInventoryScanAt) }) : null;
           return (
             <li key={p.id} className={`flex items-start gap-2 rounded-2xl ${GLASS_CLASS} p-3`}>
