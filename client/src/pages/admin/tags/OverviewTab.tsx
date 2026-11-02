@@ -34,6 +34,7 @@ import { PieceTable } from "./piece-table";
 import { AnalyticsPanel, RangePicker, useDeviceLabel, type AnalyticsRange } from "./pieces-analytics";
 import {
   ACTIVITY_FILTERS,
+  ACTIVITY_PREVIEW,
   activityFeed,
   pieceQueueCard,
   type ActivityFilter,
@@ -110,7 +111,9 @@ function ActivityFeed({ overview, go }: { overview: TagOverview; go: Go }) {
   const reasonText = useReasonText();
   const deviceLabel = useDeviceLabel();
   const [filter, setFilter] = useState<ActivityFilter>("all");
-  const items = activityFeed(overview, filter);
+  const [all, setAll] = useState(false);
+  const feed = activityFeed(overview, filter);
+  const items = all ? feed : feed.slice(0, ACTIVITY_PREVIEW);
   return (
     <SectionCard
       accent="tags"
@@ -134,7 +137,7 @@ function ActivityFeed({ overview, go }: { overview: TagOverview; go: Go }) {
                     face={item.event.face}
                     batchCode={item.event.batchCode}
                     customer={item.event.leadName}
-                    details={[labels.event(item.event.eventType), item.event.deviceType && deviceLabel(item.event.deviceType)].filter(Boolean).join(" · ")}
+                    details={item.count > 1 ? tf.plural("activityScansN", item.count) : [labels.event(item.event.eventType), item.event.deviceType && deviceLabel(item.event.deviceType)].filter(Boolean).join(" · ")}
                     className="min-w-0 flex-1"
                   />
                   <span className="flex shrink-0 flex-col items-end gap-1">
@@ -179,6 +182,7 @@ function ActivityFeed({ overview, go }: { overview: TagOverview; go: Go }) {
           ))}
         </ul>
       )}
+      {!all && feed.length > ACTIVITY_PREVIEW ? <button type="button" onClick={() => setAll(true)} className="mb-1 mt-1 min-h-10 w-full rounded-xl text-sm font-medium text-white/60 hover:bg-white/[0.04] hover:text-white" data-testid="activity-see-all">{tf("activitySeeAll", { count: feed.length })}</button> : null}
     </SectionCard>
   );
 }

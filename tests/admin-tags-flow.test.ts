@@ -62,6 +62,13 @@ describe("Overview activity feed", () => {
     expect(activityFeed(overview).map((i) => i.kind)).toEqual(["activated", "destination", "scans"]);
   });
 
+  it("shows a piece's scans as one row, at the newest scan, with how many", () => {
+    const event = (id: number, tagId: string, at: string) => ({ ...overview.recentEvents[0], id, tagId, occurredAt: at });
+    const many = { ...overview, recentActivations: [], recentChanges: [], recentEvents: [event(1, "t1", "2026-10-03T10:00:00.000Z"), event(2, "t9", "2026-10-03T11:00:00.000Z"), event(3, "t1", "2026-10-04T10:00:00.000Z"), event(4, "t1", "2026-10-02T10:00:00.000Z")] };
+    const rows = activityFeed(many, "scans");
+    expect(rows.map((row) => [row.key, row.kind === "scans" ? row.count : 0, row.at])).toEqual([["e3", 3, "2026-10-04T10:00:00.000Z"], ["e2", 1, "2026-10-03T11:00:00.000Z"]]);
+  });
+
   it("filters by kind", () => {
     expect(activityFeed(overview, "scans").map((i) => i.key)).toEqual(["e1"]);
     expect(activityFeed(overview, "destination").map((i) => i.key)).toEqual(["ch1"]);

@@ -93,14 +93,14 @@ export function RangePicker({ value, onChange }: { value: AnalyticsRange; onChan
         <input type="date" aria-label={t("rangeFrom")} className={DATE_INPUT} value={custom.from} onChange={(e) => setCustom((c) => ({ ...c, from: e.target.value }))} />
         <span className="text-xs text-white/40">–</span>
         <input type="date" aria-label={t("rangeTo")} className={DATE_INPUT} value={custom.to} onChange={(e) => setCustom((c) => ({ ...c, to: e.target.value }))} />
-        <button
+        {/* Only once there is a start date: a button that does nothing is not shown. */}
+        {custom.from ? <button
           type="button"
-          className={`h-7 shrink-0 rounded-full px-3 text-xs font-semibold transition-colors disabled:opacity-40 ${customOn ? "bg-violet-500/30 text-white" : "text-white/60 hover:bg-white/10 hover:text-white"}`}
-          disabled={!custom.from}
+          className={`h-7 shrink-0 rounded-full px-3 text-xs font-semibold transition-colors ${customOn ? "bg-violet-500/30 text-white" : "text-white/60 hover:bg-white/10 hover:text-white"}`}
           onClick={() => onChange({ preset: "custom", from: custom.from, to: custom.to || undefined })}
         >
           {t("apply")}
-        </button>
+        </button> : null}
       </div>
     </div>
   );
@@ -176,7 +176,7 @@ export function AnalyticsPanel({
         </p>
       </div>
 
-      <div className={`grid min-w-0 grid-cols-1 gap-4 ${showTopTags ? "md:grid-cols-2" : ""}`}>
+      <div className={`grid min-w-0 grid-cols-1 items-start gap-4 ${showTopTags ? "md:grid-cols-2" : ""}`}>
         <div className={`${CARD} min-w-0 p-4`}>
           <p className="mb-2 text-sm font-semibold text-white">{tm("devices")}</p>
           {data.devices.length === 0 ? (
@@ -202,7 +202,7 @@ export function AnalyticsPanel({
             ) : (
               <ul className="space-y-1.5 text-sm">
                 {data.topTags.map((t) => (
-                  <li key={t.id} className="flex min-w-0 items-center justify-between gap-2 py-1">
+                  <li key={t.id} className="flex min-w-0 flex-col gap-1 py-1 sm:flex-row sm:items-center sm:justify-between sm:gap-2">
                     <button type="button" className="min-w-0 flex-1 text-left hover:opacity-90" onClick={() => onOpenTag?.(t.id)}>
                       <TagPieceMention
                         publicCode={t.publicCode}
@@ -213,7 +213,7 @@ export function AnalyticsPanel({
                         details={t.repName ?? undefined}
                       />
                     </button>
-                    <span className="shrink-0 whitespace-nowrap text-xs tabular-nums text-white/50">
+                    <span className="shrink-0 whitespace-nowrap pl-1 text-xs tabular-nums text-white/50 sm:pl-0">
                       QR {t.qr} · NFC {t.nfc}
                     </span>
                   </li>
