@@ -311,6 +311,8 @@ export interface TagKitItem {
   soldCount: number;
   acquisitionSource: string | null;
   unitCostCents: number | null;
+  /** Whose stock "Take back unsold" puts this kit's pieces into (shared/tagKits.ts takeBackDestination). */
+  takeBackTo: { organizationId: number; name: string; company: boolean };
 }
 
 /** One piece a kit handed out (GET /api/xpot/admin/tag-kits/:id/items): the packing list, with where it is now. */

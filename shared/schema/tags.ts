@@ -47,6 +47,8 @@ export const tagBatches = pgTable("tag_batches", {
 export const tagKits = pgTable("tag_kits", {
   id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
   organizationId: integer("organization_id").notNull().references(() => organizations.id, { onDelete: "restrict" }),
+  /** The organization whose stock the pieces came from, where Take back returns them (migrations/0072); null on older kits. */
+  sourceOrganizationId: integer("source_organization_id").references(() => organizations.id, { onDelete: "restrict" }),
   repId: integer("rep_id").notNull().references(() => salesReps.id),
   /** Short sequential number, shown as K-0001 (shared/tagKits.ts kitCode); migrations/0054_tag_kit_items.sql. */
   kitNumber: integer("kit_number").notNull().default(sql`nextval('tag_kits_kit_number_seq')`),

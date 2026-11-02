@@ -86,6 +86,10 @@ export interface DistributionCheckItem<R extends string = string> {
   repName: string | null;
   /** The kit it is in now, as K-0001. */
   kitCode: string | null;
+  /** Take back only, for a piece that can come back: whose stock it goes into. */
+  goesTo?: { organizationId: number; name: string; company: boolean } | null;
+  /** Take back only: the reseller bought it (it is theirs, so taking it back settles no money). */
+  bought?: boolean;
 }
 
 export interface DistributionCheck<R extends string = string> {
