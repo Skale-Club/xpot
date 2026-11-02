@@ -74,15 +74,13 @@ export function LiveMap({
       )}
 
       {/* Live badge */}
-      <div className="absolute left-3 top-3 flex items-center gap-1.5 rounded-full px-2.5 py-1" style={MAP_CHIP}>
+      {/* The accuracy is a detail for the tap (title), not a "±15 m" on the badge. */}
+      <div className="absolute left-3 top-3 flex items-center gap-1.5 rounded-full px-2.5 py-1" style={MAP_CHIP} title={typeof accuracy === "number" ? `±${formatMeters(accuracy)}` : undefined}>
         <span className="relative flex h-2 w-2">
           <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
           <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-400" />
         </span>
         <span className="text-[10px] font-bold uppercase tracking-wider text-white/80">{t("mapLive")}</span>
-        {typeof accuracy === "number" ? (
-          <span className="text-[10px] font-medium tabular-nums text-white/40">±{formatMeters(accuracy)}</span>
-        ) : null}
       </div>
 
       {/* What the second pin is, when there is one */}

@@ -126,7 +126,7 @@ const en = {
 
   // Live map
   mapAlt: "Your current location",
-  mapLive: "Live",
+  mapLive: "Location OK",
   openInMaps: "Open in Google Maps",
 
   // Voice recorder
@@ -320,7 +320,7 @@ export const checkinMessages: Dictionary<typeof en> = {
     exceptionAccuracy: "localização com precisão de cerca de {accuracy}",
 
     mapAlt: "Sua localização atual",
-    mapLive: "Ao vivo",
+    mapLive: "Localização OK",
     openInMaps: "Abrir no Google Maps",
 
     micDenied: "Acesso ao microfone negado",
@@ -505,7 +505,7 @@ export const checkinMessages: Dictionary<typeof en> = {
     exceptionAccuracy: "ubicación con precisión de unos {accuracy}",
 
     mapAlt: "Tu ubicación actual",
-    mapLive: "En vivo",
+    mapLive: "Ubicación OK",
     openInMaps: "Abrir en Google Maps",
 
     micDenied: "Acceso al micrófono denegado",
