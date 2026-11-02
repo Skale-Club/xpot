@@ -227,10 +227,12 @@ function isPlaque(productType: string, face: string | null | undefined): boolean
   return PLAQUE_PRODUCT_TYPES.has(productType) || (productType === "custom" && face === "instagram");
 }
 
-const VISUAL_SLOT = { sm: "w-9", md: "w-12", lg: "w-28" } as const;
+/** `hero`: the one piece on a piece's own popup or page, drawn large on a light backdrop; lists and tables never use it. */
+type VisualSize = keyof typeof SIZES | "hero";
+const VISUAL_SLOT = { sm: "w-9", md: "w-12", lg: "w-28", hero: "h-32 w-32 rounded-2xl bg-zinc-500/35 ring-1 ring-white/15" } as const;
 /** The slot widths above in px: the 3D picture is a square that wide. */
-const VISUAL_SLOT_PX = { sm: 36, md: 48, lg: 112 } as const;
-const VISUAL_FACE_SIZE = { sm: "md", md: "lg", lg: "lg" } as const;
+const VISUAL_SLOT_PX = { sm: 36, md: 48, lg: 112, hero: 128 } as const;
+const VISUAL_FACE_SIZE = { sm: "md", md: "lg", lg: "lg", hero: "lg" } as const;
 
 /**
  * The picture of a piece in lists and headers, and the one place every screen gets it from. A piece with a 3D preview
@@ -251,7 +253,7 @@ export function TagPieceVisual({
 }: {
   productType: string;
   face: string | null | undefined;
-  size?: keyof typeof SIZES;
+  size?: VisualSize;
   title?: string;
   /** A picture only (no turning, no tap to open): for a piece inside a button that does something else. */
   still?: boolean;
@@ -261,7 +263,10 @@ export function TagPieceVisual({
 }) {
   const { model, loading } = usePieceModel({ productType, face, theme, batchCode, modelSlug });
   const flat = isPlaque(productType, face) ? (
-    <TagProductThumbnail productType={productType} face={face} size={size} theme={theme} />
+    // The flat stand (body and foot) is 140px tall: scaled so it sits inside the 128px hero box, not over its edge.
+    <span className={size === "hero" ? "inline-flex scale-[0.85]" : "inline-flex"}>
+      <TagProductThumbnail productType={productType} face={face} size={size === "hero" ? "lg" : size} theme={theme} />
+    </span>
   ) : (
     <TagFaceIcon face={face} size={VISUAL_FACE_SIZE[size]} title={title} />
   );

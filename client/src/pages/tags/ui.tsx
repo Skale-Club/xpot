@@ -61,6 +61,7 @@ export function TopBar({
   right,
   sub,
   picture,
+  hero,
   titleClassName = "",
 }: {
   title: string;
@@ -74,6 +75,8 @@ export function TopBar({
   sub?: ReactNode;
   /** A picture right of the title, e.g. the piece's icon and plaque. */
   picture?: ReactNode;
+  /** A large picture centred above the title (a piece's own screen), instead of the small one beside it. */
+  hero?: ReactNode;
   titleClassName?: string;
 }) {
   const t = useT(commonMessages);
@@ -86,25 +89,26 @@ export function TopBar({
     <>
       {/* The phone bar shows this on the screens you start from; the ones inside something (a piece) have none, so this bar does. */}
       {!online && phoneBarHidden(path) && <p className="mb-3 rounded-2xl border border-red-500/20 bg-red-500/10 px-4 py-3 text-sm text-red-300 lg:hidden" role="status" data-testid="offline-strip">{tt("offlineNotice")}</p>}
-      <header className="mb-4 flex items-start gap-2">
+      <header className={hero ? "relative mb-4 flex flex-col items-center text-center" : "mb-4 flex items-start gap-2"}>
         {back && (
           <Link
             href={back}
             onClick={onBack ? (e) => { e.preventDefault(); onBack(); } : undefined}
             aria-label={t("back")}
-            className="-ml-2 mt-0.5 flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-white/80 active:bg-white/10"
+            className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-white/80 active:bg-white/10 ${hero ? "absolute -left-2 top-0 z-10" : "-ml-2 mt-0.5"}`}
           >
             <ArrowLeft className="h-5 w-5" />
           </Link>
         )}
-        <div className="min-w-0 flex-1">
+        <div className={hero ? "w-full min-w-0" : "min-w-0 flex-1"}>
+          {hero && <div className="mb-2 flex justify-center" data-testid="topbar-hero">{hero}</div>}
           {eyebrow && <p className={identity === "direct" ? EYEBROW_MUTED : EYEBROW}>{eyebrow}</p>}
           <h1 className={`mt-0.5 break-words text-[26px] font-extrabold leading-tight tracking-tight text-white ${titleClassName}`}>{title}</h1>
-          {sub && <div className="mt-1.5">{sub}</div>}
+          {sub && <div className={hero ? "mt-1.5 [&>div]:justify-center" : "mt-1.5"}>{sub}</div>}
         </div>
         {/* Top-aligned with the title: the piece's picture, not a floating badge. */}
         {picture && <div className="mt-1 shrink-0 self-start">{picture}</div>}
-        {right && <div className="shrink-0">{right}</div>}
+        {right && <div className={hero ? "absolute right-0 top-0 z-10" : "shrink-0"}>{right}</div>}
       </header>
     </>
   );
