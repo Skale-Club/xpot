@@ -114,6 +114,8 @@ def slice_and_check(three_mf: Path, work: Path, face_up: bool, expect_pause: boo
     if not result_path.exists():
         raise BuildFailed('the slicer wrote no result.json: result unknown')
     result = json.loads(result_path.read_text(encoding='utf-8'))
+    if not result.get('sliced_plates'):
+        raise BuildFailed(f"the slicer produced no printable plate: {result.get('error_string', result)}")
     plate = result['sliced_plates'][0]
     if not str(result.get('error_string', '')).startswith('Success') or plate.get('warning_message'):
         raise BuildFailed(f"slice not clean: {result.get('error_string')!r} {plate.get('warning_message')!r}")

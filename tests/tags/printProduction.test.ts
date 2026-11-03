@@ -203,6 +203,15 @@ describe("the Production page's choices", () => {
     };
   };
 
+  it("does not offer unapproved body colors or mutate historical model records", () => {
+    const previous = model({ slug: "stand-large-google-navy", theme: "Navy" });
+    const options = printGenerateOptions([model({ slug: "white" }), model({ slug: "black", theme: "black" }), previous]);
+    expect(options[0].colours.map((colour) => colour.theme)).toEqual(["white", "black"]);
+    expect(pickGenerateFace(options, { productType: "large_stand", theme: "navy", face: "google_review" })).toBeNull();
+    expect(previous.theme).toBe("Navy");
+    expect(previous.status).toBe("ready");
+  });
+
   it("offers per product the colours and faces that have a generator, white before black", () => {
     const options = printGenerateOptions([
       model({ slug: "plate-small-google-white", productType: "small_plate", builder: "plate.google" }),
@@ -228,6 +237,19 @@ describe("the Production page's choices", () => {
     expect(pickGenerateFace(mixedCase, { productType: "large_stand", theme: "WHITE", face: "google_review" })?.slug).toBe("a");
     expect(pickGenerateFace(options, { productType: "large_stand", theme: "Black", face: "instagram" })?.slug).toBe("stand-large-instagram-black");
     expect(pickGenerateFace(options, { productType: "large_stand", theme: "white", face: "venmo" })).toBeNull();
+  });
+
+  it("keeps every menu style and resolves the exact model only inside its face, colour and product", () => {
+    const classic = model({ slug: "menu-classic", face: "menu", currentVersion: { ...version("plate.service", [{ label: "x4", copies: 4 }]), params: { style: "classic" } } });
+    const italic = model({ slug: "menu-italic", face: "menu", currentVersion: { ...classic.currentVersion!, params: { style: "italic" } } });
+    const options = printGenerateOptions([classic, italic, model({ slug: "cashapp", face: "cashapp" }), model({ slug: "paypal", face: "paypal" }), model({ slug: "zelle", face: "zelle" }), model({ slug: "wifi", face: "wifi" })]);
+    const menu = options[0].colours[0].faces.find((face) => face.face === "menu")!;
+    expect(menu.styles?.map((style) => [style.slug, style.style])).toEqual([["menu-classic", "classic"], ["menu-italic", "italic"]]);
+    const input = { productType: "large_stand", theme: "white", face: "menu" };
+    expect(pickGenerateFace(options, { ...input, modelSlug: "menu-italic" })?.slug).toBe("menu-italic");
+    expect(pickGenerateFace(options, { ...input, modelSlug: "cashapp" })).toBeNull();
+    expect(pickGenerateFace(options, { ...input, theme: "black", modelSlug: "menu-italic" })).toBeNull();
+    expect(options[0].colours[0].faces.map((face) => face.face)).toEqual(expect.arrayContaining(["cashapp", "paypal", "zelle", "wifi"]));
   });
 
   it("shows the parts that come off the printer as always ready, not the bought ones", () => {

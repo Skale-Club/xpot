@@ -15,3 +15,17 @@ user's decision, as with the Google "G" and Instagram.
 
 Older files (`NFC.svg`, `Stuscle Icon.svg`, `Stuscle Lockup.svg`) predate this list; their origin is in
 the notes of the pieces that use them.
+
+
+## Flyer service board (2026-11-02)
+
+`client/public/production/logos/*.png` are the twelve original logo tiles from
+`N:/My Drive/Marketing/NFC Price Flyer 2026/04 - Source/assets/logos`. The flyer was inspected visually, including the editable source's sibling preview.
+
+`service-marks.json` contains vector paths from the same installed `react-icons` source used by the flyer:
+Simple Icons (Yelp, Facebook, TikTok, WhatsApp, YouTube), Material Design Icons (Website and Wi-Fi),
+and Font Awesome (LinkedIn). `scripts/export-flyer-marks.mjs` reproduces the extraction. Payment outlines reuse
+the existing SVGs listed above. The new geometry uses the real outlines rather than approximated text initials.
+
+The six Menu font files are copied unchanged from the Windows font files already used by the original
+Menu studies. Their redistribution licenses are beside the files in `library/fonts/`.

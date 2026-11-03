@@ -1,6 +1,6 @@
 import { useEffect, useId, useRef, useState, type FormEvent } from "react";
 import { useMutation } from "@tanstack/react-query";
-import { Check, ChevronDown, ChevronRight, Info } from "lucide-react";
+import { ChevronDown, ChevronRight, Info } from "lucide-react";
 import { TAG_MAX_BATCH_QUANTITY, TAG_PRODUCT_TYPES } from "@shared/tags";
 import { materialsForNfc, nfcMountsOf, preferredNfcMount, type PrintModelItem, type PrintNfcMount, type PrintRequestItem } from "@shared/printProduction";
 import { Button } from "@/components/ui/button";
@@ -23,6 +23,7 @@ import { useTagLabels } from "./labels";
 import { bedSummary, usePrintModels, useProductionAccess } from "./production-shared";
 import { assemblyParts, canPrintModel, filamentColours, printableBeds, printQuantity, type ExistingProductionBatch } from "./production-workflow";
 import { useModelName } from "./production-identity";
+import { ProductionSteps } from "./production-steps";
 
 const EMPTY_FORM = {
   name: "", batchCode: "", productType: TAG_PRODUCT_TYPES[0] as string,
@@ -132,14 +133,7 @@ export function ProductionWizard({ onClose, onCreated, onOrdered, onCloseAutoFoc
         <div className="shrink-0 border-b border-white/[0.08] px-5 py-5 pr-14 sm:px-6 sm:pr-14">
           <DialogTitle className="text-white">{existingBatch ? u("prepareExisting", { code: existingBatch.batchCode }) : fromModel && model ? tp("printTitle", { model: nameOf(model) }) : external ? u("otherWays") : u("newProduction")}</DialogTitle>
           <DialogDescription className={fromModel ? "sr-only" : "mt-2"}>{printing ? u(step === 0 ? "printIntro" : step === 1 ? "quantityIntro" : "reviewPrint") : step === 0 ? tw("createIntro") : step === 1 ? tw("codeIntro") : tw("reviewIntro")}</DialogDescription>
-          <ol className="mt-5 flex items-center gap-2" aria-label={tw("stepCount", { current: step + 1 - first, total: visibleSteps.length })}>
-            {stepNames.map((name, index) => index < first ? null : <li key={name} className="flex min-w-0 flex-1 items-center gap-2">
-              <button type="button" onClick={() => setStep(index)} disabled={index > step || busy} aria-current={step === index ? "step" : undefined} className={`flex min-h-10 items-center gap-2 text-xs font-medium ${step === index ? "text-white" : index < step ? "text-violet-300" : "text-white/35"}`}>
-                <span className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full border text-[11px] ${index <= step ? "border-violet-400/50 bg-violet-500/20" : "border-white/15"}`}>{index < step ? <Check className="h-3 w-3" aria-hidden="true" /> : index + 1 - first}</span><span>{name}</span>
-              </button>
-              {index < 2 ? <span className={`h-px min-w-2 flex-1 ${index < step ? "bg-violet-400/40" : "bg-white/10"}`} aria-hidden="true" /> : null}
-            </li>)}
-          </ol>
+          <ProductionSteps names={visibleSteps.map((index) => stepNames[index])} current={step - first} canVisit={(index) => index + first <= step} busy={busy} onChange={(index) => setStep(index + first)} progress={tw("stepCount", { current: step + 1 - first, total: visibleSteps.length })} />
         </div>
         <form onSubmit={submit} className="flex min-h-0 flex-1 flex-col" data-testid="admin-tags-new-batch-form">
           <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 py-5 sm:px-6" data-testid="production-wizard-body">

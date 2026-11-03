@@ -175,8 +175,10 @@ describe("unified production", () => {
     expect(canPrintModel(model, { ...batch, salesProductId: 2 })).toBe(false);
     expect(canPrintModel(model, { ...batch, tagCount: 9 })).toBe(false);
   });
-  it("splits a requested quantity exactly and never truncates or clamps invalid input", () => {
-    expect(printQuantity("10", 4, true)).toMatchObject({ valid: true, count: 10, plates: [4, 4, 2], pieces: 10 });
+  it("limits serialized generation to one printer plate without clamping", () => {
+    expect(printQuantity("4", 4, true)).toMatchObject({ valid: true, count: 4, max: 4, plates: [4], pieces: 4 });
+    expect(printQuantity("3", 4, true)).toMatchObject({ valid: true, plates: [3], pieces: 3 });
+    for (const raw of ["5", "10", "80"]) expect(printQuantity(raw, 4, true)).toMatchObject({ valid: false, plates: [], pieces: 0 });
     for (const raw of ["", "0", "-1", "1.5", "NaN", "10001"]) expect(printQuantity(raw, 4, true).valid).toBe(false);
     expect(printQuantity("5", 4, false)).toMatchObject({ valid: true, plates: [4, 4], pieces: 8 });
   });

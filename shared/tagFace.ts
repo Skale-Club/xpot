@@ -13,6 +13,7 @@ import { contentKindOf } from "./chipContent.js";
 
 export const TAG_FACES = [
   "google_review",
+  "yelp",
   "instagram",
   "facebook",
   "tiktok",
@@ -26,12 +27,17 @@ export const TAG_FACES = [
   "booking",
   "vcard",
   "venmo",
+  "cashapp",
+  "paypal",
+  "zelle",
+  "wifi",
   "custom",
 ] as const;
 export type TagFace = (typeof TAG_FACES)[number];
 
 export const TAG_FACE_LABELS: Record<TagFace, string> = {
   google_review: "Google Review",
+  yelp: "Yelp",
   instagram: "Instagram",
   facebook: "Facebook",
   tiktok: "TikTok",
@@ -45,6 +51,10 @@ export const TAG_FACE_LABELS: Record<TagFace, string> = {
   booking: "Booking",
   vcard: "Contact card",
   venmo: "Venmo",
+  cashapp: "Cash App",
+  paypal: "PayPal",
+  zelle: "Zelle",
+  wifi: "Wi-Fi",
   custom: "Custom",
 };
 
