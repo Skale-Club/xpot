@@ -126,5 +126,50 @@ typecheck was attempted with a 768 MiB Node heap limit and exhausted that limit;
 it is not recorded as passing. Do not increase local resource pressure to finish
 it: use remote CI for complete type/build/integration validation.
 
-The application is not marked migrated. Explicit development routing and the
-public R2 implementation are prepared; remaining work above still applies.
+## Production cutover — 2026-11-03
+
+PR 178 merged as 86c605cb31fcbc4f9112fe2208b4db74b061e420 and deployed through
+the normal CI/Coolify path. The main CI job passed full types, unit tests, print
+pipeline, NFC tests, real PostgreSQL integration and build. The separate SonarCloud
+check was cancelled; it is not claimed as validated.
+
+Before changing database references, a 951,302-byte custom PostgreSQL dump was
+created, restored successfully into an isolated temporary database (76 public
+tables, 2 users, 85 migration rows), and verified in private R2 by SHA-256:
+3045019c1d04e9a1c8f381398ffe54771927868f27f8e2b39948f92f74711f51.
+The temporary restore database was then removed; production was not reset.
+
+Durable rollback evidence in the private xpot-files bucket:
+
+- migration-backups/xpot-pre-r2-20261103.dump
+- migration-backups/xpot-pre-r2-runtime-20261103.json (sensitive runtime settings)
+- migration-backups/xpot-r2-reference-rollback-20261103.json
+- migration-archive/20261103/manifest.json, with size/SHA-256 for all 50 objects
+- migration-archive/20261103/{source-bucket}/{original-key}, immutable source copies
+
+The xpot-assets bucket and media.xpot.place domain were created separately from
+private xpot-files. Public access is enabled only for xpot-assets, with minimum
+TLS 1.2. The existing Xpot object read/write credential was scoped to these two
+buckets; access to other applications' buckets was not added. The previous
+credential did not permit the new bucket; access was verified after the update.
+
+All 50 objects (27,871,172 bytes) were copied directly on the server, archived and
+verified by SHA-256. Only the avatar and favicon went to public R2; audio and all
+47 print files stayed private. No source object was deleted. Public delivery of
+the two image objects was independently fetched and hash-verified over HTTPS.
+
+R2_PUBLIC_BUCKET and R2_PUBLIC_BASE_URL were saved as production runtime values
+and deployed using the already-validated release. Four database fields were then
+switched with compare-and-set updates in one transaction: favicon, rep avatar,
+user profile image, and visit-note audio. The private rollback manifest was saved
+before the transaction. Private audio now uses an r2: reference, not a public URL.
+
+The follow-up release makes Supabase Auth/Storage unavailable in production,
+requires complete Google/R2 configuration before startup, and removes the old
+provider-user deletion call. Account removal remains local to Xpot so shared
+Google identities are not deleted. Supabase PostgreSQL development is retained.
+This release must pass CI and deploy before retiring production Supabase env vars.
+
+Production observation and real interactive Google/SMS testing remain follow-up
+items. Development's 29 pending migrations remain unapplied pending shared-schema
+review; this production cutover does not authorize an automatic development reset.

@@ -43,10 +43,10 @@ New here? Read [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) first.
 - **Backend:** Express + Drizzle ORM, sessions in Postgres (`connect-pg-simple`).
 - **Sign-in:** SMS through Google Identity Platform (primary), or Google. No passwords. See "Auth model" and [Google auth setup](docs/auth/google-identity.md).
 - **DB:** PostgreSQL. Production runs on a Coolify database on the Hetzner host
-  (see "Database on the Hetzner host"). Xpot's own Supabase project
-  (`Xpot`, ref `swqxxeivetzakglaphil`) keeps public Storage (avatars, the
-  branding icon). Supabase Auth is retired from the current sign-in flow. Business photos and voice notes are private, on Cloudflare
-  R2 (see "Files"). Nothing is shared with Skale Club.
+  (see "Database on the Hetzner host"). Development uses a separately configured
+  Supabase PostgreSQL database. Production uses R2 for public avatars/branding
+  and private business files; Supabase Auth/Storage are disabled there.
+  See [the migration record](docs/supabase-production-exit.md) for rollout evidence.
 - **Integrations:**
   - Xphere CRM: prospects in, companies, sales and visit outcomes out. One
     connection per person, set up by the Xpot admin only: Platform › Integrations ›
@@ -99,8 +99,9 @@ inside `npm test`.
 
 ## Setup
 
-1. Copy `.env.example` to `.env` and fill in at least the database URL, the
-   Supabase keys and `SESSION_SECRET` (the server refuses to boot without them).
+1. Copy `.env.example` to `.env` and configure the development database,
+   Google identity and `SESSION_SECRET`. Supabase Storage keys are optional for
+   legacy development files; production requires private and public R2 instead.
    Integrations (Xphere, GoHighLevel, Twilio, Google Places, the AI providers)
    are set in the app by the Xpot admin, under Platform › Integrations
    (`/admin/integrations`); Xphere is one connection per person. The matching env
@@ -404,8 +405,8 @@ valid for 5 minutes. A key that no lead or visit holds is never signed.
   alongside the R2 credentials above. Use a public media domain and grant the
   token access to both buckets. The public bucket must differ from the private
   `R2_BUCKET`; never expose the private photo/audio/print bucket. Without those
-  public settings, the existing Supabase `uploads` path remains active during
-  rollout. A partial or invalid configuration fails instead of silently writing
+  public settings, the existing Supabase `uploads` path remains available only
+  in development. Production requires both R2 stores. A partial or invalid configuration fails instead of silently writing
   somewhere else. Existing Supabase links remain readable until migrated.
   Replaced avatars are deleted from their original bucket; avatars go with the account.
 - **Cleanup:** removing a photo, deleting a lead or a visit, and re-recording a
@@ -438,7 +439,7 @@ Administration › People › a blocked person › Access › **Delete account**
 (the Xpot admin only, after typing the confirmation word;
 `DELETE /api/xpot/admin/reps/:id` with `{ "confirm": "DELETE" }`,
 `server/accountDeletion.ts`). It deletes the sign-in identity (users row,
-sessions, sign-in codes, Supabase Auth user, MCP OAuth grants, Xphere
+sessions, sign-in codes, Google identity bindings, MCP OAuth grants, Xphere
 connection), the rep's visits, notes, voice notes, opportunities, tasks and
 suggested actions, the businesses they own, and every file they uploaded
 (including their photos on other reps' businesses and anything left under
@@ -609,8 +610,9 @@ comment on each, plus the client's optional `VITE_GOOGLE_MAPS_API_KEY` (see
 | `DEV_DATABASE_URL`, `DEV_SUPABASE_PROJECT_REF` | development | Explicit approved Supabase development DB; development never falls back to production aliases |
 | `DATABASE_URL` or `POSTGRES_URL` | production / explicit scripts | Postgres. If both are set, `DATABASE_URL` wins |
 | `SESSION_SECRET` | yes | Signs the session cookie |
-| `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY` | yes | Storage and the legacy email Auth; the server won't boot without them |
-| `R2_ACCOUNT_ID` (or `R2_ENDPOINT`), `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET` | no | Private storage for photos and voice notes (see "Files"); unset, they go to the private Supabase bucket |
+| `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` | optional development | Legacy development Storage only; disabled in production. Supabase Auth is retired |
+| `R2_ACCOUNT_ID` (or `R2_ENDPOINT`), `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET` | production | Private storage for business/print files; Supabase fallback is development-only |
+| `R2_PUBLIC_BUCKET`, `R2_PUBLIC_BASE_URL` | production | Separate public avatar/branding bucket and HTTPS media domain |
 | `PGSSLMODE`, `POSTGRES_SSL` | no | Force TLS on (`require` / `true`) or off (`PGSSLMODE=disable`); by default it follows the URL |
 | `PORT` | no | Listen port (2110 by default; the Docker image sets 8888) |
 | `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_FROM_NUMBER` or `TWILIO_MESSAGING_SERVICE_SID` | no | SMS fallback when Platform › Integrations has no Twilio |

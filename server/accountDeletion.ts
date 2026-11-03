@@ -47,7 +47,6 @@ import {
   xphereIntegrations,
 } from "#shared/schema.js";
 import { discardFiles, isRepAvatarUrl, sweepRepFiles, uploaderRepId } from "./lib/files.js";
-import { getSupabaseAdmin } from "./lib/supabase.js";
 
 export class AccountDeletionError extends Error {
   constructor(message: string, public status: number, public code?: string) {
@@ -229,15 +228,8 @@ export async function deleteRepAccount(
   // Anything else under their folders: replaced voice notes, removed photos from before cleanup existed.
   const swept = await sweepRepFiles(repId, context);
 
-  // Google sign-ins have a Supabase Auth user with the same id; phone accounts don't.
-  if (process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY) {
-    try {
-      const { error } = await getSupabaseAdmin().auth.admin.deleteUser(result.rep.userId);
-      if (error && error.status !== 404) console.error(`[accounts] ${context}: Supabase Auth user not deleted:`, error.message);
-    } catch (err) {
-      console.error(`[accounts] ${context}: Supabase Auth user not deleted:`, (err as Error).message);
-    }
-  }
+  // Identity providers are shared across apps. Deleting this app account must
+  // not delete the person's Google identity or a legacy Supabase identity.
 
   const summary: AccountDeletionResult = {
     repId,
