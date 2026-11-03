@@ -180,7 +180,7 @@ export function ProductionWizard({ onClose, onCreated, onOrdered, onCloseAutoFoc
               <p className="flex items-start gap-2 rounded-xl border border-white/[0.06] bg-white/[0.02] p-3 text-xs leading-relaxed text-white/50"><Info className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden="true" />{tw("stockHint")}</p>
             </fieldset> : null}
             {step === 2 ? <>
-              {printing && model ? <><ProductionIdentity model={model} hero /><MaterialsNeeded materials={materialsForNfc(model.materials, nfcMount ? nfcVariants?.[nfcMount] : null)} filaments={filamentColours(model)} assembly={assemblyParts(model, bySlug)} /></> : !printing ? <ProductionIdentity model={{ title: form.name, productType: form.productType, face: form.face || (form.productType === "google_review_sign" ? "google_review" : null) }} hero /> : null}
+              {printing && model ? <><ProductionIdentity model={model} hero /><MaterialsNeeded materials={materialsForNfc(model.materials, nfcMount ? nfcVariants?.[nfcMount] : null)} filaments={filamentColours(model)} assembly={assemblyParts(model, bySlug, nfcMount)} /></> : !printing ? <ProductionIdentity model={{ title: form.name, productType: form.productType, face: form.face || (form.productType === "google_review_sign" ? "google_review" : null) }} hero /> : null}
               <dl className="grid grid-cols-1 gap-4 rounded-xl border border-white/10 bg-white/[0.02] p-4 text-sm sm:grid-cols-2">
                 {(printing ? [
                   [tp("fieldQuantity"), String(printPlan.pieces)],

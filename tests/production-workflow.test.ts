@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { PrintModelItem, PrintRequestItem } from "../shared/printProduction";
 import { parseBatchName, batchTabsFor, pendingBatches } from "../client/src/pages/admin/tags/batches-model";
-import { buildState, collapsedPlates, damagedToReprint, needsPrintComputer, journeyTitle, personName, plainTitle, batchPrefixFromTitle, boardGroups, chipsWritten, pauseNeedsChips, canAssembleJob, canPrintModel, journeyProgress, latestPlates, pendingPieces, plateActions, printableBeds, printComputers, printedOutcome, printQuantity, productionNeedsAction, productionPath, productionTabFor, showPlateNumber, slugFromTitle } from "../client/src/pages/admin/tags/production-workflow";
+import { assemblyParts, buildState, collapsedPlates, damagedToReprint, needsPrintComputer, journeyTitle, personName, plainTitle, batchPrefixFromTitle, boardGroups, chipsWritten, pauseNeedsChips, canAssembleJob, canPrintModel, journeyProgress, latestPlates, pendingPieces, plateActions, printableBeds, printComputers, printedOutcome, printQuantity, productionNeedsAction, productionPath, productionTabFor, showPlateNumber, slugFromTitle } from "../client/src/pages/admin/tags/production-workflow";
 
 const model = {
   id: "model", kind: "serialized", status: "ready", productType: "large_plate", face: "google_review", salesProductId: 1,
@@ -20,6 +20,16 @@ describe("production tabs", () => {
 });
 
 describe("unified production", () => {
+  it("reviews assembly parts for the selected NFC without changing the model recipe", () => {
+    const original = [{ part: "round", perPiece: 1 }];
+    const configured = { ...model, currentVersion: { ...model.currentVersion!, consumes: original,
+      nfcVariants: { sticker_10x20: { pause: { z: 1, text: "Insert NFC" }, consumes: [{ part: "base", perPiece: 1 }, { part: "rectangle", perPiece: 1 }] } },
+    } } as PrintModelItem;
+    const names = new Map([["round", { title: "Round NFC" }], ["rectangle", { title: "Rectangle NFC" }], ["base", { title: "Base" }]]);
+    expect(assemblyParts(configured, names, "sticker_10x20")).toEqual(["1 Base", "1 Rectangle NFC"]);
+    expect(assemblyParts(configured, names)).toEqual(["1 Round NFC"]);
+    expect(configured.currentVersion!.consumes).toEqual(original);
+  });
   it("walks file, printer, stock and done; a failed or cancelled job is on no step", () => {
     const at = (status: string, extra = {}) => journeyProgress({ status, batchId: "b", pendingCount: 0, ...extra } as never);
     expect(at("requested")).toBe(0);
