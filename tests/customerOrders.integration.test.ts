@@ -306,19 +306,28 @@ test.skipIf(!enabled)(
         ).status,
       ).toBe(403);
       // Production intake allocates good pieces; damaged pieces still need replacing.
-      order = await command(order, "produce", { lineId: order.lines[0].id });
-      expect(order.lines[0].pending).toBe(8);
-      const jobs = (
+      expect(order.lines[0].plateCapacity).toBe(4);
+      const oversized = await call("POST", `${path}/${order.id}/produce`, { revision: order.revision, lineId: order.lines[0].id, quantity: 8 });
+      expect(oversized.status).toBe(409);
+      expect(oversized.data.code).toBe("order_quantity_exceeded");
+      for (let round = 0; round < 2; round++) {
+        order = await command(order, "produce", { lineId: order.lines[0].id });
+        expect(order.lines[0].pending).toBe(4);
+        const duplicate = await call("POST", `${path}/${order.id}/produce`, { revision: order.revision, lineId: order.lines[0].id });
+        expect(duplicate.status).toBe(409);
+        expect(duplicate.data.code).toBe("order_production_pending");
+        const jobs = (
         await db.execute(
-          sql`SELECT j.* FROM print_jobs j JOIN print_requests r ON r.id=j.request_id WHERE r.customer_order_line_id=${order.lines[0].id} ORDER BY j.plate_number`,
+          sql`SELECT j.* FROM print_jobs j JOIN print_requests r ON r.id=j.request_id WHERE r.customer_order_line_id=${order.lines[0].id} AND j.status='requested' ORDER BY j.plate_number`,
         )
-      ).rows as any[];
-      for (const [i, job] of jobs.entries()) {
+        ).rows as any[];
+        expect(jobs).toHaveLength(1);
+        for (const job of jobs) {
         await db.execute(
           sql`UPDATE print_jobs SET status='printing' WHERE id=${job.id}`,
         );
         const bad =
-          i === 0
+          round === 0
             ? (
                 await one(
                   sql`SELECT public_code FROM tags WHERE batch_id=${job.batch_id} ORDER BY id LIMIT 1`,
@@ -334,8 +343,9 @@ test.skipIf(!enabled)(
           },
           null,
         );
+        }
+        order = (await call("GET", `${path}/${order.id}`)).data;
       }
-      order = (await call("GET", `${path}/${order.id}`)).data;
       expect([
         order.lines[0].allocated,
         order.lines[0].pending,
@@ -615,6 +625,9 @@ test.skipIf(!enabled)(
         });
       }
       complete = await printFor(complete, 2);
+      expect([complete.lines[0].allocated, complete.lines[0].toProduce]).toEqual([2, 6]);
+      complete = await command(complete, "produce", { lineId: complete.lines[0].id });
+      complete = await printFor(complete);
       expect([
         complete.lines[0].allocated,
         complete.lines[0].toProduce,

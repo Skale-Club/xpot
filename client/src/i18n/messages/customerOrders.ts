@@ -124,6 +124,16 @@ const rows = {
     "Pedir produção do que falta",
     "Solicitar producción faltante",
   ],
+  onePlate: [
+    "Generate one printer plate at a time, up to {max} pieces. Mark it printed before the next run.",
+    "Gere uma placa por vez, com até {max} peças. Marque como impressa antes da próxima fornada.",
+    "Genera una placa por vez, con hasta {max} piezas. Márcala como impresa antes de la siguiente tanda.",
+  ],
+  productionPending: [
+    "Finish or cancel the current print before requesting the next plate.",
+    "Conclua ou cancele a impressão atual antes de pedir a próxima placa.",
+    "Termina o cancela la impresión actual antes de solicitar la siguiente placa.",
+  ],
   allocate: [
     "Separate available pieces",
     "Separar peças disponíveis",

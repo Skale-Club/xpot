@@ -31,7 +31,7 @@ import {
   MAX_ORDER_CENTS,
   type CustomerOrderCreateInput,
 } from "#shared/customerOrders.js";
-import { PRINT_MAX_PLATES, type PrintNfcMount } from "#shared/printProduction.js";
+import type { PrintNfcMount } from "#shared/printProduction.js";
 import type { TagActor } from "#shared/tagAccess.js";
 import { resolveTagFace } from "#shared/tagFace.js";
 import { createTagSaleWithin, releaseSalePieces } from "../tags/sales.js";
@@ -172,7 +172,10 @@ export async function getOrder(id: string, actor: TagActor) {
           WHERE r.customer_order_line_id=${line.id} GROUP BY r.id,m.title ORDER BY r.created_at`),
               line.modelId
                 ? db
-                    .select({ slug: printModels.slug })
+                    .select({
+                      slug: printModels.slug,
+                      plateCapacity: sql<number>`COALESCE((SELECT (v.beds->0->>'copies')::int FROM print_model_versions v WHERE v.id=${line.versionId}),1)`,
+                    })
                     .from(printModels)
                     .where(eq(printModels.id, line.modelId))
                 : [],
@@ -186,6 +189,7 @@ export async function getOrder(id: string, actor: TagActor) {
             ...orderLineBalance({ ...line, ...balance }),
             approved,
             modelSlug: model[0]?.slug ?? null,
+            plateCapacity: model[0]?.plateCapacity ?? 1,
             units,
             artwork: revisions.map(({ fileRef, ...r }) => ({
               ...r,
@@ -712,20 +716,24 @@ export async function produceOrder(
           : [];
         if (!approved || !version?.preview) fail("order_artwork_required");
       }
-      const missing = orderLineBalance({
+      const currentCounts = await counts(line.id, tx);
+      const balance = orderLineBalance({
         ...line,
-        ...(await counts(line.id, tx)),
-      }).toProduce;
-      const quantity = input.quantity ?? Math.min(missing, PRINT_MAX_PLATES);
-      if (quantity > missing || quantity > PRINT_MAX_PLATES)
-        fail("order_quantity_exceeded");
-      if (!quantity) fail("order_nothing_to_produce");
+        ...currentCounts,
+      });
+      if (currentCounts.pending > 0) fail("order_production_pending");
       const [model] = await tx
         .select()
         .from(printModels)
         .where(eq(printModels.id, line.modelId));
       if (!model || model.currentVersionId !== line.versionId)
         fail("order_design_changed");
+      const [version] = await tx.select().from(printModelVersions).where(eq(printModelVersions.id, line.versionId!));
+      const capacity = Number(version?.beds?.[0]?.copies ?? 0);
+      if (!Number.isInteger(capacity) || capacity < 1) fail("order_model_required");
+      const quantity = input.quantity ?? Math.min(balance.toProduce, capacity);
+      if (quantity > balance.toProduce || quantity > capacity) fail("order_quantity_exceeded");
+      if (!quantity) fail("order_nothing_to_produce");
       const [lead] = await tx
         .select({ name: salesLeads.name })
         .from(salesLeads)

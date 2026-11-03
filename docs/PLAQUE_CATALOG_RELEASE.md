@@ -6,6 +6,8 @@ Five named steps cover Design, Appearance, NFC, Quantity and Review. The service
 
 New serialized requests fit one physical printer plate: one batch, fresh public codes, and a quantity bounded by the chosen bed. The server enforces the same limit for direct API and MCP requests. Existing multi-plate requests retain their history, reprint rules and stock movements.
 
+Customer orders keep their full commercial quantity. Each production action requests at most one bed, using the exact version's capacity; another plate for that item waits until the current one is printed or cancelled. The order screen shows that limit and the same illustrated NFC choices. Damage/replacement and partial delivery still follow the existing order lifecycle.
+
 Migration `0080_flyer_design_catalog.sql` creates or versions catalog models. It does not issue codes, create jobs, change inventory quantities or overwrite a recipe referenced by an old order. Applying it again does not duplicate versions. The generator in `print-pipeline/catalog/design_catalog.py` reproduces the approved catalog.
 
 Black and white parts default to ELEGOO standard PLA. Existing versioned settings remain attached to old jobs. The new baseline uses 215/210 °C nozzle temperature, 60/55 °C textured bed temperature, and 12 mm³/s maximum flow. Physical calibration and actual prints must be recorded from the real machine.
