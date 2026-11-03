@@ -23,6 +23,8 @@ import { loadTwilioConfigFromDb } from "../auth/smsConfigDb.js";
 import { actorOf, requireTagUser } from "../tags/access.js";
 import { normalizeIpKey, rateLimit } from "../tags/rateLimit.js";
 import * as repo from "./repository.js";
+import { googleAuthConfig, verifyGoogleIdentity } from '../auth/googleIdentity.js';
+import { isSameAuthOrigin } from '../auth/sameOrigin.js';
 
 // The customer panel's API (docs/PROFILES_EXECUTION_PLAN.md, F7). Read only, off when CUSTOMER_PANEL_ENABLED says so
 // (every route then answers 404, as if it did not exist).
@@ -47,6 +49,25 @@ const codeSchema = z.object({
   countryCode: z.string().regex(/^\d{1,4}$/).optional(),
   lang: z.enum(LANGS).optional(),
 }).strict();
+
+async function verifyCustomerGoogleIdentity(req: Request, res: Response) {
+    if (!isSameAuthOrigin(req)) return res.status(403).json({ code:'origin_denied' });
+    const input = z.object({ idToken:z.string().min(1).max(16384) }).strict().parse(req.body);
+    let identity;
+    try { identity = await verifyGoogleIdentity(input.idToken); }
+    catch { return res.status(401).json({ code:'wrong_code' }); }
+    const pending = sessionOf(req).customerPending;
+    if (identity.provider !== 'phone' || !identity.phone || pending?.phone !== identity.phone
+      || Date.now()-pending.at > CUSTOMER_PENDING_MAX_MS) return res.status(401).json({ code:'code_expired' });
+    if (pending.leadId === null) return res.status(403).json({ code:'no_access' });
+    const access = await repo.leadAccessData(pending.leadId);
+    if (!access.exists || !customerAccessFor(identity.phone,access.contactPhones,access.businessPhone)) return res.status(403).json({code:'no_access'});
+    await repo.recordSignIn(identity.phone,access.businessPhone === identity.phone ? pending.leadId : null);
+    const leadIds = await repo.leadIdsOfPhone(identity.phone);
+    if (!leadIds.length) return res.status(403).json({code:'no_access'});
+    await startCustomerSession(req,identity.phone,leadIds);
+    return res.json({ok:true});
+}
 
 const verifySchema = z.object({
   phone: z.string().trim().min(4).max(40),
@@ -185,7 +206,8 @@ export function registerCustomerRoutes(
       const sess = req.session as unknown as Record<string, unknown>;
       sess.customerPending = { phone, leadId: matched ? leadId : null, at: Date.now() };
       await saveSession(req);
-      if (matched) {
+      const google = googleAuthConfig();
+      if (matched && !google.enabled) {
         const job: Promise<void> = sendCode(phone, input.lang ?? "en", req.ip ?? null, sms)
           .then(() => undefined)
           // "Wait 30 seconds", "too many codes" and a refused SMS are only for the log: saying them would tell a
@@ -194,7 +216,7 @@ export function registerCustomerRoutes(
           .finally(() => { jobs.delete(job); });
         jobs.add(job);
       }
-      res.json({ ok: true, phone });
+      res.json({ ok: true, phone, ...(google.enabled ? { provider:'google', google } : {}) });
     } catch (err) {
       fail(res, err);
     }
@@ -204,6 +226,9 @@ export function registerCustomerRoutes(
   app.post("/api/my/verify", async (req, res) => {
     try {
       enforceIp(req, "verify", 30);
+      if (googleAuthConfig().enabled && req.body?.idToken !== undefined) {
+        return await verifyCustomerGoogleIdentity(req, res);
+      }
       const input = verifySchema.parse(req.body);
       const phone = normalizePhone(input.phone, input.countryCode);
       if (!phone) throw new PhoneAuthError("invalid_phone", 400, "Enter a valid phone number.");

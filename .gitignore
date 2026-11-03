@@ -21,3 +21,6 @@ Xpot Logo-font-backup.svg
 # Python bytecode (print-pipeline/)
 __pycache__/
 *.pyc
+
+/.codex-local/
+/.audit-*.json

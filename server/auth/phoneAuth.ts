@@ -1,3 +1,5 @@
+import { googleAuthConfig } from './googleIdentity.js';
+import { bindGoogleIdentities, type IdentityBinding } from './googleIdentityStore.js';
 import { createHash, randomInt, timingSafeEqual } from "crypto";
 import type { Express, Request, Response } from "express";
 import { and, desc, eq, gt, sql } from "drizzle-orm";
@@ -246,7 +248,7 @@ export async function accessOf(user: User): Promise<PhoneAuthStatus> {
   return application?.status && application.status !== "draft" ? "pending" : "new";
 }
 
-async function startSession(req: Request, user: User) {
+export async function startSession(req: Request, user: User) {
   const sess = req.session as any;
   sess.userId = user.id;
   sess.email = user.email;
@@ -259,10 +261,10 @@ async function startSession(req: Request, user: User) {
   await new Promise<void>((resolve, reject) => req.session.save((err) => (err ? reject(err) : resolve())));
 }
 
-async function rememberVerifiedPhone(req: Request, phone: string) {
+export async function rememberVerifiedPhone(req: Request, phone: string, identities: IdentityBinding[] = []) {
   const sess = req.session as any;
   for (const key of ["userId", "email", "phone", "isAdmin", "firstName", "lastName"]) delete sess[key];
-  sess.verifiedPhone = { phone, at: Date.now() };
+  sess.verifiedPhone = { phone, at: Date.now(), identities };
   await new Promise<void>((resolve, reject) => req.session.save((err) => (err ? reject(err) : resolve())));
 }
 
@@ -274,11 +276,13 @@ function verifiedPhone(req: Request): string {
   return verified.phone;
 }
 
-async function ensureDraftUser(phone: string, displayName?: string) {
+async function ensureDraftUser(req: Request, phone: string, displayName?: string) {
   const existing = await findUserByPhone(phone);
-  if (existing) return existing;
   const { firstName, lastName } = splitName(displayName?.trim() || "Xpot applicant");
-  return (await db.insert(users).values({ phone, firstName, lastName, isAdmin: false }).returning())[0];
+  const user = existing ?? (await db.insert(users).values({ phone, firstName, lastName, isAdmin: false }).returning())[0];
+  const identities = (req.session as any).verifiedPhone?.identities ?? [];
+  if (identities.length) await bindGoogleIdentities(identities, user.id);
+  return user;
 }
 
 function fail(res: Response, err: unknown) {
@@ -291,8 +295,11 @@ function fail(res: Response, err: unknown) {
 export function registerPhoneAuthRoutes(app: Express, sms: SmsSender = defaultSmsSender({ loadDbConfig: loadTwilioConfigFromDb })) {
   // What the sign-in screen needs to know.
   app.get("/api/auth/phone/config", async (req, res) => {
-    const smsLive = sms.resolveLive ? await sms.resolveLive().catch(() => sms.live) : sms.live;
+    const google = googleAuthConfig();
+    const smsLive = google.enabled || (sms.resolveLive ? await sms.resolveLive().catch(() => sms.live) : sms.live);
     res.json({
+      provider: google.enabled ? 'google' : 'legacy',
+      google: google.enabled ? google : undefined,
       smsLive,
       supportWhatsapp: normalizePhone(process.env.XPOT_SUPPORT_WHATSAPP ?? "") ?? null,
       countryIso: countryIsoFromHeaders(req.headers),
@@ -300,6 +307,7 @@ export function registerPhoneAuthRoutes(app: Express, sms: SmsSender = defaultSm
   });
 
   app.post("/api/auth/phone/start", async (req, res) => {
+    if (googleAuthConfig().enabled) return res.status(410).json({ code: "use_google_identity" });
     try {
       enforceRouteLimit(req, "start", 12, 900);
       const input = startSchema.parse(req.body);
@@ -314,6 +322,7 @@ export function registerPhoneAuthRoutes(app: Express, sms: SmsSender = defaultSm
   });
 
   app.post("/api/auth/phone/verify", async (req, res) => {
+    // Codes already issued before cutover remain valid until their normal expiry.
     try {
       enforceRouteLimit(req, "verify", 30, 900);
       const input = verifySchema.parse(req.body);
@@ -366,7 +375,7 @@ export function registerPhoneAuthRoutes(app: Express, sms: SmsSender = defaultSm
       const input = draftSchema.parse(req.body);
       const phone = verifiedPhone(req);
       enforceDraftLimit(phone);
-      const user = await ensureDraftUser(phone, input.displayName);
+      const user = await ensureDraftUser(req, phone, input.displayName);
       const { step, displayName, ...fields } = input;
       if (displayName?.trim().length && displayName.trim().length >= 2) {
         const { firstName, lastName } = splitName(displayName);
@@ -410,7 +419,7 @@ export function registerPhoneAuthRoutes(app: Express, sms: SmsSender = defaultSm
         if (status === "pending" || status === "blocked") return res.json({ status });
       }
 
-      await db.transaction(async (tx) => {
+      const registeredAccount = await db.transaction(async (tx) => {
         const account = existing
           ? (await tx.update(users).set({ firstName, lastName, updatedAt: new Date() }).where(eq(users.id, existing.id)).returning())[0]
           : (await tx.insert(users).values({ phone, firstName, lastName, isAdmin: false }).returning())[0];
@@ -469,6 +478,8 @@ export function registerPhoneAuthRoutes(app: Express, sms: SmsSender = defaultSm
         return account;
       });
 
+      const identities = (req.session as any).verifiedPhone?.identities ?? [];
+      if (identities.length) await bindGoogleIdentities(identities, registeredAccount.id);
       delete (req.session as any).verifiedPhone;
       await new Promise<void>((resolve) => req.session.save(() => resolve()));
       console.log(`[phone-auth] new sign-up pending approval: ${input.displayName} ${phone}`);

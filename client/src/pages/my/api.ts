@@ -1,4 +1,5 @@
 import type { CustomerContactResponse, CustomerPieceDetail, CustomerPiecesResponse } from "@shared/customerPanel";
+import type { GoogleLoginConfig } from '@/lib/googleIdentity';
 
 // The customer panel's calls. Plain fetch: this app is not the team's, so it sends none of the team app's headers and
 // never touches /api/xpot.
@@ -40,8 +41,8 @@ export const myApi = {
   piece: (code: string) => request<CustomerPieceDetail>("GET", `/api/my/pieces/${encodeURIComponent(code)}`),
   contact: () => request<CustomerContactResponse>("GET", "/api/my/contact"),
   askCode: (input: { code: string; phone: string; countryCode: string; lang: string }) =>
-    request<{ ok: true; phone: string }>("POST", "/api/my/code", input),
-  verify: (input: { phone: string; otp: string }) => request<{ ok: true }>("POST", "/api/my/verify", input),
+    request<{ ok: true; phone: string; provider?:'google'; google?:GoogleLoginConfig }>("POST", "/api/my/code", input),
+  verify: (input: { phone: string; otp: string } | { idToken:string }) => request<{ ok: true }>("POST", "/api/my/verify", input),
   signOut: () => request<{ ok: true }>("POST", "/api/my/sign-out"),
 };
 

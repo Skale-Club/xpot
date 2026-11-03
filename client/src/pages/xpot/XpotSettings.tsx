@@ -66,7 +66,7 @@ const COUNTRIES = [
 // Settings is the person's own: Profile (photo, names, contact phone; the Tags
 // wholesale code is in My pieces), My company (where they work and their role there; someone
 // selling alone adds the first colleague here), Sign-in (the sign-in phone as
-// text; the password only for an email login) and Language. The panel is not
+// details) and Language. The panel is not
 // here: "My company" in the account menu is its door. Sign out is the last row
 // of the phone's list, and the avatar menu's on desktop.
 //
@@ -250,11 +250,6 @@ export function XpotSettings() {
   const [lastName, setLastName] = useState("");
   const [phone, setPhone] = useState("");
 
-  const [showPwd, setShowPwd] = useState(false);
-  const [currentPassword, setCurrentPassword] = useState("");
-  const [newPassword, setNewPassword] = useState("");
-  const [confirmPassword, setConfirmPassword] = useState("");
-
   if (me && !initialized) {
     setInitialized(true);
     setDisplayName(me.rep.displayName);
@@ -277,22 +272,6 @@ export function XpotSettings() {
     },
   });
 
-  const passwordMutation = useMutation({
-    mutationFn: async (data: { currentPassword: string; newPassword: string }) => {
-      const res = await apiRequest("POST", "/api/xpot/me/change-password", data);
-      return res.json();
-    },
-    onSuccess: () => {
-      toast({ title: t("passwordChanged"), variant: "success" });
-      setCurrentPassword("");
-      setNewPassword("");
-      setConfirmPassword("");
-    },
-    onError: (err: Error) => {
-      toast({ title: t("passwordChangeFailed"), description: err.message, variant: "destructive" });
-    },
-  });
-
   const handleSaveProfile = async () => {
     if (!me) return;
 
@@ -308,22 +287,6 @@ export function XpotSettings() {
     }
 
     profileMutation.mutate(patch);
-  };
-
-  const handleChangePassword = async () => {
-    if (!newPassword) {
-      toast({ title: t("passwordRequired"), variant: "destructive" });
-      return;
-    }
-    if (newPassword.length < 8) {
-      toast({ title: t("passwordTooShort"), variant: "destructive" });
-      return;
-    }
-    if (newPassword !== confirmPassword) {
-      toast({ title: t("passwordsMismatch"), variant: "destructive" });
-      return;
-    }
-    passwordMutation.mutate({ currentPassword, newPassword });
   };
 
   if (meQuery.isLoading) return <AppLoader />;
@@ -343,19 +306,13 @@ export function XpotSettings() {
     setLastName(me.user.lastName ?? "");
     setPhone(me.rep.phone ?? "");
   };
-  const passwordDirty = Boolean(currentPassword || newPassword || confirmPassword);
-  const resetPassword = () => {
-    setCurrentPassword("");
-    setNewPassword("");
-    setConfirmPassword("");
-  };
 
   const isSaving = profileMutation.isPending;
 
   const name = me ? me.rep.displayName || [me.user.firstName, me.user.lastName].filter(Boolean).join(" ").trim() : "";
   const initials = name.split(" ").map((n) => n[0]).slice(0, 2).join("").toUpperCase();
-  // The password is only for the legacy email sign-in: an account without an email has none.
-  const hasEmailLogin = Boolean(me?.user.email);
+  // Contact email is informational; sign-in uses Google or a verified phone.
+  const hasEmail = Boolean(me?.user.email);
   const signInPhone = me?.user.phone ? formatPhone(me.user.phone) : null;
   // My company: the one the person works in (a team before their own one-person workspace), and their role in it.
   const myOrganizations = (me?.organizations ?? [])
@@ -474,7 +431,7 @@ export function XpotSettings() {
                   {access.profile === "platform" ? <Link href="/admin/reps" className="underline underline-offset-2">{tn("signInPhoneAdminHint")}</Link> : tn("signInPhoneHint")}
                 </p>
               </div>
-              {hasEmailLogin && (
+              {hasEmail && (
                 <Field label={tn("signInEmail")}>
                   <Input value={me?.user.email ?? ""} readOnly disabled />
                 </Field>
@@ -482,49 +439,7 @@ export function XpotSettings() {
               {isDesktop && <InstallAppRow />}
             </Section>
 
-            {hasEmailLogin && (
-              <Section title={tn("password")}>
-                <p className="text-sm text-white/45">{tn("passwordHint")}</p>
-                <Field label={t("currentPassword")}>
-                  <div className="relative">
-                    <Input
-                      type={showPwd ? "text" : "password"}
-                      value={currentPassword}
-                      onChange={(e) => setCurrentPassword(e.target.value)}
-                      placeholder={t("currentPasswordPlaceholder")}
-                      className="pr-12"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setShowPwd(!showPwd)}
-                      className="absolute right-1 top-1/2 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-lg text-white/30 hover:text-white/60"
-                      aria-label={showPwd ? t("hidePassword") : t("showPassword")}
-                    >
-                      {showPwd ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                    </button>
-                  </div>
-                </Field>
-                <Field label={t("newPassword")}>
-                  <Input type="password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} placeholder={t("newPasswordPlaceholder")} />
-                </Field>
-                <Field
-                  label={t("confirmPassword")}
-                  error={newPassword && confirmPassword && newPassword !== confirmPassword ? t("passwordsMismatch") : undefined}
-                >
-                  <Input type="password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} placeholder={t("confirmPasswordPlaceholder")} />
-                </Field>
-                <FormFooter dirty={passwordDirty} onCancel={passwordDirty ? resetPassword : undefined}>
-                  <Button
-                    variant="brand"
-                    onClick={handleChangePassword}
-                    disabled={!currentPassword || !newPassword || newPassword !== confirmPassword}
-                    loading={passwordMutation.isPending}
-                  >
-                    {t("changePassword")}
-                  </Button>
-                </FormFooter>
-              </Section>
-            )}
+
           </div>
         );
 

@@ -1,11 +1,9 @@
 import type { Express, Request, Response, RequestHandler } from "express";
 import session from "express-session";
 import connectPg from "connect-pg-simple";
-import { getSupabaseAdmin } from "../lib/supabase.js";
 import { db, pool } from "../db.js";
 import { users } from "#shared/schema.js";
 import { eq } from "drizzle-orm";
-import { usesGoogleAuth } from "./providers.js";
 import { normalizeIpKey, rateLimit } from "../tags/rateLimit.js";
 
 export async function setupSupabaseAuth(app: Express) {
@@ -42,113 +40,9 @@ export async function setupSupabaseAuth(app: Express) {
     })
   );
 
-  // POST /api/auth/login
-  // Accepts a Supabase access token from the client, verifies it server-side,
-  // upserts the user row, and creates an Express session cookie.
-  app.post("/api/auth/login", async (req: Request, res: Response) => {
-    try {
-      if (rateLimit(`supabase-login:${normalizeIpKey(req.ip)}`, { limit: 20, windowMs: 15 * 60_000 })) {
-        return res.status(429).json({ code: "rate_limited", message: "Too many sign-in attempts. Try again later." });
-      }
-      const { accessToken } = req.body;
-      if (!accessToken) {
-        return res.status(400).json({ message: "Access token required" });
-      }
-
-      const supabase = getSupabaseAdmin();
-      const { data: { user: supabaseUser }, error } = await supabase.auth.getUser(accessToken);
-
-      if (error || !supabaseUser) {
-        return res.status(401).json({ message: "Invalid token" });
-      }
-
-      if (usesGoogleAuth(supabaseUser)) {
-        return res.status(403).json({
-          code: "google_login_disabled",
-          message: "Google sign-in is temporarily disabled.",
-        });
-      }
-
-      const email = supabaseUser.email;
-      if (!email) {
-        return res.status(400).json({ message: "Email not available from Supabase" });
-      }
-
-      // Normalize profile metadata across any non-Google Supabase providers that
-      // may be enabled later. Pick whichever common profile fields are present.
-      const md = supabaseUser.user_metadata || {};
-      const fullName = (md.full_name || md.name || "").trim();
-      const [firstFromFull, ...restFromFull] = fullName.split(/\s+/);
-      const firstName = md.first_name || md.given_name || firstFromFull || null;
-      const lastName =
-        md.last_name ||
-        md.family_name ||
-        (restFromFull.length ? restFromFull.join(" ") : null);
-      const avatarUrl = md.avatar_url || md.picture || null;
-
-      let [dbUser] = await db.select().from(users).where(eq(users.email, email));
-
-      if (!dbUser) {
-        [dbUser] = await db
-          .insert(users)
-          .values({
-            id: supabaseUser.id,
-            email,
-            firstName,
-            lastName,
-            profileImageUrl: avatarUrl,
-            isAdmin: false,
-          })
-          .onConflictDoUpdate({
-            target: users.id,
-            set: { email, updatedAt: new Date() },
-          })
-          .returning();
-      } else if (
-        (!dbUser.firstName && firstName) ||
-        (!dbUser.lastName && lastName) ||
-        (!dbUser.profileImageUrl && avatarUrl)
-      ) {
-        // Re-login profile sync: only fill NULL fields, never overwrite user edits.
-        const [updated] = await db
-          .update(users)
-          .set({
-            firstName: dbUser.firstName ?? firstName,
-            lastName: dbUser.lastName ?? lastName,
-            profileImageUrl: dbUser.profileImageUrl ?? avatarUrl,
-            updatedAt: new Date(),
-          })
-          .where(eq(users.id, dbUser.id))
-          .returning();
-        dbUser = updated;
-      }
-
-      (req.session as any).userId = dbUser.id;
-      (req.session as any).email = dbUser.email;
-      (req.session as any).isAdmin = dbUser.isAdmin;
-      (req.session as any).firstName = dbUser.firstName;
-      (req.session as any).lastName = dbUser.lastName;
-
-      // Persist the session to the store BEFORE responding. The client fires an
-      // immediate authenticated request (GET /api/xpot/me) right after this
-      // resolves; without an explicit save the row may not be written yet and
-      // that follow-up races ahead, failing with "Authentication required"
-      // even though login succeeded.
-      await new Promise<void>((resolve, reject) => {
-        req.session.save((err) => (err ? reject(err) : resolve()));
-      });
-
-      res.json({
-        isAdmin: dbUser.isAdmin || false,
-        email: dbUser.email,
-        firstName: dbUser.firstName,
-        lastName: dbUser.lastName,
-      });
-    } catch (err) {
-      console.error("Supabase login error:", err);
-      res.status(500).json({ message: "Login failed" });
-    }
-  });
+  // The Supabase-token exchange is retired. Google Cloud credentials use
+  // /api/auth/identity; the application's own secure session cookie remains.
+  app.post('/api/auth/login', (_req, res) => res.status(410).json({ code: 'passwordless_login_required' }));
 
   app.post("/api/auth/logout", (req: Request, res: Response) => {
     req.session.destroy((err) => {
@@ -177,13 +71,7 @@ export async function setupSupabaseAuth(app: Express) {
     }
   });
 
-  // Client config endpoint (Supabase project URL + anon key for the browser SDK)
-  app.get("/api/supabase-config", (_req: Request, res: Response) => {
-    res.json({
-      url: process.env.SUPABASE_URL || "",
-      anonKey: process.env.SUPABASE_ANON_KEY || "",
-    });
-  });
+  app.get('/api/supabase-config', (_req, res) => res.status(410).json({ code: 'supabase_auth_retired' }));
 }
 
 export const isAuthenticated: RequestHandler = (req, res, next) => {

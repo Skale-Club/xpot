@@ -1,7 +1,6 @@
 import { profileOf } from "#shared/profiles.js";
 import { Router } from "express";
 import { z } from "zod";
-import { createClient } from "@supabase/supabase-js";
 import { storage, type SalesRepProfilePatch } from "../../storage.js";
 import { requireXpotUser, ensureXpotRep } from "./middleware.js";
 import { getSupabaseAdmin } from "../../lib/supabase.js";
@@ -187,54 +186,7 @@ export function createAuthRouter() {
     }
   });
 
-  router.post("/me/change-password", async (req, res) => {
-    try {
-      const actor = (req as any).xpotActor as Awaited<ReturnType<typeof ensureXpotRep>>;
-      const parsed = z.object({
-        currentPassword: z.string().min(1),
-        newPassword: z.string().min(8).max(128),
-      }).safeParse(req.body);
-      if (!parsed.success) {
-        return res.status(400).json({ message: "Invalid input", errors: parsed.error.flatten() });
-      }
-      const { currentPassword, newPassword } = parsed.data;
-
-      if (!actor!.user.email) {
-        return res.status(400).json({ message: "No email on file for password reset" });
-      }
-
-      if (currentPassword === newPassword) {
-        return res.status(400).json({ message: "New password must differ from current password" });
-      }
-
-      const anonClient = createClient(
-        process.env.SUPABASE_URL!,
-        process.env.SUPABASE_ANON_KEY!,
-        { auth: { autoRefreshToken: false, persistSession: false } },
-      );
-
-      const { error: signInError } = await anonClient.auth.signInWithPassword({
-        email: actor!.user.email,
-        password: currentPassword,
-      });
-
-      if (signInError) {
-        return res.status(401).json({ message: "Current password is incorrect" });
-      }
-
-      const admin = getSupabaseAdmin();
-      const { error: updateError } = await admin.auth.admin.updateUserById(actor!.user.userId, { password: newPassword });
-
-      if (updateError) {
-        return res.status(500).json({ message: "Failed to update password" });
-      }
-
-      res.json({ success: true });
-    } catch (err) {
-      console.error("[POST /api/xpot/me/change-password]", err);
-      res.status(500).json({ message: "Internal server error" });
-    }
-  });
+  router.post('/me/change-password', (_req, res) => res.status(410).json({ code: 'passwordless_login_required' }));
 
   return router;
 }
