@@ -1,7 +1,7 @@
 // Tags › Shop, the Stuscle half: what Xpot makes of Stuscle's wholesale catalogue, and the links its cards open. The
 // links are the contract with Stuscle's /wholesale/kit: the reader's own code and SKU:quantity, never a price.
 import { describe, expect, it } from "vitest";
-import { shopLinkWithQuantity, toShopProducts } from "../shared/tagShowcase";
+import { TAG_SHOP_PACKS, shopLineTotals, shopLinkWithQuantity, toShopProducts } from "../shared/tagShowcase";
 import { stuscleKitUrl } from "../shared/wholesale";
 
 const CODE = "XPABCD1234";
@@ -60,5 +60,23 @@ describe("shopLinkWithQuantity", () => {
     expect(new URL(shopLinkWithQuantity(variant, 0)).searchParams.get("items")).toBe("PLATE-GOOGLE-SMALL-BLACK:1");
     expect(new URL(shopLinkWithQuantity(variant, 2.7)).searchParams.get("items")).toBe("PLATE-GOOGLE-SMALL-BLACK:2");
     expect(new URL(shopLinkWithQuantity(variant, 99_999)).searchParams.get("items")).toBe("PLATE-GOOGLE-SMALL-BLACK:10000");
+  });
+});
+
+describe("shopLineTotals", () => {
+  const plate = { wholesalePriceCents: 1500, retailPriceCents: 2500 };
+  it("multiplies the wholesale and the retail price by the quantity and says what is saved", () => {
+    expect(shopLineTotals(plate, 50)).toEqual({ wholesaleCents: 75_000, retailCents: 125_000, saveCents: 50_000 });
+  });
+  it("shows no retail or saving when there is no retail price or it is not above wholesale", () => {
+    expect(shopLineTotals({ wholesalePriceCents: 1500, retailPriceCents: null }, 10)).toEqual({ wholesaleCents: 15_000, retailCents: null, saveCents: null });
+    expect(shopLineTotals({ wholesalePriceCents: 1500, retailPriceCents: 1500 }, 10).saveCents).toBeNull();
+  });
+  it("keeps the quantity a whole number of at least one", () => {
+    expect(shopLineTotals(plate, 0).wholesaleCents).toBe(1500);
+    expect(shopLineTotals(plate, 2.9).wholesaleCents).toBe(3000);
+  });
+  it("offers ascending packs", () => {
+    expect([...TAG_SHOP_PACKS]).toEqual([...TAG_SHOP_PACKS].sort((a, b) => a - b));
   });
 });

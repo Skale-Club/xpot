@@ -2,7 +2,9 @@ import { useCallback, useEffect, useRef, useState, type ReactNode } from "react"
 import { useQuery } from "@tanstack/react-query";
 import { ChevronLeft, ChevronRight, ExternalLink, ImageOff, Minus, Plus, ShoppingBag, ShoppingCart } from "lucide-react";
 import {
+  TAG_SHOP_PACKS,
   TAG_SHOWCASE_MAX_QUANTITY,
+  shopLineTotals,
   shopLinkWithQuantity,
   showcaseAddsToCart,
   type TagShopCatalog,
@@ -59,6 +61,7 @@ function ProductCard({ product, currency }: { product: TagShopProduct; currency:
   const [quantity, setQuantity] = useState(1);
   const variant = product.variants.find((v) => v.id === variantId) ?? product.variants[0];
   const off = percentOff(variant.wholesalePriceCents, variant.retailPriceCents);
+  const totals = shopLineTotals(variant, quantity);
   const setQty = (value: number) => setQuantity(Math.min(TAG_SHOWCASE_MAX_QUANTITY, Math.max(1, Math.floor(value) || 1)));
   return (
     <li className={`${CARD} ${CARD_WIDTH} flex flex-col overflow-hidden`} data-testid="shop-product">
@@ -89,7 +92,35 @@ function ProductCard({ product, currency }: { product: TagShopProduct; currency:
               </p>
             )}
           </div>
+          {quantity > 1 && (
+            <div className="rounded-xl border border-white/10 bg-black/20 px-3 py-2" data-testid="shop-total">
+              <p className="flex items-baseline justify-between gap-2 text-sm">
+                <span className="text-white/60">{t("shopTotalFor", { count: quantity })}</span>
+                <span className="flex items-baseline gap-2">
+                  {totals.retailCents !== null && <span className="text-xs text-white/40 line-through">{formatMoney(totals.retailCents, currency)}</span>}
+                  <span className="font-bold text-white">{formatMoney(totals.wholesaleCents, currency)}</span>
+                </span>
+              </p>
+              {totals.saveCents !== null && <p className="mt-0.5 text-right text-xs font-semibold text-emerald-300">{t("shopYouSave", { amount: formatMoney(totals.saveCents, currency) })}</p>}
+            </div>
+          )}
           <div className="space-y-2">
+            <div className="flex gap-1.5" role="group" aria-label={t("shopPacks")}>
+              {TAG_SHOP_PACKS.map((pack) => (
+                <button
+                  key={pack}
+                  type="button"
+                  aria-pressed={quantity === pack}
+                  onClick={() => setQty(pack)}
+                  className={`h-9 flex-1 rounded-lg border text-xs font-semibold transition-colors ${
+                    quantity === pack ? "border-violet-300/60 bg-violet-400/20 text-white" : "border-white/10 bg-white/[0.04] text-white/60 hover:text-white"
+                  }`}
+                  data-testid="shop-pack"
+                >
+                  {pack}
+                </button>
+              ))}
+            </div>
             <div className="flex h-11 items-center justify-between rounded-xl border border-white/10 bg-white/[0.05]">
               <button
                 type="button"

@@ -187,6 +187,25 @@ export function toShopProducts(body: unknown, storeBaseUrl: string, code: string
   return { currency, products };
 }
 
+/** The quantities offered as one-tap packs on a product card. */
+export const TAG_SHOP_PACKS = [10, 25, 50, 100] as const;
+
+/**
+ * What `quantity` of a variant costs at wholesale, against the same pieces at retail. `retailCents` and `saveCents` are
+ * null when Stuscle gave no retail price, or it is not above the wholesale one. For display only: the cart is priced by Stuscle.
+ */
+export function shopLineTotals(
+  variant: Pick<TagShopVariant, "wholesalePriceCents" | "retailPriceCents">,
+  quantity: number,
+): { wholesaleCents: number; retailCents: number | null; saveCents: number | null } {
+  const qty = Math.min(TAG_SHOWCASE_MAX_QUANTITY, Math.max(1, Math.floor(quantity) || 1));
+  const wholesaleCents = variant.wholesalePriceCents * qty;
+  const retail = variant.retailPriceCents;
+  if (retail === null || retail <= variant.wholesalePriceCents) return { wholesaleCents, retailCents: null, saveCents: null };
+  const retailCents = retail * qty;
+  return { wholesaleCents, retailCents, saveCents: retailCents - wholesaleCents };
+}
+
 /** A variant's cart link for `quantity` pieces instead of one (the reseller picks how many in the Shop). */
 export function shopLinkWithQuantity(variant: Pick<TagShopVariant, "url" | "sku">, quantity: number): string {
   const qty = Math.min(TAG_SHOWCASE_MAX_QUANTITY, Math.max(1, Math.floor(quantity) || 1));
