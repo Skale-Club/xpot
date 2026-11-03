@@ -14,14 +14,14 @@ import {
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import { EmptyState } from "@/components/xpot/EmptyState";
-import { TagPieceVisual } from "@/components/xpot/TagProductThumbnail";
 import { useT } from "@/i18n";
 import { productionMessages } from "@/i18n/messages/production";
 import { productionBoardMessages } from "@/i18n/messages/productionBoard";
 import { unifiedProductionMessages } from "@/i18n/messages/unifiedProduction";
 import { useTagLabels } from "./labels";
 import { Loading, LoadError } from "./pieces-shared";
-import { GenerateDialog } from "./production-generate";
+import { DesignPreview, GenerateDialog } from "./production-generate";
+import { printStyle } from "@shared/printDesigns";
 import { ToPrintList } from "./production-orders";
 import type { PreviewState } from "./production-preview-3d";
 import { PRODUCTION_BASE, minutesText, usePrintComputers, usePrintModels, usePrintRequests, useProductionAccess } from "./production-shared";
@@ -167,7 +167,7 @@ function ProductCard({ option, model, onOpen }: { option: PrintGenerateOption; m
         data-testid="production-generate-product"
       >
         <span className="flex h-40 w-full items-center justify-center rounded-xl bg-white/[0.16]">
-          <TagPieceVisual productType={option.productType} face={sample.face} theme={model?.theme} modelSlug={sample.slug} size="lg" still />
+          <DesignPreview productType={option.productType} face={sample.face} theme={model?.theme ?? option.colours[0].theme} style={printStyle(model?.currentVersion?.params)} modelSlug={sample.slug} />
         </span>
         <span className="space-y-0.5">
           <span className="block text-sm font-semibold text-white">{labels.product(option.productType)}</span>

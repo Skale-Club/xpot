@@ -1,3 +1,4 @@
+import { screens } from "@/lib/screens";
 import { useEffect } from "react";
 import { Redirect, Route, Switch, useLocation } from "wouter";
 import { useQuery } from "@tanstack/react-query";
@@ -6,15 +7,6 @@ import { useT } from "@/i18n";
 import { tagsMessages } from "@/i18n/messages/tags";
 import { customerOrdersMessages } from '@/i18n/messages/customerOrders';
 import type { XpotMeResponse } from "@/pages/xpot/types";
-import DirectScreen from "./DirectScreen";
-import CustomersScreen from "./CustomersScreen";
-import CustomerScreen from "./CustomerScreen";
-import HomeScreen from "./HomeScreen";
-import CustomerOrders from './CustomerOrders';
-import PiecesScreen from "./PiecesScreen";
-import ShopScreen from "./ShopScreen";
-import TagsResults from "./TagsResults";
-import TagScreen from "./TagScreen";
 import { APP_BASE, tagPath } from "./lib";
 import { useIsDesktop } from "@/hooks/use-is-desktop";
 import { AppLayout, MODULE_COLUMN } from "@/components/xpot/AppLayout";
@@ -25,6 +17,8 @@ import { useOnline } from "@/hooks/use-online";
 import { MODULE_HOME, rememberModuleRoute } from "@/lib/xpot";
 import { SessionGate } from "@/components/xpot/SessionGate";
 
+
+const { tagsDirect: DirectScreen, tagsCustomers: CustomersScreen, tagsCustomer: CustomerScreen, tagsHome: HomeScreen, tagsOrders: CustomerOrders, tagsPieces: PiecesScreen, tagsShop: ShopScreen, tagsResults: TagsResults, tagsPiece: TagScreen } = screens;
 
 /** The Tags module: read, sell and write QR/NFC pieces. Mounted at /tags/*. */
 export function TagsApp() {

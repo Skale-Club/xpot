@@ -15,6 +15,7 @@ import { ListSkeleton } from "@/components/xpot/ListSkeleton";
 import { ListPager } from "@/components/xpot/pagination";
 import { MasterDetail } from "@/components/xpot/MasterDetail";
 import { useIsDesktop } from "@/hooks/use-is-desktop";
+import { currentSearch, useUrlFilters } from "@/hooks/use-url-filters";
 import { commonMessages } from "@/i18n/messages/common";
 import { Pill, PILL_DOTS } from "@/components/xpot/StatusPill";
 import { apiRequest } from "@/lib/queryClient";
@@ -137,9 +138,14 @@ function SystemHealthOverview() {
   const services = useServices();
   const syncProblems = useSyncProblems();
   const [, setNow] = useState(0);
-  const [fingerprint, setFingerprint] = useState<string | null>(null);
-  const [runFilter, setRunFilter] = useState<number | null>(null);
-  const [logOpen, setLogOpen] = useState(false);
+  const logFilters = useUrlFilters({ log: "", fingerprint: "", runId: "" });
+  const fingerprint = logFilters.values.fingerprint || null;
+  const setFingerprint = (fingerprint: string | null) => logFilters.set({ fingerprint });
+  const runId = Number(logFilters.values.runId);
+  const runFilter = Number.isSafeInteger(runId) && runId > 0 ? runId : null;
+  const setRunFilter = (runId: number | null) => logFilters.set({ runId: runId == null ? "" : String(runId) });
+  const logOpen = logFilters.values.log === "1";
+  const setLogOpen = (open: boolean) => logFilters.set({ log: open ? "1" : "" });
   const pane = useEventPane();
   const health = useQuery<SystemHealthSnapshot>({
     queryKey: ["/api/xpot/admin/system-health"],
@@ -349,7 +355,7 @@ function SystemHealthOverview() {
         t={t}
         ago={ago}
         open={logOpen || pane.id !== null}
-        onToggle={() => setLogOpen((v) => !v)}
+        onToggle={() => setLogOpen(!logOpen)}
         fingerprint={fingerprint}
         onClearFingerprint={() => setFingerprint(null)}
         runId={runFilter}
@@ -520,10 +526,14 @@ function EventLog({ t, ago, open, onToggle, fingerprint, onClearFingerprint, run
   runId: number | null;
   onClearRun: () => void;
 }) {
-  const [level, setLevel] = useState<"all" | "error" | "warn">("all");
-  const [source, setSource] = useState("");
+  const filters = useUrlFilters({ level: "all", source: "", q: "" });
+  const level = filters.values.level === "error" || filters.values.level === "warn" ? filters.values.level : "all";
+  const setLevel = (level: "all" | "error" | "warn") => filters.set({ level });
+  const source = filters.values.source;
+  const setSource = (source: string) => filters.set({ source });
   // FilterSearch reports after typing pauses (debounceMs), so this is already the settled search.
-  const [query, setQ] = useState("");
+  const query = filters.values.q;
+  const setQ = (q: string) => filters.set({ q });
   const q = query.trim();
 
   const params = new URLSearchParams();
@@ -593,7 +603,7 @@ function EventLog({ t, ago, open, onToggle, fingerprint, onClearFingerprint, run
           {rows.map((event) => (
             <li key={event.id}>
               <Link
-                href={`/admin/health/events/${event.id}`}
+                href={`/admin/health/events/${event.id}${currentSearch(["event"])}`}
                 onClick={(e) => {
                   // A computer opens the event beside the log; a new-tab click still opens its page.
                   if (!isDesktop || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button !== 0) return;

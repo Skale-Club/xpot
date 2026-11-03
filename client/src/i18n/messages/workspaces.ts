@@ -4,7 +4,7 @@ import type { Dictionary } from "../index";
 
 const en = {
   // The panel's name, by profile (shared/profiles.ts)
-  panelPlatform: "Platform",
+  panelPlatform: "Skale Club",
   panelCompany: "My company",
   panelCompanies: "My companies",
   groupMake: "Make",
@@ -44,7 +44,7 @@ const en = {
 export const workspacesMessages: Dictionary<typeof en> = {
   en,
   pt: {
-    panelPlatform: "Plataforma",
+    panelPlatform: "Skale Club",
     panelCompany: "Minha empresa",
     panelCompanies: "Minhas empresas",
     groupMake: "Produzir",
@@ -80,7 +80,7 @@ export const workspacesMessages: Dictionary<typeof en> = {
     stockHint: "Encontre peças, confira a disponibilidade e gerencie o estoque da empresa.",
   },
   es: {
-    panelPlatform: "Plataforma",
+    panelPlatform: "Skale Club",
     panelCompany: "Mi empresa",
     panelCompanies: "Mis empresas",
     groupMake: "Producir",

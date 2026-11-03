@@ -8,7 +8,7 @@ import type { PanelNames } from "./moduleNav";
 
 /**
  * The panel's name by profile, and the words its sidebar, phone bar and palette use (i18n/messages/workspaces.ts).
- * The platform's is "Platform"; everyone else's is "My company" ("My companies" for an owner of several): a partner
+ * The platform team's is "Skale Club"; everyone else's is "My company" ("My companies" for an owner of several): a partner
  * sells and has a team too, so its panel is not "Production". A member has no panel.
  */
 export function usePanelNames() {

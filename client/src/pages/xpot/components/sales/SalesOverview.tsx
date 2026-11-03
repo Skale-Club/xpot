@@ -108,7 +108,6 @@ export function SalesOverview({ onGoToConsignments, onNewSale }: { onGoToConsign
   // On the 1st the month is one day old: "this month" next to a bigger "last 30 days" figure reads as an error.
   const monthIsNew = new Date().getDate() < 2;
   const monthLabel = monthIsNew ? t("sinceToday", { date: formatShortDate(new Date()) }) : t("soldThisMonth");
-  const nothingYet = s.sales.periodCount === 0 && s.consignment.activeCount === 0 && s.byProduct.length === 0;
 
   const periodPicker = (
     <PeriodSelector
@@ -118,18 +117,6 @@ export function SalesOverview({ onGoToConsignments, onNewSale }: { onGoToConsign
       ariaLabel={t("periodLabel")}
     />
   );
-
-  // Nothing sold and nothing out: one message and the way to start, not a wall of zeros.
-  if (nothingYet) {
-    return (
-      <div className="space-y-4" data-testid="sales-overview-empty">
-        <div className="flex justify-end">{periodPicker}</div>
-        <EmptyState icon={ShoppingBag} title={t("noSalesPeriod")} hint={t("noSalesPeriodHint")}>
-          {onNewSale ? <Button type="button" variant="brand" onClick={onNewSale}>{t("newSale")}</Button> : null}
-        </EmptyState>
-      </div>
-    );
-  }
 
   return (
     <div className="space-y-4 lg:space-y-5">
@@ -159,7 +146,7 @@ export function SalesOverview({ onGoToConsignments, onNewSale }: { onGoToConsign
                     <span data-testid="sales-margin">{t("profitMargin", { percent: costedMargin })}</span>
                   </>
                 ) : showProfit ? (
-                  <span className="max-w-sm" data-testid="sales-no-cost">{t("noCostYet")}</span>
+                  <span className="max-w-sm" data-testid="sales-no-cost">{s.sales.periodCount === 0 ? t("noSalesPeriod") : t("noCostYet")}</span>
                 ) : (
                   <span>{t.plural("salesCount", s.sales.periodCount)} · {t.plural("units", s.sales.unitsSold)}</span>
                 )}
@@ -347,7 +334,9 @@ export function SalesOverview({ onGoToConsignments, onNewSale }: { onGoToConsign
               ))}
             </div>
           ) : (
-            <EmptyState compact dense icon={Boxes} title={t("noSalesPeriod")} hint={t("noSalesPeriodHint")} />
+            <EmptyState compact dense icon={Boxes} title={t("noSalesPeriod")} hint={t("noSalesPeriodHint")}>
+              {onNewSale ? <Button type="button" variant="brand" size="sm" onClick={onNewSale}>{t("newSale")}</Button> : null}
+            </EmptyState>
           )}
         </div>
       </section>

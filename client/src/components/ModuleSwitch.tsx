@@ -71,6 +71,7 @@ export function ModuleSwitch({ current }: { current: XpotModule }) {
             type="button"
             role="tab"
             aria-selected={active}
+            data-preload-href={moduleEntryPath(id)}
             onClick={() => {
               if (active) return;
               rememberModuleRoute(current, `${window.location.pathname}${window.location.search}`);

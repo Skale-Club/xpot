@@ -21,7 +21,7 @@ export function PanelTabBar({ groups, profile }: { groups: NavGroup[]; profile: 
   const { tabs, more } = panelPhoneTabs(groups, profile);
   const lit = tabs.find((item) => item.match(location));
   const items = [
-    ...tabs.map((item) => ({ id: item.href, label: item.label, icon: item.icon, testId: `panel-nav-${item.href.replace(/\W+/g, "-").replace(/^-|-$/g, "")}` })),
+    ...tabs.map((item) => ({ id: item.href, href: item.href, label: item.label, icon: item.icon, testId: `panel-nav-${item.href.replace(/\W+/g, "-").replace(/^-|-$/g, "")}` })),
     ...(more.length ? [{ id: MORE, label: t("moreTab"), icon: Ellipsis, testId: "panel-nav-more" }] : []),
   ];
   return (

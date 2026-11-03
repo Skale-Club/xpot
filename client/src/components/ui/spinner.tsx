@@ -42,6 +42,15 @@ export function DotsLoader({ size = "md", tone = "brand", className, label }: Do
   );
 }
 
+/** Local waiting state: never covers or hides the surrounding navigation. */
+export function ScreenLoader() {
+  return (
+    <div className="flex min-h-[40vh] items-center justify-center" data-testid="screen-loader" aria-busy="true">
+      <DotsLoader size="md" tone="brand" />
+    </div>
+  );
+}
+
 /**
  * AppLoader — full-screen, theme-aware loader.
  *

@@ -9,6 +9,7 @@ import { PageHeader } from "@/components/xpot/PageHeader";
 import { Pill } from "@/components/xpot/StatusPill";
 import { GLASS_SUBTLE_CLASS } from "@/components/xpot/surface";
 import { useViewerAccess } from "@/lib/adminMode";
+import { currentSearch } from "@/hooks/use-url-filters";
 import { describeApiError } from "@/lib/apiErrors";
 import { formatDate, formatMoney, formatPhone } from "@/lib/format";
 import { useT } from "@/i18n";
@@ -69,7 +70,9 @@ export function OrganizationPerson({ organizationId, repId }: { organizationId: 
   const tasks = useQuery<SalesTask[]>({ queryKey: [`/api/xpot/tasks?repId=${repId}&status=${OPEN_TASK_STATUSES}`], enabled: listsOn });
   const sales = useQuery<SaleWithItems[]>({ queryKey: [`/api/xpot/sales?repId=${repId}&limit=100`], enabled: listsOn });
 
-  const back = `/organizations/${organizationId}?tab=team`;
+  const backParams = new URLSearchParams(currentSearch(["view", "tab"]));
+  backParams.set("tab", "team");
+  const back = `/organizations/${organizationId}?${backParams}`;
   const header = (description?: ReactNode, actions?: ReactNode) => (
     <PageHeader
       backHref={back}

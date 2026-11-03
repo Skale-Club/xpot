@@ -1,3 +1,4 @@
+import { screens } from "@/lib/screens";
 import { useLocation } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { ShieldAlert } from "lucide-react";
@@ -12,17 +13,8 @@ import { panelGroups } from "@/components/xpot/moduleNav";
 import { usePanelNames } from "@/components/xpot/panelNames";
 import { ownedOrganizationId, profileOfMe } from "@/lib/adminMode";
 import type { XpotMeResponse } from "@/pages/xpot/types";
-import { AdminOverview } from "./AdminOverview";
-import { AdminReps } from "./AdminReps";
-import { AdminIntegrations } from "./AdminIntegrations";
-import { AdminBrandSite } from "./platform/AdminBrandSite";
-import { AdminTags, CodeLookup } from "./tags/AdminTags";
+import { CodeLookup } from "./tags/CodeLookup";
 import { useProductionAccess } from "./tags/production-shared";
-import { AdminProducts } from "./AdminProducts";
-import { AdminSettings } from "./AdminSettings";
-import { AdminSystemHealth } from "./AdminSystemHealth";
-import { AdminHome } from "./AdminHome";
-import { AdminWork } from "./AdminWork";
 import { can } from "@shared/profiles";
 import { isTagPieceQueue } from "@shared/tagQueues";
 import { pieceQueueCard } from "./tags/overview-model";
@@ -35,6 +27,8 @@ import { navIaMessages } from "@/i18n/messages/navIa";
 import { manageMessages } from "@/i18n/messages/manage";
 import { workspacesMessages } from "@/i18n/messages/workspaces";
 import { useXpotModules, homeForModules } from "@/components/ModuleSwitch";
+
+const { adminTags: AdminTags, adminOverview: AdminOverview, adminReps: AdminReps, adminIntegrations: AdminIntegrations, adminBrandSite: AdminBrandSite, adminProducts: AdminProducts, adminSettings: AdminSettings, adminHealth: AdminSystemHealth, adminHome: AdminHome, adminWork: AdminWork } = screens;
 
 const SECTIONS = ["home", "work", "overview", "tags", "products", "integrations", "branding", "landing", "xphere", "reps", "settings", "health"] as const;
 /** What an owner's or a partner's panel reaches; the rest of /admin is the platform's. (Tags narrows itself by tab: AdminTags.) */

@@ -11,7 +11,7 @@ const en = {
   tabSales: "Sales",
   tabRoute: "Route",
   tabTasks: "Tasks",
-  tabDashboard: "Dashboard",
+  tabDashboard: "Home",
 
   // Formatters
   notSet: "Not set",
@@ -87,7 +87,7 @@ export const shellMessages: Dictionary<typeof en> = {
     tabSales: "Vendas",
     tabRoute: "Rota",
     tabTasks: "Tarefas",
-    tabDashboard: "Painel",
+    tabDashboard: "Home",
 
     notSet: "Não definido",
     durationMinutes: "{minutes}min",
@@ -153,7 +153,7 @@ export const shellMessages: Dictionary<typeof en> = {
     tabSales: "Ventas",
     tabRoute: "Ruta",
     tabTasks: "Tareas",
-    tabDashboard: "Panel",
+    tabDashboard: "Home",
 
     notSet: "Sin definir",
     durationMinutes: "{minutes} min",

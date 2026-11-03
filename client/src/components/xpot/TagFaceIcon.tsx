@@ -1,5 +1,5 @@
 import type { CSSProperties, ReactNode } from "react";
-import { CalendarCheck, Contact, Facebook, Globe, Instagram, Linkedin, Mail, Phone, Sparkles, Tag, UtensilsCrossed, Youtube } from "lucide-react";
+import { CalendarCheck, Contact, DollarSign, Facebook, Globe, Instagram, Linkedin, Mail, Phone, Sparkles, Tag, UtensilsCrossed, Wifi, Youtube } from "lucide-react";
 import { isTagFace, type TagFace } from "@shared/tagFace";
 import { useT } from "@/i18n";
 import { tagsMessages } from "@/i18n/messages/tags";
@@ -54,6 +54,11 @@ const TILES: Record<TagFace, Tile> = {
   booking: { background: "#0d9488", color: "#fff", glyph: (c) => <CalendarCheck className={c} /> },
   vcard: { background: "#7c3aed", color: "#fff", glyph: (c) => <Contact className={c} /> },
   venmo: { background: "#008CFF", color: "#fff", glyph: (c) => <VenmoGlyph className={c} /> },
+  yelp: { background: "#fff", color: "#D32323", glyph: (c) => <img src="/production/logos/yelp.png" alt="" className={c} /> },
+  cashapp: { background: "#00C244", color: "#fff", glyph: (c) => <DollarSign className={c} /> },
+  paypal: { background: "#fff", color: "#003087", glyph: (c) => <img src="/production/logos/paypal.png" alt="" className={c} /> },
+  zelle: { background: "#fff", color: "#6C1CD3", glyph: (c) => <img src="/production/logos/zelle.png" alt="" className={c} /> },
+  wifi: { background: "#111827", color: "#fff", glyph: (c) => <Wifi className={c} /> },
   custom: { background: "linear-gradient(135deg, #5b8cff, #22d3ee)", color: "#fff", glyph: (c) => <Sparkles className={c} /> },
 };
 

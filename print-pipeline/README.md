@@ -123,3 +123,31 @@ XPOT_MCP_TOKEN=... python print-pipeline/preview.py version.json preview.glb --u
 ## Checks
 
 CI compiles every Python file and runs `tests/test_*.py`. The slicer never runs in CI: the bench slices and reports.
+
+
+## Flyer catalog and single-plate generation
+
+New serialized requests are limited to the selected bed's capacity: one generation, one printer plate, one batch.
+Historical requests with several plates retain their history, retry and stock lifecycle. Parts without serials
+can still be ordered as whole beds.
+
+`catalog/design_catalog.py` defines 160 ready recipes: four physical products, fifteen services, approved white/black bodies
+and six Menu styles. Each recipe has all three NFC variants. Historic versions are preserved by the generated
+forward migration; only future requests use the new recipes. The service builders decode the QR from the mesh,
+check watertightness, non-manifold edges and expected volume before writing STLs.
+
+```powershell
+python print-pipeline/catalog/design_catalog.py --migration migrations/0080_flyer_design_catalog.sql --previews client/public/production/previews
+python print-pipeline/tests/validate_design_geometry.py --workers 4 --out .cache/plaque-geometry.json
+python print-pipeline/tests/validate_design_slices.py --out .cache/plaque-slices
+```
+
+Black and white primary filaments default to ELEGOO standard PLA, 1.75 mm. Accent colours may be generic PLA.
+The conservative baseline is nozzle 215 °C on layer 1 / 210 °C after that, textured bed 60 / 55 °C,
+and maximum volumetric flow 12 mm³/s. Layer height stays 0.16 mm, first-layer speed 30 mm/s,
+artwork first and body last. Dark-to-light flushes keep at least 600 mm³. This is a default recipe,
+not a claim of physical calibration of every ELEGOO product line; PLA+, Rapid, Matte and Silk may require
+their own profiles. An admin can still author another version for another filament.
+
+Offline tests use TEST0001..TEST0008 and the non-issued preview code A7K3P9X2. Never receive these samples
+into stock or substitute them for production batch codes.

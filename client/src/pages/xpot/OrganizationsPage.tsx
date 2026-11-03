@@ -2,6 +2,7 @@ import { useMemo, useState, type ReactNode } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Building2, ChevronRight, Package, PackageOpen, Plus, Settings, ShieldCheck, ShoppingBag, UserPlus, Users } from "lucide-react";
 import { Link, Redirect, useLocation, useSearchParams } from "wouter";
+import { currentSearch, useUrlFilters } from "@/hooks/use-url-filters";
 import { PieceStatusPill, usePieceStatusLabel } from "@/components/piece/PieceStatusPill";
 import { Button } from "@/components/ui/button";
 import { AppLayout } from "@/components/xpot/AppLayout";
@@ -144,8 +145,11 @@ function OrganizationsList() {
   const [name, setName] = useState("");
   const [repAdminId, setRepAdminId] = useState("");
   const [creating, setCreating] = useState(false);
-  const [showPersonal, setShowPersonal] = useState(false);
-  const [type, setType] = useState<"all" | "producer" | "seller">("all");
+  const filters = useUrlFilters({ personal: "", type: "all" });
+  const showPersonal = filters.values.personal === "1";
+  const setShowPersonal = (shown: boolean) => filters.set({ personal: shown ? "1" : "" });
+  const type = filters.values.type === "producer" || filters.values.type === "seller" ? filters.values.type : "all";
+  const setType = (type: "all" | "producer" | "seller") => filters.set({ type });
   const personalCount = organizations.filter((o) => o.personal).length;
   const shown = (showPersonal ? organizations : organizations.filter((o) => !o.personal)).filter((o) => type === "all" || (type === "producer") === isProducer(o));
   const create = useMutation({
@@ -202,7 +206,7 @@ function OrganizationsList() {
             {shown.map((organization) => (
               <button
                 key={organization.id}
-                onClick={() => navigate(`/organizations/${organization.id}`)}
+                onClick={() => navigate(`/organizations/${organization.id}${currentSearch()}`)}
                 className={`rounded-2xl ${GLASS_CLASS} p-5 text-left transition-colors hover:border-white/20 hover:bg-white/[0.06]`}
               >
                 <div className="flex items-start justify-between gap-3">
@@ -259,16 +263,12 @@ function OrganizationWorkspace({ organizationId }: { organizationId: number }) {
   const tab: WorkspaceTab | null = urlTab ?? (ownPanel ? "team" : isDesktop ? "overview" : null);
   const home = `/organizations/${organizationId}`;
   const setTab = (next: WorkspaceTab) => {
-    if (!isDesktop) {
-      navigate(`${home}?tab=${next}`);
-      return;
-    }
     setParams((current) => {
       const updated = new URLSearchParams(current);
-      if (next === "overview") updated.delete("tab");
+      if (isDesktop && next === "overview") updated.delete("tab");
       else updated.set("tab", next);
       return updated;
-    }, { replace: true });
+    }, { replace: isDesktop });
   };
   const base = `/api/xpot/organizations/${organizationId}`;
   const organization = useQuery<Organization>({ queryKey: [base] });
@@ -279,7 +279,13 @@ function OrganizationWorkspace({ organizationId }: { organizationId: number }) {
   const membership = me?.organizationMemberships?.find((item) => item.organizationId === organizationId && item.isActive && !item.blockedAt);
   const mayManageTeam = platformManager || membership?.role === "admin";
   // The owner or partner of this one organization has no list above it: Back goes to their panel.
-  const [backHref, backLabel] = ownedOrganizationId(me) === organizationId ? ["/admin", twp("todayTitle")] : ["/organizations", t("backToList")];
+  const listParams = new URLSearchParams();
+  for (const key of ["personal", "type"]) {
+    const value = params.get(key);
+    if (value) listParams.set(key, value);
+  }
+  const listHref = `/organizations${listParams.size ? `?${listParams}` : ""}`;
+  const [backHref, backLabel] = ownedOrganizationId(me) === organizationId ? ["/admin", twp("todayTitle")] : [listHref, t("backToList")];
   // The owner follows what the team bought; an employee has no list of it (the server refuses).
   const purchases = useQuery<Purchase[]>({ queryKey: [`${base}/purchases`], enabled: tab === "purchases" && mayManageTeam });
   // Companies open where this viewer works with them: Visits if they have it, else Tags.
@@ -356,7 +362,7 @@ function OrganizationWorkspace({ organizationId }: { organizationId: number }) {
     <AppLayout title={org.name} size="wide">
       <div className="space-y-5">
         {phoneSection ? (
-          <PageHeader backHref={home} backLabel={org.name} eyebrow={org.name} title={phoneSection.label} className="mb-0" />
+          <PageHeader backHref={`${home}${currentSearch(["tab"])}`} backLabel={org.name} eyebrow={org.name} title={phoneSection.label} className="mb-0" />
         ) : (
           <PageHeader
             backHref={backHref}
@@ -405,7 +411,7 @@ function OrganizationWorkspace({ organizationId }: { organizationId: number }) {
                     <div className="min-w-0 flex-1">
                       {/* Their work (companies, visits, tasks, sales) for whoever manages the team; the person themselves (access, role, every membership) is in People. */}
                       {mayManageTeam ? (
-                        <Link href={`/organizations/${organizationId}/people/${member.repId}`} className="block truncate font-medium text-white hover:text-blue-200" data-testid={`organization-member-${member.repId}`}>{member.displayName}</Link>
+                        <Link href={`/organizations/${organizationId}/people/${member.repId}${currentSearch(["tab"])}`} className="block truncate font-medium text-white hover:text-blue-200" data-testid={`organization-member-${member.repId}`}>{member.displayName}</Link>
                       ) : (
                         <p className="truncate font-medium text-white">{member.displayName}</p>
                       )}

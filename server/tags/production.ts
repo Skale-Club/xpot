@@ -903,7 +903,12 @@ function fileItem(f: typeof printJobFiles.$inferSelect): PrintJobFileItem {
 
 /** A version's params, recipe, beds and parts as the plate's NFC type prints them (shared withNfcVariant). */
 function printedVersion(version: VersionRow, mount: string | null, menuFont: string | null) {
-  const params = menuFont ? { ...version.params, font: menuFont } : version.params ?? {};
+  const serviceMenu = version.params?.face === "menu" && version.builder?.endsWith(".service");
+  const fontIndex = PRINT_MENU_FONTS.findIndex((font) => font === menuFont);
+  const params = menuFont ? {
+    ...version.params, font: menuFont,
+    ...(serviceMenu && fontIndex >= 0 ? { style: ["classic", "italic", "modern", "spaced", "bold", "rounded"][fontIndex] } : {}),
+  } : version.params ?? {};
   return withNfcVariant(
     { params, recipe: version.recipe ?? {}, beds: version.beds ?? [], consumes: version.consumes ?? [] },
     version.nfc_variants, mount,
@@ -912,7 +917,8 @@ function printedVersion(version: VersionRow, mount: string | null, menuFont: str
 
 /** The title font of a new print: only a Menu piece has one to choose; unsaid, the version's own. */
 function pickMenuFont(version: VersionRow, requested: PrintMenuFont | undefined): PrintMenuFont | null {
-  if (requested && !menuFontsOf(version.builder).includes(requested)) throw new TagError("Only a Menu piece has a title font to choose", 409, "print_font_unavailable");
+  const fonts = version.params?.face === "menu" && version.builder?.endsWith(".service") ? PRINT_MENU_FONTS : menuFontsOf(version.builder);
+  if (requested && !fonts.includes(requested)) throw new TagError("Only a Menu piece has a title font to choose", 409, "print_font_unavailable");
   return requested ?? null;
 }
 
@@ -1146,8 +1152,8 @@ async function targetOrganization(ref: string | number | undefined, scope: Produ
 }
 
 /**
- * A print request: `quantity` pieces (or whole `plates`) of a model's current version, split into plates of at most
- * one bed each, the last one partial (10 on a 4-up bed: 4 + 4 + 2). Each serialized plate issues its own batch; a
+ * A new serialized request is one printer plate (1..bed.copies), with one batch of fresh codes. Historical
+ * multi-plate requests retain their lifecycle and history. Unnumbered parts can still span whole beds. A
  * part's plates are its fixed file, so its count rounds up to whole beds. The request and all its plates are written
  * in one transaction: either all of them exist or none. `existingBatch` links a batch made before the catalog
  * instead, as a request of one plate, for the batch's own organization unless another is named. `replaces` (set by
@@ -1183,6 +1189,10 @@ export async function createJob(input: PrintJobCreateInput, userId: string | nul
     throw new TagError("This model needs a product, a sales product and a batch prefix before printing", 409, "print_model_incomplete");
   }
   const quantity = input.quantity ?? bed.copies * (input.plates ?? 1);
+  if (model.kind === "serialized" && quantity > bed.copies) {
+    throw new TagError(`Generate one printer plate at a time: at most ${bed.copies} pieces on ${bed.label}`, 400,
+      "print_single_plate_only", { max: bed.copies });
+  }
   const plates = splitIntoPlates(quantity, bed.copies, model.kind === "serialized");
   if (plates.length > PRINT_MAX_PLATES) {
     throw new TagError(`At most ${PRINT_MAX_PLATES} plates in one request: up to ${PRINT_MAX_PLATES * bed.copies} pieces on ${bed.label}`, 400,

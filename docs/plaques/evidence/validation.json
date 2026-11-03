@@ -1,0 +1,106 @@
+{
+  "geometry": {
+    "checked": 480,
+    "passed": 480
+  },
+  "slices": [
+    {
+      "model": "stand-large-menu-white-rounded",
+      "mount": "sticker_10x20",
+      "ok": true,
+      "qr": "4/4",
+      "pause": 1.8,
+      "minutes": 341.3
+    },
+    {
+      "model": "stand-large-menu-white-rounded",
+      "mount": "sticker_round_25",
+      "ok": true,
+      "qr": "4/4",
+      "pause": 1.8,
+      "minutes": 344.5
+    },
+    {
+      "model": "stand-small-cashapp-black",
+      "mount": "sticker_round_25",
+      "ok": true,
+      "qr": "4/4",
+      "pause": 1.32,
+      "minutes": 180.9
+    },
+    {
+      "model": "stand-large-menu-white-rounded",
+      "mount": "embedded_round",
+      "ok": true,
+      "qr": "4/4",
+      "pause": 2.76,
+      "minutes": 344.2
+    },
+    {
+      "model": "stand-small-cashapp-black",
+      "mount": "sticker_10x20",
+      "ok": true,
+      "qr": "4/4",
+      "pause": 1.32,
+      "minutes": 178.9
+    },
+    {
+      "model": "stand-small-cashapp-black",
+      "mount": "embedded_round",
+      "ok": true,
+      "qr": "4/4",
+      "pause": 2.76,
+      "minutes": 178.8
+    },
+    {
+      "model": "plate-large-yelp-black",
+      "mount": "sticker_round_25",
+      "ok": true,
+      "qr": "4/4",
+      "pause": 1.32,
+      "minutes": 273.3
+    },
+    {
+      "model": "plate-large-yelp-black",
+      "mount": "sticker_10x20",
+      "ok": true,
+      "qr": "4/4",
+      "pause": 1.32,
+      "minutes": 271.0
+    },
+    {
+      "model": "plate-large-yelp-black",
+      "mount": "embedded_round",
+      "ok": true,
+      "qr": "4/4",
+      "pause": 2.76,
+      "minutes": 274.6
+    },
+    {
+      "model": "plate-small-wifi-white",
+      "mount": "sticker_round_25",
+      "ok": true,
+      "qr": "8/8",
+      "pause": 1.8,
+      "minutes": 326.5
+    },
+    {
+      "model": "plate-small-wifi-white",
+      "mount": "sticker_10x20",
+      "ok": true,
+      "qr": "8/8",
+      "pause": 1.8,
+      "minutes": 321.3
+    },
+    {
+      "model": "plate-small-wifi-white",
+      "mount": "embedded_round",
+      "ok": true,
+      "qr": "8/8",
+      "pause": 2.76,
+      "minutes": 325.2
+    }
+  ],
+  "qr_decoded": 60,
+  "qr_total": 60
+}

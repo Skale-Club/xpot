@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
+import { Suspense, useCallback, useEffect, useState, type CSSProperties, type ReactNode } from "react";
+import { ScreenLoader } from "@/components/ui/spinner";
 import { useQuery } from "@tanstack/react-query";
 import { Link, useLocation, useSearch } from "wouter";
 import {
@@ -61,6 +62,8 @@ import { usePanelNames } from "./panelNames";
 import { PersistentRouteProgress } from "./PersistentRouteProgress";
 import { navigateGuarded } from "@/hooks/useUnsavedChangesGuard";
 import { subscribeToRoutePush } from "@/lib/pushNotifications";
+import { useRememberedScroll } from "@/hooks/use-remembered-scroll";
+import { usePageScroll } from "@/hooks/use-page-scroll";
 
 // The frame around every rep screen. Below `lg` it is the phone column the app
 // always had (the caller passes its header row and bottom nav). From `lg` up a
@@ -220,6 +223,7 @@ function SidebarModuleSwitch({ collapsed, module, modules, label }: {
             title={collapsed ? label(m) : undefined}
             onClick={() => go(m)}
             disabled={active}
+            data-preload-href={moduleEntryPath(m)}
             className={`relative flex h-9 flex-1 items-center justify-center gap-2 rounded-xl text-sm font-semibold transition-colors disabled:cursor-default ${
               active ? "text-white" : "text-white/45 hover:text-white/80"
             }`}
@@ -247,6 +251,13 @@ function CollapsibleGroup({ group, children }: { group: NavGroup; children: Reac
   });
   const [location] = useLocation();
   const holdsScreen = group.items.some((item) => item.match(location));
+  useEffect(() => {
+    if (!holdsScreen || open) return;
+    // Entering a group opens it for the rest of the session too. Otherwise
+    // leaving its last active screen collapses the menu and clamps its scroll.
+    setOpen(true);
+    try { window.localStorage.setItem(key, "1"); } catch { /* Kept in state. */ }
+  }, [holdsScreen, open, key]);
   const toggle = () => {
     const next = !(open || holdsScreen);
     setOpen(next);
@@ -265,8 +276,8 @@ function CollapsibleGroup({ group, children }: { group: NavGroup; children: Reac
 }
 
 /** The sidebar's list: when more is hidden below the fold, a shade at its foot says so. */
-function ScrollingNav({ children, label }: { children: ReactNode; label: string }) {
-  const ref = useRef<HTMLElement>(null);
+function ScrollingNav({ children, label, scrollKey }: { children: ReactNode; label: string; scrollKey: string }) {
+  const { ref, remember } = useRememberedScroll<HTMLElement>(scrollKey);
   const [more, setMore] = useState(false);
   const measure = useCallback(() => {
     const el = ref.current;
@@ -281,13 +292,13 @@ function ScrollingNav({ children, label }: { children: ReactNode; label: string 
   });
   return (
     <div className="relative min-h-0 flex-1">
-      <nav ref={ref} onScroll={measure} className="h-full space-y-6 overflow-y-auto px-3 py-2" aria-label={label}>{children}</nav>
+      <nav ref={ref} onScroll={() => { remember(); measure(); }} onClickCapture={remember} className="h-full space-y-6 overflow-y-auto px-3 py-2" aria-label={label}>{children}</nav>
       {more ? <div className="pointer-events-none absolute inset-x-0 bottom-0 h-10 bg-gradient-to-t from-[#0a0e1a] to-transparent" aria-hidden="true" data-testid="sidebar-more-below" /> : null}
     </div>
   );
 }
 
-function DesktopSidebar({ collapsed, onToggle }: { collapsed: boolean; onToggle: () => void }) {
+function DesktopSidebar({ collapsed, onToggle, pending }: { collapsed: boolean; onToggle: () => void; pending: boolean }) {
   const t = useT(shellMessages);
   const [location] = useLocation();
   const { context, module, modules, groups, moduleLabel, me, panel } = useShellNav();
@@ -363,10 +374,10 @@ function DesktopSidebar({ collapsed, onToggle }: { collapsed: boolean; onToggle:
 
       <div className="space-y-2 px-3 pb-3">
         {panel ? <div className={`flex min-h-20 items-center gap-3 border-b border-amber-200/10 pb-4 text-amber-100 ${collapsed ? "justify-center" : "px-2"}`} title={panelName(profile)}><span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-amber-300/25 bg-amber-300/10"><ShieldCheck className="h-5 w-5" /></span>{!collapsed && <span className="text-base font-semibold leading-snug">{panelName(profile)}</span>}</div> : <SidebarModuleSwitch collapsed={collapsed} module={module} modules={modules} label={moduleLabel} />}
-        {module === "visits" && !panel ? <PersistentRouteProgress collapsed={collapsed} className={collapsed ? "mt-2" : "mt-2.5"} /> : null}
+        {module === "visits" && !panel && !pending ? <PersistentRouteProgress collapsed={collapsed} className={collapsed ? "mt-2" : "mt-2.5"} /> : null}
       </div>
 
-      <ScrollingNav label={panel ? panelName(profile) : module ? moduleLabel(module) : t("navSettings")}>
+      <ScrollingNav scrollKey={`sidebar.${me?.user.id ?? "guest"}.${panel ? "management" : module ?? "account"}.${collapsed ? "collapsed" : "expanded"}`} label={panel ? panelName(profile) : module ? moduleLabel(module) : t("navSettings")}>
         {groups.map((group, i) => {
           const items = group.items.map((item) => <SidebarLink key={item.href} item={item} collapsed={collapsed} active={item.match(location)} accent={accent} />);
           if (group.collapsible && !collapsed) return <CollapsibleGroup key={group.label || i} group={group}>{items}</CollapsibleGroup>;
@@ -501,6 +512,7 @@ export function AppLayout({
   mobileColumnClassName = "pb-28 pt-5",
   mobileMaxWidth = "max-w-md",
   mobileColumnStyle,
+  pending = false,
 }: {
   /** Shown in the desktop top bar. */
   title: ReactNode;
@@ -519,6 +531,8 @@ export function AppLayout({
   /** Padding of the phone column; desktop padding is fixed. */
   mobileColumnClassName?: string;
   mobileColumnStyle?: CSSProperties;
+  /** Loading a route or changing data scope: render chrome without scoped requests. */
+  pending?: boolean;
 }) {
   const [collapsed, setCollapsed] = useState(readCollapsed);
   const [location] = useLocation();
@@ -527,7 +541,8 @@ export function AppLayout({
   const [paletteOpen, setPaletteOpen] = useState(false);
   const togglePalette = useCallback(() => setPaletteOpen((o) => !o), []);
   useDesktopShortcuts({ enabled: isDesktop, onPalette: togglePalette });
-  const { pages, crumb: area, panel, module, groups, profile } = useShellNav();
+  const { pages, crumb: area, panel, module, groups, profile, me } = useShellNav();
+  const mainRef = usePageScroll(me?.user.id ?? "guest", isDesktop, pending);
   // A screen named like its module shows the name once.
   const crumb = area && area.label !== title ? area : null;
   const Background = panel ? ManagementBackground : AppBackground;
@@ -540,10 +555,10 @@ export function AppLayout({
     if (panel) rememberPanelRoute(`${location}${search ? `?${search}` : ""}`);
   }, [panel, location, search]);
   useEffect(() => {
-    if (module === "visits" && "Notification" in window && Notification.permission === "granted") {
+    if (!pending && module === "visits" && "Notification" in window && Notification.permission === "granted") {
       void subscribeToRoutePush().catch((error) => console.error("[push subscription] failed:", error));
     }
-  }, [module]);
+  }, [module, pending]);
   const toggle = () => {
     setCollapsed((c) => {
       try {
@@ -563,7 +578,7 @@ export function AppLayout({
       >
         {tShell("skipToContent")}
       </a>
-      <DesktopSidebar collapsed={collapsed} onToggle={toggle} />
+      <DesktopSidebar collapsed={collapsed} onToggle={toggle} pending={pending} />
       <div className={`relative ${collapsed ? "lg:pl-[72px]" : "lg:pl-60"}`}>
         <AdminModeBar />
         <DesktopTopBar
@@ -583,8 +598,10 @@ export function AppLayout({
           {/* The panel has no shell header: the bar above names it, and the screen's title is said once here (a phone has no top bar). */}
           {panel ? <h1 className="mb-4 truncate text-lg font-bold tracking-tight text-white lg:hidden" data-testid="phone-title">{title}</h1> : null}
           {mobileHeader ? <div className="lg:hidden">{mobileHeader}</div> : null}
-          <main id="xpot-main-content" tabIndex={-1} className="flex-1">
-            <ScreenErrorBoundary resetKey={location}>{children}</ScreenErrorBoundary>
+          <main ref={mainRef} id="xpot-main-content" tabIndex={-1} className="flex-1">
+            <ScreenErrorBoundary resetKey={location}>
+              <Suspense fallback={<ScreenLoader />}>{children}</Suspense>
+            </ScreenErrorBoundary>
           </main>
           {panel ? <div className="h-20 shrink-0 lg:hidden" aria-hidden="true" /> : null}
         </div>

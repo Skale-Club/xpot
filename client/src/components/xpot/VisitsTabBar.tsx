@@ -17,8 +17,8 @@ export function VisitsTabBar() {
   const [location, navigate] = useLocation();
   const { canManage } = useViewerAccess();
   const items = [
-    ...tabs.map(({ id, labelKey, icon }) => ({ id: id as string, label: t(labelKey), icon, testId: `visits-nav-${id}` })),
-    ...(canManage ? [{ id: "manage", label: t("navManage"), icon: Shield, testId: "visits-nav-manage" }] : []),
+    ...tabs.map(({ id, labelKey, icon }) => ({ id: id as string, href: `/${id}`, label: t(labelKey), icon, testId: `visits-nav-${id}` })),
+    ...(canManage ? [{ id: "manage", href: "/admin", label: t("navManage"), icon: Shield, testId: "visits-nav-manage" }] : []),
   ];
   return (
     <MobileTabBar

@@ -7,6 +7,7 @@ import { useUrlFilters } from "@/hooks/use-url-filters";
 import { ListPager, useOffsetPages } from "@/components/xpot/pagination";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import { useIsDesktop } from "@/hooks/use-is-desktop";
 import { useXpotQueries } from "./hooks/useXpotQueries";
 import { useViewerAccess } from "@/lib/adminMode";
 import type { FullSalesLead, SalesTask } from "./types";
@@ -58,6 +59,7 @@ function bucket(task: EnrichedTask): BucketKey {
 export function XpotTasks() {
   // Inside the management panel the panel already names the screen.
   const inPanel = useRouter().base.startsWith("/admin");
+  const isDesktop = useIsDesktop();
   const { me } = useXpotQueries();
   const { toast } = useToast();
   const t = useT(tasksMessages);
@@ -157,20 +159,20 @@ export function XpotTasks() {
   }
 
   return <div className="space-y-5">
-    {/* Inside the management panel the panel already names the screen: only the action stays. */}
-    {inPanel ? (
+    {/* The desktop breadcrumb and the management panel already name the screen. */}
+    {inPanel || isDesktop ? (
       <div className="flex justify-end">
         <Button type="button" variant="brand" onClick={newTask}><Plus aria-hidden="true" /> {t("newTask")}</Button>
       </div>
     ) : (
       <PageHeader
         safeArea={false}
-        className="!mb-0"
+        className="!mb-0 !items-center [&>div:last-child]:pt-0 [&_h1]:mt-0"
         accent="visits"
         title={t("title")}
         actions={(
-          <Button type="button" variant="brand" onClick={newTask} aria-label={t("newTask")} className="w-11 px-0 sm:w-auto sm:px-4">
-            <Plus aria-hidden="true" /> <span className="hidden sm:inline">{t("newTask")}</span>
+          <Button type="button" variant="brand" onClick={newTask} className="shrink-0">
+            <Plus aria-hidden="true" /> {t("newTask")}
           </Button>
         )}
       />
@@ -186,6 +188,7 @@ export function XpotTasks() {
             onChange={(next) => filters.set({ priority: next })}
             placeholder={t("allPriorities")}
             icon={Flag}
+            className="w-full lg:w-auto"
             options={priorityOptions.map((option) => ({ value: option.value, label: t(option.labelKey) }))}
           />
           {canManage ? (inPanel
@@ -194,6 +197,7 @@ export function XpotTasks() {
         </>
       }
       secondary={
+        <div className="border-t border-white/[0.06] pt-3">
         <FilterChips
           items={[
             { id: "open", label: t("filterOpen") },
@@ -204,6 +208,7 @@ export function XpotTasks() {
           onChange={(next) => filters.set({ status: next })}
           ariaLabel={t("filterByStatus")}
         />
+        </div>
       }
       summary={{ shown: taskCount, active: filters.activeCount() > 0, onClear: () => filters.reset() }}
     />
@@ -230,22 +235,7 @@ export function XpotTasks() {
                 {task.status === "completed" ? <Check className="h-4 w-4" /> : <X className="h-4 w-4" />}
               </span>
             </span>
-          ) : (
-            // An empty circle, like the Dashboard's: a tick and "Done" read as a stamp on a task that is not done yet.
-            <button
-              type="button"
-              onClick={() => changeStatus.mutate({ id: task.id, action: "complete" })}
-              disabled={changeStatus.isPending && changeStatus.variables?.id === task.id}
-              aria-label={`${t("markDone")}: ${task.title}`}
-              title={t("markDone")}
-              className="group/done -ml-1.5 -mt-1.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-transparent transition-colors hover:text-emerald-300"
-              data-testid={`task-done-${task.id}`}
-            >
-              <span className="flex h-7 w-7 items-center justify-center rounded-full border border-white/20 transition-colors group-hover/done:border-white/35">
-                <Check className="h-3.5 w-3.5" aria-hidden="true" />
-              </span>
-            </button>
-          )}
+          ) : null}
           <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-center gap-2">
               <h3 className={`font-semibold ${task.status === "completed" ? "text-white/35 line-through" : "text-white"}`}>{task.customerOrderId?<Link href={`/tags/orders/${task.customerOrderId}`}>{ordersT('deliver')}</Link>:task.title}</h3>
@@ -259,13 +249,26 @@ export function XpotTasks() {
             </div>
             {task.description && <p className="mt-2 line-clamp-2 text-sm text-white/50">{task.description}</p>}
           </div>
-          <Button type="button" variant="ghost" size="icon" onClick={() => editTask(task)} aria-label={t("edit")} title={t("edit")} className="-mr-2 -mt-2 text-white/40"><Pencil aria-hidden="true" /></Button>
+          <Button type="button" variant="ghost" size="icon" onClick={() => editTask(task)} disabled={changeStatus.isPending && changeStatus.variables?.id === task.id} aria-label={t("edit")} title={t("edit")} className="-mr-2 -mt-2 text-white/40"><Pencil aria-hidden="true" /></Button>
         </div>
-        {task.status !== "completed" && task.status !== "cancelled" && <div className="mt-3 flex justify-end gap-2 border-t border-white/5 pt-3">
-          {task.status === "pending" && <button onClick={() => changeStatus.mutate({ id: task.id, action: "start" })} className="flex items-center gap-1 rounded-lg px-2 py-1 text-xs text-indigo-300 hover:bg-indigo-500/10" data-testid={`task-start-${task.id}`}><Clock3 className="h-3 w-3" /> {t("start")}</button>}
-          <button onClick={() => changeStatus.mutate({ id: task.id, action: "cancel" })} className="flex items-center gap-1 rounded-lg px-2 py-1 text-xs text-white/35 hover:bg-white/5"><X className="h-3 w-3" /> {t("cancel")}</button>
+        {task.status !== "completed" && task.status !== "cancelled" && <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-white/5 pt-3">
+          <Button
+            type="button"
+            variant="secondary"
+            size="sm"
+            onClick={() => changeStatus.mutate({ id: task.id, action: "complete" })}
+            disabled={changeStatus.isPending}
+            loading={changeStatus.isPending && changeStatus.variables?.id === task.id && changeStatus.variables.action === "complete"}
+            aria-label={`${t("markDone")}: ${task.title}`}
+            className="mr-auto px-2 text-xs text-emerald-300"
+            data-testid={`task-done-${task.id}`}
+          >
+            <Check aria-hidden="true" /> {t("markDone")}
+          </Button>
+          {task.status === "pending" && <Button type="button" variant="ghost" size="sm" disabled={changeStatus.isPending} onClick={() => changeStatus.mutate({ id: task.id, action: "start" })} className="px-2 text-xs text-indigo-300" data-testid={`task-start-${task.id}`}><Clock3 aria-hidden="true" /> {t("start")}</Button>}
+          <Button type="button" variant="ghost" size="sm" disabled={changeStatus.isPending} onClick={() => changeStatus.mutate({ id: task.id, action: "cancel" })} className="px-2 text-xs text-white/50"><X aria-hidden="true" /> {t("cancel")}</Button>
         </div>}
-        {(task.status === "completed" || task.status === "cancelled") && <div className="mt-3 flex justify-end border-t border-white/5 pt-3"><button onClick={() => changeStatus.mutate({ id: task.id, action: "reopen" })} className="flex items-center gap-1 rounded-lg px-2 py-1 text-xs text-indigo-300 hover:bg-indigo-500/10"><RotateCcw className="h-3 w-3" /> {t("reopen")}</button></div>}
+        {(task.status === "completed" || task.status === "cancelled") && <div className="mt-3 flex justify-end border-t border-white/5 pt-3"><Button type="button" variant="ghost" size="sm" disabled={changeStatus.isPending} onClick={() => changeStatus.mutate({ id: task.id, action: "reopen" })} className="text-indigo-300"><RotateCcw aria-hidden="true" /> {t("reopen")}</Button></div>}
       </article>)}</div>
     </section>)}
     <ListPager shown={taskCount} hasMore={tasks.hasMore} onMore={tasks.loadMore} loading={tasks.loadingMore} pageSize={100} />

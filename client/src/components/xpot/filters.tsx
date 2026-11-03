@@ -317,6 +317,7 @@ export function FilterChips<T extends string>({
   onChange,
   ariaLabel,
   accent = "visits",
+  layout = "scroll",
 }: {
   items: ReadonlyArray<FilterChip<T>>;
   value: T;
@@ -324,6 +325,8 @@ export function FilterChips<T extends string>({
   ariaLabel: string;
   /** The module the list belongs to: `tags` draws the chosen chip violet. */
   accent?: ModuleAccent;
+  /** Grid keeps every choice visible on phones; desktop keeps the compact row. */
+  layout?: "scroll" | "grid";
 }) {
   const chosen = FILTER_CHIP_ON[accent];
   // On a phone the row scrolls sideways: a fade on the edge that still has chips says so (VIS-23, VIS-25).
@@ -345,7 +348,7 @@ export function FilterChips<T extends string>({
       role="group"
       aria-label={ariaLabel}
       data-more={more || undefined}
-      className={`-mx-0.5 flex gap-1.5 overflow-x-auto px-0.5 pb-0.5 [scrollbar-width:none] lg:flex-wrap lg:overflow-visible [&::-webkit-scrollbar]:hidden ${more ? "[mask-image:linear-gradient(to_right,black_calc(100%-2.5rem),transparent)] lg:[mask-image:none]" : ""}`}
+      className={`-mx-0.5 gap-1.5 px-0.5 pb-0.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden ${layout === "grid" ? "grid grid-cols-2 lg:flex lg:flex-wrap" : "flex overflow-x-auto lg:flex-wrap lg:overflow-visible"} ${layout === "scroll" && more ? "[mask-image:linear-gradient(to_right,black_calc(100%-2.5rem),transparent)] lg:[mask-image:none]" : ""}`}
     >
       {items.map((item) => {
         const on = item.id === value;
@@ -355,7 +358,7 @@ export function FilterChips<T extends string>({
             type="button"
             aria-pressed={on}
             onClick={() => onChange(item.id)}
-            className={`inline-flex h-8 shrink-0 items-center gap-1.5 rounded-full border px-3 text-xs font-semibold outline-none transition-colors ${
+            className={`inline-flex h-8 shrink-0 items-center gap-1.5 rounded-full border px-3 text-xs font-semibold outline-none transition-colors ${layout === "grid" ? "justify-center" : ""} ${
               on ? chosen.chip : "border-white/[0.08] bg-white/[0.03] text-white/50 hover:border-white/[0.15] hover:text-white/80"
             }`}
             data-testid={item.testId}

@@ -39,7 +39,7 @@ export function canPrintModel(model: PrintModelItem, batch?: ExistingProductionB
 /** Never clamp or truncate the quantity: the review must match what will be ordered. */
 export function printQuantity(raw: string, copies: number, serialized: boolean) {
   const count = Number(raw);
-  const max = Math.min(10_000, PRINT_MAX_PLATES * copies);
+  const max = serialized ? copies : Math.min(10_000, PRINT_MAX_PLATES * copies);
   const valid = raw.trim() !== "" && Number.isInteger(count) && count >= 1 && count <= max;
   const plates = valid ? splitIntoPlates(count, copies, serialized) : [];
   return { count, max, valid, plates, pieces: plates.reduce((sum, n) => sum + n, 0) };

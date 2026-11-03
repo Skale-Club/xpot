@@ -40,8 +40,8 @@ export function TagsTabBar() {
   const { canManage } = useViewerAccess();
   const primary = modules.includes("visits") ? TAGS_NAV.filter((item) => item.href !== `${APP_BASE}/customers`) : TAGS_NAV;
   const tabs = [
-    ...primary.map(({ href, key, icon }) => ({ id: href as string, label: t(key), icon, testId: `tags-nav-${key}` })),
-    ...(canManage ? [{ id: TAGS_MANAGE_HREF, label: ts("navManage"), icon: Shield, testId: "tags-nav-manage" }] : []),
+    ...primary.map(({ href, key, icon }) => ({ id: href as string, href, label: t(key), icon, testId: `tags-nav-${key}` })),
+    ...(canManage ? [{ id: TAGS_MANAGE_HREF, href: TAGS_MANAGE_HREF, label: ts("navManage"), icon: Shield, testId: "tags-nav-manage" }] : []),
   ];
   return <MobileTabBar module="tags" tabs={tabs} activeId={activeTagsTab(location)} onSelect={navigate} />;
 }

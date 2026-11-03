@@ -3,7 +3,7 @@ import { useSearchParams } from "wouter";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { Building2, Layers, MapPin, Network, Nfc, Package, Plus, SlidersHorizontal, Users } from "lucide-react";
 import { FilterBar, FilterChips, FilterSearch, FilterSelect, FilterToggle } from "@/components/xpot/filters";
-import { useUrlFilters } from "@/hooks/use-url-filters";
+import { currentSearch, useUrlFilters } from "@/hooks/use-url-filters";
 import { ListPager, useOffsetPages } from "@/components/xpot/pagination";
 import { TAG_PRODUCT_TYPES } from "@shared/tags";
 import { parseTagIntakeScan } from "@shared/tagIntake";
@@ -190,7 +190,7 @@ export function PiecesTab({ go }: { go: (path: string) => void }) {
       }, { replace: !id || current() }),
     [setParams],
   );
-  const openPiece = (id: string) => (isDesktop ? setPane(id) : go(`/pieces/${id}`));
+  const openPiece = (id: string) => (isDesktop ? setPane(id) : go(`/pieces/${id}${currentSearch(["piece"])}`));
   // The one search box also takes a piece's code or what its QR / chip holds (a scanned link): Enter opens that piece.
   const openByCode = async (typed: string): Promise<boolean> => {
     const scan = parseTagIntakeScan(typed, [window.location.hostname]);
@@ -198,7 +198,7 @@ export function PiecesTab({ go }: { go: (path: string) => void }) {
     try {
       const { id } = await getJson<{ id: string }>(`/api/xpot/tags/lookup/${scan.publicCode}`);
       // The code did its job: the list behind the pop-up is the list again, not one row.
-      if (!isDesktop) go(`/pieces/${id}`);
+      if (!isDesktop) go(`/pieces/${id}${currentSearch(["piece"])}`);
       else {
         setParams((now) => {
           const next = new URLSearchParams(now);

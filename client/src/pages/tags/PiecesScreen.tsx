@@ -137,7 +137,10 @@ export default function PiecesScreen({ selectedCode = null }: { selectedCode?: s
   return (
     <>
       <div className="lg:hidden">
-        <TopBar title={t("piecesTitle")} eyebrow={data ? t.plural("pieces", data.length) : undefined} />
+        <TopBar
+          title={t("piecesTitle")}
+          right={data ? <span className="inline-flex h-8 items-center text-xs font-medium tabular-nums text-white/45">{t.plural("pieces", data.length)}</span> : undefined}
+        />
       </div>
 
       {/* A list with nothing in it has nothing to search or filter: the empty state says what to do. */}

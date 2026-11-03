@@ -308,10 +308,13 @@ export function TagProductThumbnail({
   const model = plaqueModel(productType, face);
   const stand = model === "Stand";
   const plate = model === "Plate";
-  const dark = /^(black|preto|preta|negro|negra)(?:$|[\s_-])/i.test(theme?.trim() ?? "");
+  const colouredBody: Record<string, string> = { navy: "#16324F", forest: "#164A3B", burgundy: "#702C3E", sand: "#DCCDB3" };
+  const bodyColour = colouredBody[theme?.trim().toLowerCase() ?? ""];
+  const dark = /^(black|preto|preta|negro|negra|navy|forest|burgundy)(?:$|[\s_-])/i.test(theme?.trim() ?? "");
   return (
     <span className={`inline-flex shrink-0 flex-col items-center ${className}`} aria-hidden="true">
       <span
+        style={bodyColour ? { background: bodyColour } : undefined}
         className={`flex flex-col items-center ${dark ? "bg-gradient-to-b from-neutral-700 to-neutral-900 text-white ring-1 ring-white/20" : "bg-gradient-to-b from-white to-[#ecebe7] text-neutral-800"} shadow-[0_1px_3px_rgba(0,0,0,0.35)] ${plate ? s.plateBody : s.body} ${stand ? s.standCorners : s.corners}`}
       >
         <span className="flex w-full items-center justify-between">

@@ -7,6 +7,7 @@ import type { TagDetail } from "@shared/tagsApi";
 import { useXpotModules } from "@/components/ModuleSwitch";
 import { EmptyState } from "@/components/xpot/EmptyState";
 import { BackLink } from "@/components/xpot/PageHeader";
+import { currentSearch } from "@/hooks/use-url-filters";
 import { PieceBody } from "@/components/piece/PieceBody";
 import { PieceProvider, type PieceContextValue } from "@/components/piece/PieceContext";
 import { PieceHeader } from "@/components/piece/PieceHeader";
@@ -49,7 +50,7 @@ function Back({ go }: { go: Go }) {
   }
   return (
     <span data-testid="admin-piece-back">
-      <BackLink onBack={() => go("/pieces")}>{ts("managePieces")}</BackLink>
+      <BackLink onBack={() => go(`/pieces${currentSearch(["piece"])}`)}>{ts("managePieces")}</BackLink>
     </span>
   );
 }
@@ -82,7 +83,7 @@ export function PieceDetail({ id, go, onClose }: { id: string; go: Go; /** Shown
   const top = onClose
     ? failed
       ? <div className="flex justify-end"><Button type="button" variant="ghost" size="icon" onClick={onClose} aria-label={tc("close")} title={tc("close")} className="-mr-2 text-white/45" data-testid="admin-piece-pane-close"><X aria-hidden="true" /></Button></div>
-      : <PaneBar fullHref={`/admin/tags/pieces/${encodeURIComponent(id)}`} onClose={onClose} testId="admin-piece-pane" />
+      : <PaneBar fullHref={`/admin/tags/pieces/${encodeURIComponent(id)}${currentSearch(["piece"])}`} onClose={onClose} testId="admin-piece-pane" />
     : <Back go={go} />;
   if (isLoading) return onClose ? <div className="space-y-3">{top}<Loading rows={5} /></div> : <Loading rows={5} />;
   if (error || !tag) {

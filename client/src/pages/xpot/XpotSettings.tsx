@@ -231,10 +231,8 @@ export function XpotSettings() {
   const me = meQuery.data;
   useEffect(() => {
     if (meQuery.isLoading) return;
-    if (!isDesktop) {
-      window.scrollTo(0, 0);
-      return;
-    }
+    // AppLayout restores each phone section and the list independently.
+    if (!isDesktop) return;
     if (!linkedSection || linkedSection === "profile") return;
     document.getElementById(`settings-${linkedSection}`)?.scrollIntoView({ block: "start" });
   }, [linkedSection, meQuery.isLoading, isDesktop]);

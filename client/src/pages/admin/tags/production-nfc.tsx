@@ -1,3 +1,4 @@
+import { useId } from "react";
 import { Check } from "lucide-react";
 import { PRINT_DEFAULT_MENU_FONT, PRINT_DEFAULT_NFC_MOUNT, type PrintMenuFont, type PrintNfcMount } from "@shared/printProduction";
 import { useT } from "@/i18n";
@@ -14,34 +15,36 @@ export function useNfcMountName() {
 export function NfcMountChoice({ mounts, value, onChange }: { mounts: readonly PrintNfcMount[]; value: PrintNfcMount | null; onChange: (mount: PrintNfcMount) => void }) {
   const t = useT(printNfcMessages);
   const name = useNfcMountName();
+  const radioName = useId();
+  if (!mounts.length) return <p className="text-sm text-white/55">{t("fixed")}</p>;
   return (
-    <div className="space-y-2" role="radiogroup" aria-label={t("question")} data-testid="production-nfc-mounts">
+    <fieldset className="grid gap-3 sm:grid-cols-3" data-testid="production-nfc-mounts">
+      <legend className="sr-only">{t("question")}</legend>
       {mounts.map((mount) => {
         const selected = value === mount;
         return (
-          <button
+          <label
             key={mount}
-            type="button"
-            role="radio"
-            aria-checked={selected}
-            onClick={() => onChange(mount)}
-            className={`flex min-h-14 w-full items-center gap-3 rounded-xl border p-3 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-400/60 ${selected ? "border-violet-400/60 bg-violet-500/10" : "border-white/10 bg-white/[0.02] hover:border-white/25"}`}
+            className="relative flex min-w-0 cursor-pointer"
             data-testid={`production-nfc-${mount}`}
           >
-            <span className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full border ${selected ? "border-violet-400 bg-violet-500/30" : "border-white/25"}`}>
-              {selected ? <Check className="h-3 w-3 text-white" aria-hidden="true" /> : null}
-            </span>
-            <span className="min-w-0">
+            <input type="radio" name={radioName} value={mount} checked={selected} onChange={() => onChange(mount)} aria-label={name(mount)} className="peer sr-only" />
+            {selected ? <Check aria-hidden="true" className="pointer-events-none absolute right-2 top-2 h-4 w-4 rounded-full bg-violet-400 p-0.5 text-[#0d1322]" /> : null}
+            <span className="flex w-full flex-col gap-3 rounded-xl border border-white/10 bg-white/[0.02] p-3 peer-checked:border-violet-400 peer-checked:bg-violet-500/10 peer-focus-visible:ring-2 peer-focus-visible:ring-violet-400">
+            <img src={`/production/nfc/${mount}.svg`} alt="" className="h-28 w-full rounded-lg object-contain" width={240} height={160} />
+            <span className="min-w-0 flex-1">
               <span className="flex flex-wrap items-center gap-2 text-sm font-medium text-white">
                 {name(mount)}
                 {mount === PRINT_DEFAULT_NFC_MOUNT ? <span className="rounded-full bg-violet-500/20 px-2 py-0.5 text-[11px] font-medium text-violet-200">{t("recommended")}</span> : null}
               </span>
               <span className="mt-0.5 block text-xs text-white/50">{t(`hint_${mount}` as "hint_sticker_round_25")}</span>
             </span>
-          </button>
+            <span className="text-[10px] text-white/35">{t("illustration")}</span>
+            </span>
+          </label>
         );
       })}
-    </div>
+    </fieldset>
   );
 }
 
