@@ -44,4 +44,3 @@ test.skipIf(process.env.TAGS_INTEGRATION !== '1')('Google and phone retain app a
   expect((await browser()('/api/auth/identity','https://other.test')).status).toBe(403);
  } finally {server.close();await clean();await pool.end();vi.unstubAllEnvs();}
 },30000);
-

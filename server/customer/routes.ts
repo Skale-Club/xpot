@@ -50,6 +50,25 @@ const codeSchema = z.object({
   lang: z.enum(LANGS).optional(),
 }).strict();
 
+async function verifyCustomerGoogleIdentity(req: Request, res: Response) {
+    if (!isSameAuthOrigin(req)) return res.status(403).json({ code:'origin_denied' });
+    const input = z.object({ idToken:z.string().min(1).max(16384) }).strict().parse(req.body);
+    let identity;
+    try { identity = await verifyGoogleIdentity(input.idToken); }
+    catch { return res.status(401).json({ code:'wrong_code' }); }
+    const pending = sessionOf(req).customerPending;
+    if (identity.provider !== 'phone' || !identity.phone || pending?.phone !== identity.phone
+      || Date.now()-pending.at > CUSTOMER_PENDING_MAX_MS) return res.status(401).json({ code:'code_expired' });
+    if (pending.leadId === null) return res.status(403).json({ code:'no_access' });
+    const access = await repo.leadAccessData(pending.leadId);
+    if (!access.exists || !customerAccessFor(identity.phone,access.contactPhones,access.businessPhone)) return res.status(403).json({code:'no_access'});
+    await repo.recordSignIn(identity.phone,access.businessPhone === identity.phone ? pending.leadId : null);
+    const leadIds = await repo.leadIdsOfPhone(identity.phone);
+    if (!leadIds.length) return res.status(403).json({code:'no_access'});
+    await startCustomerSession(req,identity.phone,leadIds);
+    return res.json({ok:true});
+}
+
 const verifySchema = z.object({
   phone: z.string().trim().min(4).max(40),
   countryCode: z.string().regex(/^\d{1,4}$/).optional(),
@@ -208,22 +227,7 @@ export function registerCustomerRoutes(
     try {
       enforceIp(req, "verify", 30);
       if (googleAuthConfig().enabled && req.body?.idToken !== undefined) {
-        if (!isSameAuthOrigin(req)) return res.status(403).json({ code:'origin_denied' });
-        const input = z.object({ idToken:z.string().min(1).max(16384) }).strict().parse(req.body);
-        let identity;
-        try { identity = await verifyGoogleIdentity(input.idToken); }
-        catch { return res.status(401).json({ code:'wrong_code' }); }
-        const pending = sessionOf(req).customerPending;
-        if (identity.provider !== 'phone' || !identity.phone || !pending || pending.phone !== identity.phone
-          || Date.now()-pending.at > CUSTOMER_PENDING_MAX_MS) return res.status(401).json({ code:'code_expired' });
-        if (pending.leadId === null) return res.status(403).json({ code:'no_access' });
-        const access = await repo.leadAccessData(pending.leadId);
-        if (!access.exists || !customerAccessFor(identity.phone,access.contactPhones,access.businessPhone)) return res.status(403).json({code:'no_access'});
-        await repo.recordSignIn(identity.phone,access.businessPhone === identity.phone ? pending.leadId : null);
-        const leadIds = await repo.leadIdsOfPhone(identity.phone);
-        if (!leadIds.length) return res.status(403).json({code:'no_access'});
-        await startCustomerSession(req,identity.phone,leadIds);
-        return res.json({ok:true});
+        return await verifyCustomerGoogleIdentity(req, res);
       }
       const input = verifySchema.parse(req.body);
       const phone = normalizePhone(input.phone, input.countryCode);

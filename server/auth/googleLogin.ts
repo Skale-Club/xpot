@@ -12,6 +12,15 @@ type PendingGoogle = IdentityBinding & { at: number };
 function sessionSave(req: Request) { return new Promise<void>((resolve, reject) => req.session.save(error => error ? reject(error) : resolve())); }
 function newSession(req: Request) { return new Promise<void>((resolve, reject) => req.session.regenerate(error => error ? reject(error) : resolve())); }
 
+async function findAccount(binding: IdentityBinding, phone?: string) {
+  const linkedId = await userIdForGoogleIdentity(binding);
+  if (linkedId) {
+    const user = (await db.select().from(users).where(eq(users.id, linkedId)).limit(1))[0];
+    if (user) return user;
+  }
+  return phone ? findUserByPhone(phone) : null;
+}
+
 export function registerGoogleLoginRoutes(app: Express) {
   app.post('/api/auth/identity', async (req, res) => {
     try {
@@ -25,14 +34,12 @@ export function registerGoogleLoginRoutes(app: Express) {
       try { identity = await verifyGoogleIdentity(token); }
       catch { return res.status(401).json({ code: 'invalid_token' }); }
       const binding = { projectId: config.projectId!, uid: identity.uid };
-      const linkedId = await userIdForGoogleIdentity(binding);
-      let user = linkedId ? (await db.select().from(users).where(eq(users.id, linkedId)).limit(1))[0] : null;
+      const user = await findAccount(binding, identity.phone);
       const pending = (req.session as any).pendingGoogle as PendingGoogle | undefined;
       const bindings = [binding];
       if (identity.provider === 'phone' && pending && Date.now() - pending.at < 10 * 60_000) {
         bindings.push({ projectId: pending.projectId, uid: pending.uid });
       }
-      if (!user && identity.phone) user = await findUserByPhone(identity.phone);
       if (!user && !identity.phone) {
         // Never claim an existing app account merely by matching its email.
         (req.session as any).pendingGoogle = { ...binding, at: Date.now() };
