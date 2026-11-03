@@ -41,12 +41,11 @@ New here? Read [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) first.
 
 - **Frontend:** React 18 + Vite + Wouter + TanStack Query + Tailwind + shadcn/ui primitives. EN/PT/ES.
 - **Backend:** Express + Drizzle ORM, sessions in Postgres (`connect-pg-simple`).
-- **Sign-in:** phone number + a 6-digit SMS code (Twilio). See "Auth model".
+- **Sign-in:** SMS through Google Identity Platform (primary), or Google. No passwords. See "Auth model" and [Google auth setup](docs/auth/google-identity.md).
 - **DB:** PostgreSQL. Production runs on a Coolify database on the Hetzner host
   (see "Database on the Hetzner host"). Xpot's own Supabase project
   (`Xpot`, ref `swqxxeivetzakglaphil`) keeps public Storage (avatars, the
-  branding icon) and the Auth accounts behind the legacy email sign-in and the
-  password change. Business photos and voice notes are private, on Cloudflare
+  branding icon). Supabase Auth is retired from the current sign-in flow. Business photos and voice notes are private, on Cloudflare
   R2 (see "Files"). Nothing is shared with Skale Club.
 - **Integrations:**
   - Xphere CRM: prospects in, companies, sales and visit outcomes out. One
@@ -55,7 +54,7 @@ New here? Read [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) first.
     are masked and can be rotated; reps have nothing to configure.
   - GoHighLevel: **Legacy** pipeline sync. It still works for accounts that use
     it, and is folded under "Legacy" in the Integrations CRM section.
-  - Twilio: SMS for sign-in codes (its card is marked "Required").
+  - Twilio: optional team notifications; sign-in SMS now comes from Google.
   - Stuscle: the store where approved reps buy kits at wholesale with a personal code.
   - Google Places: business search at check-in and address autocomplete.
   - AI: Groq Whisper transcribes visit audio (OpenAI Whisper as fallback);
@@ -162,8 +161,7 @@ Tags module:
   reseller's own wholesale code (see "Wholesale (Stuscle)").
 
 Settings (everyone): `/settings` with the tabs Profile (name, photo, contact
-phone), Sign-in (the sign-in phone, read only; a password only for email
-logins), Language and Memberships (`?tab=memberships`: role, modules,
+phone), Sign-in (the sign-in phone and contact email, read only; no passwords), Language and Memberships (`?tab=memberships`: role, modules,
 organizations with their role, the wholesale code). For a manager, Memberships
 also holds the management mode switch and the links to Administration (and
 Platform, for the Xpot admin); that is how management mode is turned on from a phone.
@@ -287,8 +285,7 @@ partner margins are in `docs/TAG_SALES_EXECUTION_PLAN.md`.
 
 ## Auth model
 
-Everyone signs in with their **phone**: a 6-digit code goes out by SMS
-(Twilio, `server/auth/phoneAuth.ts`), no email and no password.
+Sign in with **phone SMS** (primary) or **Google**, using Google Identity Platform in the shared `skaleclub` project. Xpot has its own OAuth client. There are no passwords. `GOOGLE_AUTH_ENABLED=true` activates this flow; setup is documented in `docs/auth/google-identity.md`.
 - `users.phone` (E.164) is the sign-in identity; `salesReps.userId` → `users.id`
   links it to the rep profile. Sessions live in the `sessions` table.
 - **Approval:** a new number asks for a name and becomes a *pending* rep. It
@@ -298,10 +295,8 @@ Everyone signs in with their **phone**: a 6-digit code goes out by SMS
   Admins can also create someone's access directly (active right away).
 - **Blocking:** People → Block turns the rep off and deletes their sessions,
   so they're out immediately; their sign-in screen says access is off.
-- Codes: 10 minutes, 5 tries, one resend per 30 s, 5 per number and 20 per
-  network per hour, stored hashed in `auth_phone_codes`.
-- Settings also has a password change. It changes the Supabase Auth password
-  behind the legacy email sign-in (below) and needs an email on file.
+- Google verifies the SMS challenge; the backend verifies the signed Firebase token before linking the stable Xpot user ID. `auth_google_identities` stores those links. Legacy Twilio challenges retain only their original expiry during rollout.
+- Supabase token exchange and password changes are retired. Google identities without an existing link require verified-phone ownership before association; pending and blocked users remain restricted.
 - Role hierarchy: `rep` < `manager` < `admin`. The `admin` role is the
   **Xpot admin**: saving it also sets `users.is_admin` (and signs the person out
   so the new access takes effect), and People warns and asks before doing so.
@@ -330,8 +325,7 @@ each rep's profile phone into `users.phone` when it is a full, unique number.
 People flags anyone left without a sign-in phone; set it with the phone
 button on their row (an admin can set their own, while still signed in). In an
 emergency: `UPDATE users SET phone = '+1XXXXXXXXXX' WHERE email = 'you@…';`.
-The old Supabase email sign-in endpoint (`POST /api/auth/login`) still exists
-but has no screen; new accounts it creates wait for approval like any sign-up.
+The old Supabase email sign-in endpoint (`POST /api/auth/login`) returns HTTP 410. Existing application sessions remain valid; new sign-ins use Google Identity Platform.
 
 ## Wholesale (Stuscle)
 
@@ -516,7 +510,7 @@ Environment:
 The Xpot admin's own screens (the Platform group; managers get a 403).
 
 - **Integrations** (`/admin/integrations`) is organised by job, one section
-  each: Sign-in by SMS (Twilio, required), Maps & places (Google Places, plus a
+  each: Sign-in and messages (Google Identity Platform; optional Twilio notifications), Maps & places (Google Places, plus a
   read-only route-optimisation line), Voice transcription (Groq, then OpenAI),
   AI writing (OpenRouter, then Gemini), CRM (an Xphere summary, with
   GoHighLevel folded under Legacy), AI assistants (MCP) and Infrastructure

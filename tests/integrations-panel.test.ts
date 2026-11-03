@@ -14,6 +14,7 @@ import {
   connectedXphereRows,
   isXphereQueryKey,
   locksOutSignIn,
+  providerForAuth,
   maskInboundKey,
   visibleXphereRows,
   type XphereRow,
@@ -231,4 +232,13 @@ describe("integrations routes", () => {
       expect.objectContaining({ path: "fromNumber", code: "invalid_e164" }),
     ]);
   });
+});
+
+it('Google auth keeps optional Twilio settings from claiming that sign-in will be locked out', () => {
+  const twilio = getProviderDef('twilio')!;
+  const working = { enabled: true, problem: null, envAvailable: false };
+  expect(locksOutSignIn(providerForAuth(twilio, 'google'), working, { enabled: false })).toBe(false);
+  expect(locksOutSignIn(providerForAuth(twilio, 'legacy'), working, { enabled: false })).toBe(true);
+  expect(locksOutSignIn(providerForAuth(twilio), working, { enabled: false })).toBe(true);
+  expect(twilio.requiredForSignIn).toBe(true);
 });

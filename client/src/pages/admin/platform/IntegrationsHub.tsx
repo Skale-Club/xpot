@@ -31,7 +31,7 @@ import {
   type IntegrationsResponse,
 } from "./ProviderCard";
 import { activeInChain, serviceAnchor, servicesNeedingAttention, SERVICES_KEY } from "./servicesUi";
-import { connectedXphereRows, XPHERE_KEY, type XphereRow } from "../integrationsUi";
+import { connectedXphereRows, providerForAuth, XPHERE_KEY, type XphereRow } from "../integrationsUi";
 
 /** How many connected people the CRM card names before "+N more". */
 const XPHERE_PEOPLE_SHOWN = 8;
@@ -167,6 +167,8 @@ export function IntegrationsHub() {
   const lines = useServiceLines();
   const query = useQuery<IntegrationsResponse>({ queryKey: INTEGRATIONS_KEY });
   const servicesQuery = useQuery<ServicesResponse>({ queryKey: [...SERVICES_KEY] });
+  const authQuery = useQuery<{ provider: string }>({ queryKey: ["/api/auth/phone/config"], staleTime: 60_000 });
+  const googleAuth = authQuery.data?.provider === 'google';
   const loaded = Boolean(query.data && servicesQuery.data);
 
   // Status links to a card with #service-<id>: open it there once the cards exist.
@@ -195,7 +197,8 @@ export function IntegrationsHub() {
   const services = servicesQuery.data.services;
   const service = (id: string) => services.find((s) => s.id === id);
   const card = (id: string) => {
-    const def = INTEGRATION_PROVIDERS.find((p) => p.provider === id)!;
+    const registered = INTEGRATION_PROVIDERS.find((p) => p.provider === id)!;
+    const def = providerForAuth(registered, authQuery.data?.provider);
     return <ProviderCard def={def} status={data.status.find((s) => s.provider === id)!} service={service(id)} />;
   };
   const attention = servicesNeedingAttention(services);
@@ -225,7 +228,10 @@ export function IntegrationsHub() {
         </div>
       )}
 
-      <JobSection job="signIn">{card("twilio")}</JobSection>
+      <JobSection job="signIn">
+        {googleAuth && <InlineAlert tone="info">{tp("googleIdentityActive")}</InlineAlert>}
+        {card("twilio")}
+      </JobSection>
 
       <JobSection job="maps">
         {card("google_places")}

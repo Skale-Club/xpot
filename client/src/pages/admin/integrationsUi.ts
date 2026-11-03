@@ -97,3 +97,8 @@ export function locksOutSignIn(
   const worksNow = status.enabled && !status.problem;
   return worksNow && (!next.enabled || Boolean(next.clearApiKey));
 }
+
+/** Google handles authentication independently of the optional Twilio notification sender. */
+export function providerForAuth(def: IntegrationProviderDef, authProvider?: string): IntegrationProviderDef {
+  return def.provider === 'twilio' && authProvider === 'google' ? { ...def, requiredForSignIn: false } : def;
+}
