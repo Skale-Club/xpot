@@ -487,7 +487,7 @@ export const printRequests = pgTable("print_requests", {
   replacesJobId: uuid("replaces_job_id"),
   // The NFC type chosen for this print (migrations/0076); null when the version has no variants.
   nfcMount: text("nfc_mount"),
-  // The Menu title font chosen for this print (migrations/0077); null keeps the version's.
+  // The Menu title font chosen for this print (migrations/0078); null keeps the version's.
   menuFont: text("menu_font"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 }, (table) => ({
