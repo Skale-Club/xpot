@@ -1153,8 +1153,8 @@ async function targetOrganization(ref: string | number | undefined, scope: Produ
 
 /**
  * A new serialized request is one printer plate (1..bed.copies), with one batch of fresh codes. Historical
- * multi-plate requests retain their lifecycle and history. Customer-order intake still splits a whole order
- * into individual plates, and unnumbered parts can span whole beds. A
+ * multi-plate requests retain their lifecycle and history. Customer-order intake generates each plate
+ * successively, and unnumbered parts can span whole beds. A
  * part's plates are its fixed file, so its count rounds up to whole beds. The request and all its plates are written
  * in one transaction: either all of them exist or none. `existingBatch` links a batch made before the catalog
  * instead, as a request of one plate, for the batch's own organization unless another is named. `replaces` (set by
@@ -1190,7 +1190,7 @@ export async function createJob(input: PrintJobCreateInput, userId: string | nul
     throw new TagError("This model needs a product, a sales product and a batch prefix before printing", 409, "print_model_incomplete");
   }
   const quantity = input.quantity ?? bed.copies * (input.plates ?? 1);
-  if (model.kind === "serialized" && !orderContext && quantity > bed.copies) {
+  if (model.kind === "serialized" && quantity > bed.copies) {
     throw new TagError(`Generate one printer plate at a time: at most ${bed.copies} pieces on ${bed.label}`, 400,
       "print_single_plate_only", { max: bed.copies });
   }
