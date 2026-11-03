@@ -9,13 +9,15 @@
     "#shared/*": "./shared/*"
   },
   "scripts": {
-    "dev": "npm run migrate && npm run dev:server",
+    "dev": "npm run migrate:dev && npm run dev:server",
     "dev:server": "cross-env NODE_ENV=development tsx server/index.ts",
     "local": "tsx scripts/open-localhost.ts",
     "build": "tsx scripts/build.ts",
     "start": "cross-env NODE_ENV=production node dist/index.cjs",
     "check": "tsc",
     "migrate": "tsx scripts/migrate.ts",
+    "migrate:dev": "cross-env NODE_ENV=development tsx scripts/migrate.ts",
+    "migrate:dev:plan": "cross-env NODE_ENV=development tsx scripts/migrate.ts --plan",
     "db:pull": "tsx scripts/db-pull.ts",
     "files:migrate": "tsx scripts/migrate-private-files.ts",
     "files:shrink": "tsx scripts/shrink-lead-photos.ts",

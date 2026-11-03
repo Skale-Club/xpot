@@ -108,10 +108,21 @@ inside `npm test`.
    panel; each card says when the server environment is the one in force
    ("Set by server environment").
 2. `npm install`
-3. `npm run migrate`. Locally you run it whenever new files appear in
-   `migrations/`; in production the container runs it on every start (see "Deploy").
-4. `npm run dev`. Without Twilio configured, development prints the sign-in
-   code in the server log.
+3. Set `DEV_DATABASE_URL` and `DEV_SUPABASE_PROJECT_REF` for the approved Supabase
+   development database. `npm run migrate:dev` applies its pending migrations;
+   `npm run migrate` remains the production/explicit database command.
+   Inspect first with `npm run migrate:dev:plan`: it uses a read-only transaction
+   and does not create a ledger or apply SQL. Review migrations that change shared
+   settings or grant access before running them on a shared development database.
+4. `npm run dev` migrates that development database, then starts the app.
+   Development reads and writes stay in Supabase, even when production URL aliases
+   exist in the environment. A missing or mismatched target fails before connecting.
+   `npm run dev:server` has the same database protection. Login uses Google phone/SMS
+   or Google when enabled; see [the identity setup](docs/auth/google-identity.md).
+   Neither `npm run dev` nor `npm run local` copies production data by default.
+   `npm run db:pull` is an explicit snapshot operation; the local shortcut refreshes
+   it only with `XPOT_REFRESH_DEV_SNAPSHOT=true`. Review sensitive data and external
+   side effects before enabling that operation.
 
 ## Routes
 
@@ -388,10 +399,15 @@ valid for 5 minutes. A key that no lead or visit holds is never signed.
   the private Supabase bucket `private-uploads` (created private at boot).
   R2 setup: a dedicated bucket with no public access and no r2.dev URL, and an
   R2 API token with Object Read & Write on that bucket only.
-- **Avatars and branding logos stay public** in the Supabase bucket `uploads`:
-  they show all over the app chrome and on public pages, and a profile picture
-  is something the person chose to show. A replaced avatar's file is deleted;
-  avatars go with the account.
+- **Avatars and branding logos stay public.** New uploads use the separate R2
+  bucket when `R2_PUBLIC_BUCKET` and `R2_PUBLIC_BASE_URL` are configured together,
+  alongside the R2 credentials above. Use a public media domain and grant the
+  token access to both buckets. The public bucket must differ from the private
+  `R2_BUCKET`; never expose the private photo/audio/print bucket. Without those
+  public settings, the existing Supabase `uploads` path remains active during
+  rollout. A partial or invalid configuration fails instead of silently writing
+  somewhere else. Existing Supabase links remain readable until migrated.
+  Replaced avatars are deleted from their original bucket; avatars go with the account.
 - **Cleanup:** removing a photo, deleting a lead or a visit, and re-recording a
   voice note delete the stored files after the DB change, best-effort; a storage
   error is logged as `[files] …` and does not fail the request.
@@ -590,7 +606,8 @@ comment on each, plus the client's optional `VITE_GOOGLE_MAPS_API_KEY` (see
 
 | Variable | Needed | What for |
 |---|---|---|
-| `DATABASE_URL` or `POSTGRES_URL` | yes | Postgres. If both are set, `DATABASE_URL` wins |
+| `DEV_DATABASE_URL`, `DEV_SUPABASE_PROJECT_REF` | development | Explicit approved Supabase development DB; development never falls back to production aliases |
+| `DATABASE_URL` or `POSTGRES_URL` | production / explicit scripts | Postgres. If both are set, `DATABASE_URL` wins |
 | `SESSION_SECRET` | yes | Signs the session cookie |
 | `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY` | yes | Storage and the legacy email Auth; the server won't boot without them |
 | `R2_ACCOUNT_ID` (or `R2_ENDPOINT`), `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET` | no | Private storage for photos and voice notes (see "Files"); unset, they go to the private Supabase bucket |

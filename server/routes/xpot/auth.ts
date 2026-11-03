@@ -3,8 +3,7 @@ import { Router } from "express";
 import { z } from "zod";
 import { storage, type SalesRepProfilePatch } from "../../storage.js";
 import { requireXpotUser, ensureXpotRep } from "./middleware.js";
-import { getSupabaseAdmin } from "../../lib/supabase.js";
-import { discardFiles, isRepAvatarUrl } from "../../lib/files.js";
+import { discardFiles, isRepAvatarUrl, publicUploadsConfigured, putPublicFile } from "../../lib/files.js";
 import { randomUUID } from "crypto";
 import { listOrganizations, membershipsForRep } from "../../organizations/service.js";
 import { eq } from "drizzle-orm";
@@ -145,7 +144,7 @@ export function createAuthRouter() {
         return res.status(400).json({ message: "imageData is required" });
       }
 
-      if (!process.env.SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
+      if (!publicUploadsConfigured()) {
         return res.status(503).json({ message: "Storage not configured" });
       }
 
@@ -156,19 +155,13 @@ export function createAuthRouter() {
       }
       const mimeType = match[1];
       const ext = mimeType.split("/")[1] || "jpg";
+      if (!["image/png", "image/jpeg", "image/webp", "image/gif", "image/avif"].includes(mimeType)) {
+        return res.status(400).json({ message: "Unsupported image format" });
+      }
       const buffer = Buffer.from(match[2], "base64");
 
-      const supabase = getSupabaseAdmin();
       const filename = `avatars/${actor!.rep.id}/${Date.now()}_${randomUUID()}.${ext}`;
-
-      const { error: uploadError } = await supabase.storage
-        .from("uploads")
-        .upload(filename, buffer, { contentType: mimeType, upsert: true });
-
-      if (uploadError) throw new Error(uploadError.message);
-
-      const { data: urlData } = supabase.storage.from("uploads").getPublicUrl(filename);
-      const avatarUrl = urlData.publicUrl;
+      const avatarUrl = await putPublicFile(filename, buffer, mimeType);
 
       const previous = actor!.rep.avatarUrl;
       const [updated] = await Promise.all([
