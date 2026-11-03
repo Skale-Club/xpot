@@ -1,4 +1,4 @@
-import { PRINT_MAX_PLATES, planRedoCodes, splitIntoPlates, type PrintJobItem, type PrintModelItem, type PrintRedoCodes, type PrintRequestItem } from "@shared/printProduction";
+import { PRINT_MAX_PLATES, planRedoCodes, splitIntoPlates, type PrintJobItem, type PrintModelItem, type PrintNfcMount, type PrintRedoCodes, type PrintRequestItem } from "@shared/printProduction";
 
 export interface ExistingProductionBatch {
   id: string;
@@ -294,8 +294,9 @@ export function filamentColours(model: Pick<PrintModelItem, "currentVersion"> | 
 }
 
 /** What one piece takes off the counts when assembled, by name ("1 Stand base · Large"), when the part is a model of the catalog. */
-export function assemblyParts(model: Pick<PrintModelItem, "currentVersion"> | undefined, models: ReadonlyMap<string, Pick<PrintModelItem, "title">>): string[] {
-  return (model?.currentVersion?.consumes ?? []).map((c) => `${c.perPiece} ${plainTitle(models.get(c.part)?.title ?? c.part)}`);
+export function assemblyParts(model: Pick<PrintModelItem, "currentVersion"> | undefined, models: ReadonlyMap<string, Pick<PrintModelItem, "title">>, nfcMount?: PrintNfcMount | null): string[] {
+  const selected = nfcMount ? model?.currentVersion?.nfcVariants?.[nfcMount]?.consumes : undefined;
+  return (selected ?? model?.currentVersion?.consumes ?? []).map((c) => `${c.perPiece} ${plainTitle(models.get(c.part)?.title ?? c.part)}`);
 }
 
 // ─── History ──────────────────────────────────────────────────────────────────────────────────────────────────
