@@ -14,7 +14,7 @@ export type LegalDoc = { title: string; updated: string; intro: string; sections
 
 const privacyEn: LegalDoc = {
   title: "Privacy Policy",
-  updated: "Last updated: October 5, 2026",
+  updated: "Last updated: November 3, 2026",
   intro:
     "Xpot (xpot.place) is a field sales app operated by Skale Club (“we”, “us”). This policy explains what we collect from the people who use the app (sales reps, managers and admins), what we keep about the businesses and contacts recorded in it, and what we record when someone scans an Xpot QR or NFC piece.",
   sections: [
@@ -27,7 +27,7 @@ const privacyEn: LegalDoc = {
     {
       heading: "2. What we collect",
       body: [
-        { lead: "Account", text: "Your phone number, name, and, if you give them, your email and profile photo. To sign in we text a 6-digit code; we keep only a hash of it, and it expires after 10 minutes. If you sign in with Google, we receive your name and email from Google." },
+        { lead: "Account", text: "Your phone number, name, and, if you give them, your email and profile photo. Google Identity Platform verifies the SMS code used to sign in; Xpot does not store that code. If you sign in with Google, we receive your name and email from Google." },
         { lead: "Location", text: "When you check in or out of a visit we record your GPS position, its accuracy and the distance to the business. While the Check-in screen is open, the app follows your position to validate the visit and draw the map; it is sent to our server to draw the map and is not stored between check-in and check-out. The app does not follow your location when that screen is closed, and on a computer it does not ask for location." },
         { lead: "Visit content", text: "Voice notes you record (we keep the audio), their transcript and the AI summary, photos you add, the visit outcome and your notes." },
         { lead: "Business data you enter", text: "Businesses and their addresses, people at those businesses (name, role, phone, email), products, sales, stock left on consignment, opportunities and tasks." },
@@ -59,9 +59,9 @@ const privacyEn: LegalDoc = {
         {
           list: [
             "Hetzner, through Coolify: hosting and database.",
-            "Supabase: sign-in and profile pictures.",
+            "Supabase: profile pictures and public branding files. Google Identity Platform: phone and Google sign-in, SMS verification and abuse prevention.",
             "Cloudflare (R2): private storage for business photos and voice notes, and database backups.",
-            "Twilio: text messages with sign-in codes.",
+            "Twilio: optional team notification messages.",
             "Groq and OpenAI: transcription of voice notes (they receive the audio).",
             "OpenRouter and Google Gemini: summaries and suggested actions (they receive the transcript, the business name and your product list).",
             "Google Maps Platform: place search and maps (they receive the search text and coordinates).",
@@ -102,7 +102,7 @@ const privacyEn: LegalDoc = {
     {
       heading: "9. Security",
       body: [
-        "Traffic is encrypted (HTTPS), sign-in codes and access tokens are stored as hashes, the session cookie cannot be read by scripts, and what each person sees depends on their role. No system is completely secure, so tell us right away if you notice anything wrong.",
+        "Traffic is encrypted (HTTPS), Google verifies sign-in codes, the session cookie cannot be read by scripts, and what each person sees depends on their role. No system is completely secure, so tell us right away if you notice anything wrong.",
       ],
     },
     {
@@ -120,7 +120,7 @@ const privacyEn: LegalDoc = {
 
 const privacyPt: LegalDoc = {
   title: "Política de Privacidade",
-  updated: "Atualizada em 5 de outubro de 2026",
+  updated: "Atualizada em 3 de novembro de 2026",
   intro:
     "O Xpot (xpot.place) é um app de vendas externas operado pela Skale Club (“nós”). Esta política explica o que coletamos de quem usa o app (vendedores, gestores e administradores), o que guardamos sobre as empresas e os contatos cadastrados nele e o que registramos quando alguém escaneia uma peça QR ou NFC do Xpot.",
   sections: [
@@ -133,7 +133,7 @@ const privacyPt: LegalDoc = {
     {
       heading: "2. O que coletamos",
       body: [
-        { lead: "Conta", text: "Seu número de celular, seu nome e, se você informar, seu e-mail e sua foto de perfil. Para entrar, enviamos um código de 6 dígitos por SMS; guardamos só um hash dele, e ele vale por 10 minutos. Se você entrar com o Google, recebemos dele seu nome e e-mail." },
+        { lead: "Conta", text: "Seu número de celular, seu nome e, se você informar, seu e-mail e sua foto de perfil. O Google Identity Platform verifica o código SMS usado para entrar; o Xpot não guarda esse código. Se você entrar com o Google, recebemos dele seu nome e e-mail." },
         { lead: "Localização", text: "No check-in e no check-out registramos sua posição de GPS, a precisão e a distância até a empresa. Com a tela de Check-in aberta, o app acompanha sua posição para validar a visita e desenhar o mapa; ela é enviada ao nosso servidor para desenhar o mapa e não é guardada entre o check-in e o check-out. O app não acompanha sua localização com essa tela fechada e, no computador, não pede localização." },
         { lead: "Conteúdo da visita", text: "As notas de voz que você grava (guardamos o áudio), a transcrição e o resumo feito pela IA, as fotos que você adiciona, o desfecho da visita e suas anotações." },
         { lead: "Dados de negócio que você cadastra", text: "Empresas e endereços, pessoas dessas empresas (nome, cargo, telefone, e-mail), produtos, vendas, estoque deixado em consignação, oportunidades e tarefas." },
@@ -165,9 +165,9 @@ const privacyPt: LegalDoc = {
         {
           list: [
             "Hetzner, via Coolify: hospedagem e banco de dados.",
-            "Supabase: login e fotos de perfil.",
+            "Supabase: fotos de perfil e arquivos públicos da marca. Google Identity Platform: acesso por telefone ou Google, verificação por SMS e prevenção de abuso.",
             "Cloudflare (R2): armazenamento privado das fotos das empresas e das notas de voz, e backups do banco de dados.",
-            "Twilio: SMS com os códigos de acesso.",
+            "Twilio: mensagens opcionais de aviso à equipe.",
             "Groq e OpenAI: transcrição das notas de voz (recebem o áudio).",
             "OpenRouter e Google Gemini: resumos e ações sugeridas (recebem a transcrição, o nome da empresa e sua lista de produtos).",
             "Google Maps Platform: busca de lugares e mapas (recebe o texto buscado e as coordenadas).",
@@ -208,7 +208,7 @@ const privacyPt: LegalDoc = {
     {
       heading: "9. Segurança",
       body: [
-        "O tráfego é criptografado (HTTPS), os códigos de acesso e os tokens ficam guardados como hash, o cookie de sessão não pode ser lido por scripts e o que cada pessoa vê depende do papel dela. Nenhum sistema é totalmente seguro: se notar algo estranho, avise-nos na hora.",
+        "O tráfego é criptografado (HTTPS), o Google verifica os códigos de acesso, o cookie de sessão não pode ser lido por scripts e o que cada pessoa vê depende do papel dela. Nenhum sistema é totalmente seguro: se notar algo estranho, avise-nos na hora.",
       ],
     },
     {
@@ -226,7 +226,7 @@ const privacyPt: LegalDoc = {
 
 const privacyEs: LegalDoc = {
   title: "Política de Privacidad",
-  updated: "Actualizada el 5 de octubre de 2026",
+  updated: "Actualizada el 3 de noviembre de 2026",
   intro:
     "Xpot (xpot.place) es una app de ventas en la calle operada por Skale Club (“nosotros”). Esta política explica qué recopilamos de quienes usan la app (vendedores, gerentes y administradores), qué guardamos sobre las empresas y los contactos registrados en ella y qué registramos cuando alguien escanea una pieza QR o NFC de Xpot.",
   sections: [
@@ -239,7 +239,7 @@ const privacyEs: LegalDoc = {
     {
       heading: "2. Qué recopilamos",
       body: [
-        { lead: "Cuenta", text: "Tu número de teléfono, tu nombre y, si los das, tu correo y tu foto de perfil. Para entrar te enviamos un código de 6 dígitos por SMS; solo guardamos un hash del código, que vence a los 10 minutos. Si entras con Google, recibimos de Google tu nombre y tu correo." },
+        { lead: "Cuenta", text: "Tu número de teléfono, tu nombre y, si los das, tu correo y tu foto de perfil. Google Identity Platform verifica el código SMS para entrar; Xpot no guarda ese código. Si entras con Google, recibimos de Google tu nombre y tu correo." },
         { lead: "Ubicación", text: "En el check-in y el check-out registramos tu posición GPS, su precisión y la distancia a la empresa. Con la pantalla de Check-in abierta, la app sigue tu posición para validar la visita y dibujar el mapa; se envía a nuestro servidor para dibujar el mapa y no se guarda entre el check-in y el check-out. La app no sigue tu ubicación con esa pantalla cerrada y, en una computadora, no pide la ubicación." },
         { lead: "Contenido de la visita", text: "Las notas de voz que grabas (guardamos el audio), su transcripción y el resumen de la IA, las fotos que agregas, el resultado de la visita y tus notas." },
         { lead: "Datos de negocio que registras", text: "Empresas y sus direcciones, personas de esas empresas (nombre, cargo, teléfono, correo), productos, ventas, stock dejado en consignación, oportunidades y tareas." },
@@ -271,9 +271,9 @@ const privacyEs: LegalDoc = {
         {
           list: [
             "Hetzner, a través de Coolify: alojamiento y base de datos.",
-            "Supabase: inicio de sesión y fotos de perfil.",
+            "Supabase: fotos de perfil y archivos públicos de marca. Google Identity Platform: acceso por teléfono o Google, verificación SMS y prevención de abuso.",
             "Cloudflare (R2): almacenamiento privado de las fotos de las empresas y de las notas de voz, y copias de seguridad de la base de datos.",
-            "Twilio: mensajes SMS con los códigos de acceso.",
+            "Twilio: mensajes opcionales de aviso al equipo.",
             "Groq y OpenAI: transcripción de las notas de voz (reciben el audio).",
             "OpenRouter y Google Gemini: resúmenes y acciones sugeridas (reciben la transcripción, el nombre de la empresa y tu lista de productos).",
             "Google Maps Platform: búsqueda de lugares y mapas (recibe el texto buscado y las coordenadas).",
@@ -314,7 +314,7 @@ const privacyEs: LegalDoc = {
     {
       heading: "9. Seguridad",
       body: [
-        "El tráfico va cifrado (HTTPS), los códigos de acceso y los tokens se guardan como hash, los scripts no pueden leer la cookie de sesión y lo que ve cada persona depende de su rol. Ningún sistema es totalmente seguro: si notas algo raro, avísanos enseguida.",
+        "El tráfico va cifrado (HTTPS), Google verifica los códigos de acceso, los scripts no pueden leer la cookie de sesión y lo que ve cada persona depende de su rol. Ningún sistema es totalmente seguro: si notas algo raro, avísanos enseguida.",
       ],
     },
     {
