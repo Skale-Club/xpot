@@ -43,6 +43,23 @@ export function stuscleKitUrl(storeBaseUrl: string, code: string, items: Readonl
   return `${storeBaseUrl.replace(/\/+$/, "")}/wholesale/kit?code=${encodeURIComponent(formatWholesaleCode(code))}&items=${encodeURIComponent(list)}`;
 }
 
+/**
+ * The same store page, opened through /wholesale/kit with no items: it only opens the session and lands on the catalogue,
+ * and it is the one route that can carry `lang` (the reseller's language in Xpot: en, pt-BR, es). Without a language
+ * it is the plain link. The old /wholesale?code= link keeps working.
+ */
+export function wholesaleStoreUrl(storeUrl: string, lang: string | null): string {
+  if (!lang) return storeUrl;
+  const url = new URL(storeUrl);
+  const code = url.searchParams.get("code");
+  if (!code) return storeUrl;
+  url.pathname = `${url.pathname.replace(/\/wholesale\/?$/, "")}/wholesale/kit`;
+  url.search = "";
+  url.searchParams.set("code", code);
+  url.searchParams.set("lang", lang);
+  return url.toString();
+}
+
 /** The store page a reseller lands on, code already filled in. */
 export function wholesaleUrl(storeBaseUrl: string, code: string): string {
   return `${storeBaseUrl.replace(/\/+$/, "")}/wholesale?code=${encodeURIComponent(formatWholesaleCode(code))}`;

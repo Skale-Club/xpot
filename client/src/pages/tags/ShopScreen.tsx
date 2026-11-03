@@ -2,10 +2,11 @@ import { useCallback, useEffect, useRef, useState, type ReactNode } from "react"
 import { useQuery } from "@tanstack/react-query";
 import { ChevronLeft, ChevronRight, ExternalLink, ImageOff, Minus, Plus, ShoppingBag, ShoppingCart } from "lucide-react";
 import {
-  TAG_SHOP_PACKS,
   TAG_SHOWCASE_MAX_QUANTITY,
-  shopLineTotals,
   shopLinkWithQuantity,
+  shopPictureFor,
+  shopStartQuantity,
+  shopTotals,
   showcaseAddsToCart,
   type TagShopCatalog,
   type TagShopProduct,
@@ -50,29 +51,32 @@ function Picture({ src, title }: { src: string | null; title: string }) {
   );
 }
 
-function percentOff(wholesale: number, retail: number | null): number | null {
-  return retail && retail > wholesale ? Math.round(((retail - wholesale) / retail) * 100) : null;
-}
-
-/** A Stuscle product: pick the variant and how many, see the wholesale price against retail, Add to cart. */
+/** A Stuscle product: pick the variant and the bulk pack, see the pack's price against retail, Add to cart. */
 function ProductCard({ product, currency }: { product: TagShopProduct; currency: string }) {
   const t = useT(tagsMessages);
   const [variantId, setVariantId] = useState(product.variants[0].id);
-  const [quantity, setQuantity] = useState(1);
+  const [quantity, setQuantity] = useState(shopStartQuantity(product.variants[0]));
   const variant = product.variants.find((v) => v.id === variantId) ?? product.variants[0];
-  const off = percentOff(variant.wholesalePriceCents, variant.retailPriceCents);
-  const totals = shopLineTotals(variant, quantity);
+  const sold = variant.packs.length > 0;
+  const totals = shopTotals(variant, quantity);
+  const retailUnit = totals.retailCents !== null ? totals.retailCents / totals.quantity : null;
   const setQty = (value: number) => setQuantity(Math.min(TAG_SHOWCASE_MAX_QUANTITY, Math.max(1, Math.floor(value) || 1)));
+  // A variant sold in packs only takes a pack's size: changing variant keeps the pack when it has one like it, else its smallest.
+  const pick = (id: string) => {
+    const next = product.variants.find((v) => v.id === id) ?? product.variants[0];
+    setVariantId(next.id);
+    setQuantity((current) => (next.packs.length > 0 && !next.packs.some((p) => p.quantity === current) ? shopStartQuantity(next) : current));
+  };
   return (
     <li className={`${CARD} ${CARD_WIDTH} flex flex-col overflow-hidden`} data-testid="shop-product">
-      <Picture src={product.thumbnail} title={product.title} />
+      <Picture src={shopPictureFor(product, variant)} title={product.title} />
       <div className="flex flex-1 flex-col gap-3 p-4">
         <h2 className="text-base font-bold leading-snug text-white">{product.title}</h2>
         {product.variants.length > 1 && (
           <Select
             aria-label={t("shopVariant")}
             value={variant.id}
-            onChange={(e) => setVariantId(e.target.value)}
+            onChange={(e) => pick(e.target.value)}
             options={product.variants.map((v) => ({ value: v.id, label: v.title ?? v.sku }))}
             data-testid="shop-variant"
           />
@@ -80,22 +84,22 @@ function ProductCard({ product, currency }: { product: TagShopProduct; currency:
         <div className="mt-auto space-y-3 pt-1">
           <div>
             <p className="flex flex-wrap items-baseline gap-x-2">
-              <span className="text-xl font-bold text-white" data-testid="shop-wholesale-price">{formatMoney(variant.wholesalePriceCents, currency)}</span>
+              <span className="text-xl font-bold text-white" data-testid="shop-wholesale-price">{formatMoney(totals.unitCents, currency)}</span>
               <span className="text-xs text-white/45">{t("shopPerUnit")}</span>
             </p>
-            {variant.retailPriceCents !== null && off !== null && (
+            {retailUnit !== null && totals.percentOff !== null && (
               <p className="mt-1 flex flex-wrap items-center gap-x-2 text-xs text-white/45">
                 <span>
-                  {t("shopRetail")} <span className="line-through">{formatMoney(variant.retailPriceCents, currency)}</span>
+                  {t("shopRetail")} <span className="line-through">{formatMoney(retailUnit, currency)}</span>
                 </span>
-                <Pill tone="green">{t("shopSave", { percent: off })}</Pill>
+                <Pill tone="green">{t("shopSave", { percent: totals.percentOff })}</Pill>
               </p>
             )}
           </div>
           {quantity > 1 && (
             <div className="rounded-xl border border-white/10 bg-black/20 px-3 py-2" data-testid="shop-total">
               <p className="flex items-baseline justify-between gap-2 text-sm">
-                <span className="text-white/60">{t("shopTotalFor", { count: quantity })}</span>
+                <span className="text-white/60">{t("shopTotalFor", { count: totals.quantity })}</span>
                 <span className="flex items-baseline gap-2">
                   {totals.retailCents !== null && <span className="text-xs text-white/40 line-through">{formatMoney(totals.retailCents, currency)}</span>}
                   <span className="font-bold text-white">{formatMoney(totals.wholesaleCents, currency)}</span>
@@ -105,54 +109,59 @@ function ProductCard({ product, currency }: { product: TagShopProduct; currency:
             </div>
           )}
           <div className="space-y-2">
-            <div className="flex gap-1.5" role="group" aria-label={t("shopPacks")}>
-              {TAG_SHOP_PACKS.map((pack) => (
+            {sold ? (
+              <div className="flex gap-1.5" role="group" aria-label={t("shopPacks")}>
+                {variant.packs.map((pack) => (
+                  <button
+                    key={pack.quantity}
+                    type="button"
+                    aria-pressed={quantity === pack.quantity}
+                    aria-label={t("shopPackLabel", { count: pack.quantity, price: formatMoney(pack.unitPriceCents, currency) })}
+                    onClick={() => setQty(pack.quantity)}
+                    className={`flex h-12 min-w-0 flex-1 flex-col items-center justify-center rounded-lg border text-xs font-semibold transition-colors ${
+                      quantity === pack.quantity ? "border-violet-300/60 bg-violet-400/20 text-white" : "border-white/10 bg-white/[0.04] text-white/60 hover:text-white"
+                    }`}
+                    data-testid="shop-pack"
+                  >
+                    <span className="text-sm">{pack.quantity}</span>
+                    <span className="font-normal text-white/50">{formatMoney(pack.unitPriceCents, currency)}</span>
+                  </button>
+                ))}
+              </div>
+            ) : (
+              <div className="flex h-11 items-center justify-between rounded-xl border border-white/10 bg-white/[0.05]">
                 <button
-                  key={pack}
                   type="button"
-                  aria-pressed={quantity === pack}
-                  onClick={() => setQty(pack)}
-                  className={`h-9 flex-1 rounded-lg border text-xs font-semibold transition-colors ${
-                    quantity === pack ? "border-violet-300/60 bg-violet-400/20 text-white" : "border-white/10 bg-white/[0.04] text-white/60 hover:text-white"
-                  }`}
-                  data-testid="shop-pack"
+                  className="flex h-full w-10 items-center justify-center text-white/60 hover:text-white disabled:opacity-30"
+                  aria-label={t("shopLess")}
+                  disabled={quantity <= 1}
+                  onClick={() => setQty(quantity - 1)}
                 >
-                  {pack}
+                  <Minus className="h-4 w-4" />
                 </button>
-              ))}
-            </div>
-            <div className="flex h-11 items-center justify-between rounded-xl border border-white/10 bg-white/[0.05]">
-              <button
-                type="button"
-                className="flex h-full w-10 items-center justify-center text-white/60 hover:text-white disabled:opacity-30"
-                aria-label={t("shopLess")}
-                disabled={quantity <= 1}
-                onClick={() => setQty(quantity - 1)}
-              >
-                <Minus className="h-4 w-4" />
-              </button>
-              <input
-                type="number"
-                inputMode="numeric"
-                min={1}
-                max={TAG_SHOWCASE_MAX_QUANTITY}
-                value={quantity}
-                onChange={(e) => setQty(Number(e.target.value))}
-                aria-label={t("shopQuantity")}
-                className="h-full min-w-0 flex-1 bg-transparent text-center text-sm font-semibold text-white [appearance:textfield] focus:outline-none [&::-webkit-inner-spin-button]:appearance-none"
-                data-testid="shop-quantity"
-              />
-              <button
-                type="button"
-                className="flex h-full w-10 items-center justify-center text-white/60 hover:text-white"
-                aria-label={t("shopMore")}
-                onClick={() => setQty(quantity + 1)}
-              >
-                <Plus className="h-4 w-4" />
-              </button>
-            </div>
+                <input
+                  type="number"
+                  inputMode="numeric"
+                  min={1}
+                  max={TAG_SHOWCASE_MAX_QUANTITY}
+                  value={quantity}
+                  onChange={(e) => setQty(Number(e.target.value))}
+                  aria-label={t("shopQuantity")}
+                  className="h-full min-w-0 flex-1 bg-transparent text-center text-sm font-semibold text-white [appearance:textfield] focus:outline-none [&::-webkit-inner-spin-button]:appearance-none"
+                  data-testid="shop-quantity"
+                />
+                <button
+                  type="button"
+                  className="flex h-full w-10 items-center justify-center text-white/60 hover:text-white"
+                  aria-label={t("shopMore")}
+                  onClick={() => setQty(quantity + 1)}
+                >
+                  <Plus className="h-4 w-4" />
+                </button>
+              </div>
+            )}
             <Button asChild variant="brand" accent="tags" size="lg" className="w-full">
-              <a href={shopLinkWithQuantity(variant, quantity)} target="_blank" rel="noopener noreferrer" data-testid="shop-add">
+              <a href={shopLinkWithQuantity(variant, totals.quantity, t.lang)} target="_blank" rel="noopener noreferrer" data-testid="shop-add">
                 <ShoppingCart />
                 {t("shopAddToCart")}
               </a>

@@ -116,12 +116,25 @@ export function showcaseUrl(item: Pick<TagShowcaseItem, "items">, storeBaseUrl: 
 // always lists exactly what resellers can buy at wholesale, with no typing on this side. Prices are Stuscle's, for
 // display; the cart gets its price from Stuscle when the link adds the piece.
 
+/** One bulk pack of a variant: from `quantity` pieces up, each costs `unitPriceCents` (Stuscle's price, smallest pack first). */
+export type TagShopPack = {
+  quantity: number;
+  unitPriceCents: number;
+  /** What a guest pays per piece: the real price the discount is measured against. */
+  retailUnitPriceCents: number | null;
+};
+
 export type TagShopVariant = {
   id: string;
   title: string | null;
   sku: string;
+  /** Per piece. On a variant sold in packs, the price at its smallest pack. */
   wholesalePriceCents: number;
   retailPriceCents: number | null;
+  /** This variant's own photos; empty means the product's. */
+  images: string[];
+  /** Empty when the variant is priced flat and sold by the piece. */
+  packs: TagShopPack[];
   /** Adds one of this variant to the reader's Stuscle cart and opens the product's wholesale page. */
   url: string;
 };
@@ -131,6 +144,7 @@ export type TagShopProduct = {
   title: string;
   handle: string;
   thumbnail: string | null;
+  images: string[];
   variants: TagShopVariant[];
 };
 
@@ -146,12 +160,34 @@ type StuscleCatalogBody = {
     title?: unknown;
     handle?: unknown;
     thumbnail?: unknown;
-    variants?: Array<{ id?: unknown; title?: unknown; sku?: unknown; wholesale_price?: unknown; retail_price?: unknown }>;
+    images?: unknown;
+    variants?: Array<{
+      id?: unknown;
+      title?: unknown;
+      sku?: unknown;
+      wholesale_price?: unknown;
+      retail_price?: unknown;
+      images?: unknown;
+      packs?: Array<{ quantity?: unknown; unit_price?: unknown; retail_unit_price?: unknown }>;
+    }>;
   }>;
 };
 
 const toCents = (amount: unknown): number | null => (typeof amount === "number" && Number.isFinite(amount) ? Math.round(amount * 100) : null);
 const str = (value: unknown): string | null => (typeof value === "string" && value.trim() ? value : null);
+const strings = (value: unknown): string[] => (Array.isArray(value) ? value.map(str).filter((v): v is string => v !== null) : []);
+
+/** Stuscle's packs, smallest first. A pack it cannot price is dropped, and a repeated size keeps its first price. */
+function toPacks(raw: unknown): TagShopPack[] {
+  const packs = new Map<number, TagShopPack>();
+  for (const pack of Array.isArray(raw) ? raw : []) {
+    const quantity = pack?.quantity;
+    const unit = toCents(pack?.unit_price);
+    if (typeof quantity !== "number" || !Number.isInteger(quantity) || quantity < 1 || quantity > TAG_SHOWCASE_MAX_QUANTITY || unit === null || unit <= 0) continue;
+    if (!packs.has(quantity)) packs.set(quantity, { quantity, unitPriceCents: unit, retailUnitPriceCents: toCents(pack?.retail_unit_price) });
+  }
+  return Array.from(packs.values()).sort((a, b) => a.quantity - b.quantity);
+}
 
 /**
  * Stuscle's `GET /xpot/wholesale-catalog` answer → the Shop's products, each variant with the link that puts it in
@@ -171,45 +207,67 @@ export function toShopProducts(body: unknown, storeBaseUrl: string, code: string
     for (const v of Array.isArray(raw.variants) ? raw.variants : []) {
       const sku = str(v?.sku);
       const variantId = str(v?.id);
-      const wholesale = toCents(v?.wholesale_price);
+      const packs = toPacks(v?.packs);
+      // On a variant sold in packs the price shown first is its smallest pack's, whatever the flat field says.
+      const wholesale = packs[0]?.unitPriceCents ?? toCents(v?.wholesale_price);
       if (!sku || !variantId || !SKU.test(sku) || wholesale === null || wholesale <= 0) continue;
       variants.push({
         id: variantId,
         title: str(v.title),
         sku,
         wholesalePriceCents: wholesale,
-        retailPriceCents: toCents(v.retail_price),
+        retailPriceCents: packs[0] ? packs[0].retailUnitPriceCents ?? toCents(v.retail_price) : toCents(v.retail_price),
+        images: strings(v.images),
+        packs,
         url: stuscleKitUrl(storeBaseUrl, code, [{ sku, quantity: 1 }]),
       });
     }
-    if (variants.length) products.push({ id, title, handle, thumbnail: str(raw.thumbnail), variants });
+    if (variants.length) products.push({ id, title, handle, thumbnail: str(raw.thumbnail), images: strings(raw.images), variants });
   }
   return { currency, products };
 }
 
-/** The quantities offered as one-tap packs on a product card. */
-export const TAG_SHOP_PACKS = [10, 25, 50, 100] as const;
-
-/**
- * What `quantity` of a variant costs at wholesale, against the same pieces at retail. `retailCents` and `saveCents` are
- * null when Stuscle gave no retail price, or it is not above the wholesale one. For display only: the cart is priced by Stuscle.
- */
-export function shopLineTotals(
-  variant: Pick<TagShopVariant, "wholesalePriceCents" | "retailPriceCents">,
-  quantity: number,
-): { wholesaleCents: number; retailCents: number | null; saveCents: number | null } {
-  const qty = Math.min(TAG_SHOWCASE_MAX_QUANTITY, Math.max(1, Math.floor(quantity) || 1));
-  const wholesaleCents = variant.wholesalePriceCents * qty;
-  const retail = variant.retailPriceCents;
-  if (retail === null || retail <= variant.wholesalePriceCents) return { wholesaleCents, retailCents: null, saveCents: null };
-  const retailCents = retail * qty;
-  return { wholesaleCents, retailCents, saveCents: retailCents - wholesaleCents };
+/** The photo a card shows for a variant: its own, else the product's, else the thumbnail. */
+export function shopPictureFor(product: Pick<TagShopProduct, "images" | "thumbnail">, variant: Pick<TagShopVariant, "images">): string | null {
+  return variant.images[0] ?? product.images[0] ?? product.thumbnail;
 }
 
-/** A variant's cart link for `quantity` pieces instead of one (the reseller picks how many in the Shop). */
-export function shopLinkWithQuantity(variant: Pick<TagShopVariant, "url" | "sku">, quantity: number): string {
+/** The quantity a card opens on: a variant sold in packs starts on its smallest, a flat one on a single piece. */
+export function shopStartQuantity(variant: Pick<TagShopVariant, "packs">): number {
+  return variant.packs[0]?.quantity ?? 1;
+}
+
+/**
+ * What `quantity` of a variant costs at wholesale, against the same pieces at retail, at the price of the pack that
+ * quantity falls into (the largest pack not above it; a flat variant has one price). `retailCents`, `saveCents` and
+ * `percentOff` are null when Stuscle gave no retail price or it is not above the wholesale one. For display only:
+ * the cart is priced by Stuscle.
+ */
+export function shopTotals(
+  variant: Pick<TagShopVariant, "wholesalePriceCents" | "retailPriceCents" | "packs">,
+  quantity: number,
+): { quantity: number; unitCents: number; wholesaleCents: number; retailCents: number | null; saveCents: number | null; percentOff: number | null } {
+  const qty = Math.min(TAG_SHOWCASE_MAX_QUANTITY, Math.max(1, Math.floor(quantity) || 1));
+  const pack = [...variant.packs].reverse().find((p) => p.quantity <= qty) ?? variant.packs[0];
+  const unitCents = pack?.unitPriceCents ?? variant.wholesalePriceCents;
+  const retailUnit = pack ? pack.retailUnitPriceCents ?? variant.retailPriceCents : variant.retailPriceCents;
+  const wholesaleCents = unitCents * qty;
+  if (retailUnit === null || retailUnit <= unitCents) return { quantity: qty, unitCents, wholesaleCents, retailCents: null, saveCents: null, percentOff: null };
+  const retailCents = retailUnit * qty;
+  return { quantity: qty, unitCents, wholesaleCents, retailCents, saveCents: retailCents - wholesaleCents, percentOff: Math.round(((retailUnit - unitCents) / retailUnit) * 100) };
+}
+
+/** Stuscle's names for the app's languages, for the `lang` of a link (docs/WHOLESALE-XPOT-SHOP.md); none for any other. */
+export function stuscleLang(lang: string | null | undefined): string | null {
+  return lang === "en" ? "en" : lang === "pt" ? "pt-BR" : lang === "es" ? "es" : null;
+}
+
+/** A variant's cart link for `quantity` pieces instead of one, in the reseller's language (the reseller picks the pack in the Shop). */
+export function shopLinkWithQuantity(variant: Pick<TagShopVariant, "url" | "sku">, quantity: number, lang?: string | null): string {
   const qty = Math.min(TAG_SHOWCASE_MAX_QUANTITY, Math.max(1, Math.floor(quantity) || 1));
   const url = new URL(variant.url);
   url.searchParams.set("items", `${variant.sku}:${qty}`);
+  const language = stuscleLang(lang);
+  if (language) url.searchParams.set("lang", language);
   return url.toString();
 }

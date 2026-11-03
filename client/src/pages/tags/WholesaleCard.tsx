@@ -6,6 +6,8 @@ import { tagsMessages } from "@/i18n/messages/tags";
 import { profileOfMe } from "@/lib/adminMode";
 import type { XpotMeResponse } from "@/pages/xpot/types";
 import { can } from "@shared/profiles";
+import { stuscleLang } from "@shared/tagShowcase";
+import { wholesaleStoreUrl } from "@shared/wholesale";
 import { tagsGet } from "./lib";
 import { Button } from "@/components/ui/button";
 import { CopyButton, EYEBROW_MUTED } from "./ui";
@@ -69,7 +71,7 @@ export function WholesaleCard() {
           <CopyButton text={data.code} label={tc("copy")} />
         </div>
         <Button asChild variant="brand" accent="tags" size="lg" className="w-full sm:w-auto">
-          <a href={data.url} target="_blank" rel="noopener noreferrer" data-testid="wholesale-open">
+          <a href={wholesaleStoreUrl(data.url, stuscleLang(t.lang))} target="_blank" rel="noopener noreferrer" data-testid="wholesale-open">
             {t("wholesaleOpen")}
             <ExternalLink />
           </a>

@@ -1,7 +1,7 @@
 // Tags › Shop, the Stuscle half: what Xpot makes of Stuscle's wholesale catalogue, and the links its cards open. The
 // links are the contract with Stuscle's /wholesale/kit: the reader's own code and SKU:quantity, never a price.
 import { describe, expect, it } from "vitest";
-import { TAG_SHOP_PACKS, shopLineTotals, shopLinkWithQuantity, toShopProducts } from "../shared/tagShowcase";
+import { shopLinkWithQuantity, shopPictureFor, shopStartQuantity, shopTotals, stuscleLang, toShopProducts } from "../shared/tagShowcase";
 import { stuscleKitUrl } from "../shared/wholesale";
 
 const CODE = "XPABCD1234";
@@ -63,20 +63,123 @@ describe("shopLinkWithQuantity", () => {
   });
 });
 
-describe("shopLineTotals", () => {
-  const plate = { wholesalePriceCents: 1500, retailPriceCents: 2500 };
-  it("multiplies the wholesale and the retail price by the quantity and says what is saved", () => {
-    expect(shopLineTotals(plate, 50)).toEqual({ wholesaleCents: 75_000, retailCents: 125_000, saveCents: 50_000 });
+describe("toShopProducts packs", () => {
+  const packed = {
+    id: "prod_packed",
+    title: "Google Review NFC Plate",
+    handle: "google-review-nfc-plate",
+    thumbnail: "https://cdn.stuscle.com/thumb.webp",
+    images: ["https://cdn.stuscle.com/p1.webp", 7, ""],
+    variants: [
+      {
+        id: "var_s_black",
+        title: "Small / Black",
+        sku: "NFC-PLATE-GOOGLE-BLACK-S",
+        wholesale_price: 99,
+        retail_price: 99,
+        images: ["https://cdn.stuscle.com/black.webp"],
+        packs: [
+          { quantity: 50, unit_price: 12, retail_unit_price: 25 },
+          { quantity: 10, unit_price: 15, retail_unit_price: 25 },
+          { quantity: 25, unit_price: 14, retail_unit_price: 25 },
+          { quantity: 25, unit_price: 1, retail_unit_price: 25 },
+          { quantity: 0, unit_price: 9 },
+          { quantity: 5.5, unit_price: 9 },
+          { quantity: 100, unit_price: 0 },
+          { quantity: "x", unit_price: 9 },
+        ],
+      },
+    ],
+  };
+
+  it("reads the packs smallest first, in cents, and drops the ones it cannot price", () => {
+    const [product] = toShopProducts({ products: [packed] }, BASE, CODE).products;
+    expect(product.variants[0].packs).toEqual([
+      { quantity: 10, unitPriceCents: 1500, retailUnitPriceCents: 2500 },
+      { quantity: 25, unitPriceCents: 1400, retailUnitPriceCents: 2500 },
+      { quantity: 50, unitPriceCents: 1200, retailUnitPriceCents: 2500 },
+    ]);
   });
+
+  it("shows the smallest pack's price first, whatever the flat price says", () => {
+    const [variant] = toShopProducts({ products: [packed] }, BASE, CODE).products[0].variants;
+    expect(variant.wholesalePriceCents).toBe(1500);
+    expect(variant.retailPriceCents).toBe(2500);
+  });
+
+  it("keeps photos as clean lists, and a variant priced flat has no packs", () => {
+    const { products } = toShopProducts({ products: [packed, plate] }, BASE, CODE);
+    expect(products[0].images).toEqual(["https://cdn.stuscle.com/p1.webp"]);
+    expect(products[0].variants[0].images).toEqual(["https://cdn.stuscle.com/black.webp"]);
+    expect(products[1].images).toEqual([]);
+    expect(products[1].variants[0]).toMatchObject({ packs: [], images: [] });
+  });
+});
+
+describe("shopTotals", () => {
+  const packs = [
+    { quantity: 10, unitPriceCents: 1500, retailUnitPriceCents: 2500 },
+    { quantity: 25, unitPriceCents: 1400, retailUnitPriceCents: 2500 },
+    { quantity: 50, unitPriceCents: 1200, retailUnitPriceCents: 2500 },
+  ];
+  const plate = { wholesalePriceCents: 1500, retailPriceCents: 2500, packs };
+
+  it("prices a pack at its own unit price, against the same pieces at retail", () => {
+    expect(shopTotals(plate, 10)).toEqual({ quantity: 10, unitCents: 1500, wholesaleCents: 15_000, retailCents: 25_000, saveCents: 10_000, percentOff: 40 });
+    expect(shopTotals(plate, 25)).toMatchObject({ unitCents: 1400, wholesaleCents: 35_000, retailCents: 62_500, saveCents: 27_500, percentOff: 44 });
+    expect(shopTotals(plate, 50)).toMatchObject({ unitCents: 1200, wholesaleCents: 60_000, retailCents: 125_000, saveCents: 65_000, percentOff: 52 });
+  });
+
+  it("gives a quantity between packs the price of the pack below it, and a larger one the largest pack's", () => {
+    expect(shopTotals(plate, 40).unitCents).toBe(1400);
+    expect(shopTotals(plate, 120).unitCents).toBe(1200);
+  });
+
+  it("falls back to the smallest pack below it", () => {
+    expect(shopTotals(plate, 3).unitCents).toBe(1500);
+  });
+
+  it("prices a flat variant by the piece", () => {
+    expect(shopTotals({ wholesalePriceCents: 850, retailPriceCents: 1499, packs: [] }, 4)).toMatchObject({ unitCents: 850, wholesaleCents: 3400, retailCents: 5996, saveCents: 2596, percentOff: 43 });
+  });
+
   it("shows no retail or saving when there is no retail price or it is not above wholesale", () => {
-    expect(shopLineTotals({ wholesalePriceCents: 1500, retailPriceCents: null }, 10)).toEqual({ wholesaleCents: 15_000, retailCents: null, saveCents: null });
-    expect(shopLineTotals({ wholesalePriceCents: 1500, retailPriceCents: 1500 }, 10).saveCents).toBeNull();
+    expect(shopTotals({ wholesalePriceCents: 850, retailPriceCents: null, packs: [] }, 2)).toMatchObject({ wholesaleCents: 1700, retailCents: null, saveCents: null, percentOff: null });
+    expect(shopTotals({ wholesalePriceCents: 850, retailPriceCents: 850, packs: [] }, 2).percentOff).toBeNull();
   });
+
   it("keeps the quantity a whole number of at least one", () => {
-    expect(shopLineTotals(plate, 0).wholesaleCents).toBe(1500);
-    expect(shopLineTotals(plate, 2.9).wholesaleCents).toBe(3000);
+    expect(shopTotals(plate, 0).quantity).toBe(1);
+    expect(shopTotals({ wholesalePriceCents: 100, retailPriceCents: null, packs: [] }, 2.9).quantity).toBe(2);
   });
-  it("offers ascending packs", () => {
-    expect([...TAG_SHOP_PACKS]).toEqual([...TAG_SHOP_PACKS].sort((a, b) => a - b));
+});
+
+describe("what a card opens on", () => {
+  it("starts a variant sold in packs on its smallest pack, and a flat one on a single piece", () => {
+    expect(shopStartQuantity({ packs: [{ quantity: 5, unitPriceCents: 2500, retailUnitPriceCents: null }, { quantity: 10, unitPriceCents: 2300, retailUnitPriceCents: null }] })).toBe(5);
+    expect(shopStartQuantity({ packs: [] })).toBe(1);
+  });
+
+  it("shows the variant's own photo, else the product's, else the thumbnail", () => {
+    const product = { images: ["p.webp"], thumbnail: "t.webp" };
+    expect(shopPictureFor(product, { images: ["v.webp"] })).toBe("v.webp");
+    expect(shopPictureFor(product, { images: [] })).toBe("p.webp");
+    expect(shopPictureFor({ images: [], thumbnail: "t.webp" }, { images: [] })).toBe("t.webp");
+    expect(shopPictureFor({ images: [], thumbnail: null }, { images: [] })).toBeNull();
+  });
+});
+
+describe("stuscleLang and the language of a link", () => {
+  const variant = { sku: "PLATE-GOOGLE-SMALL-BLACK", url: stuscleKitUrl(BASE, CODE, [{ sku: "PLATE-GOOGLE-SMALL-BLACK", quantity: 1 }]) };
+
+  it("names the app's languages the way Stuscle does", () => {
+    expect([stuscleLang("en"), stuscleLang("pt"), stuscleLang("es")]).toEqual(["en", "pt-BR", "es"]);
+    for (const other of ["fr", "", null, undefined]) expect(stuscleLang(other)).toBeNull();
+  });
+
+  it("carries the reseller's language, and leaves it out for one Stuscle does not know", () => {
+    expect(new URL(shopLinkWithQuantity(variant, 25, "pt")).searchParams.get("lang")).toBe("pt-BR");
+    expect(new URL(shopLinkWithQuantity(variant, 25, "fr")).searchParams.has("lang")).toBe(false);
+    expect(new URL(shopLinkWithQuantity(variant, 25)).searchParams.has("lang")).toBe(false);
   });
 });
