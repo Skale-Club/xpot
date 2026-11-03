@@ -38,7 +38,8 @@ if PLATE_DESIGN not in sys.path:
 W, H = fc.CARD_W, fc.CARD_H
 TOP, INLAY, BACK_ENGRAVE, SIMPLIFY = ig.TOP, ig.INLAY, ig.BACK_ENGRAVE, ig.SIMPLIFY
 SLOT_LINE = ig.SLOT_LINE
-FONTS = ('Inria Serif Bold', 'Inria Serif Bold Italic')
+FONTS = ('Inria Serif Bold', 'Inria Serif Bold Italic', 'Metropolis Medium, MENU spaced', 'Inter SemiBold, MENU spaced',
+         'Metropolis Bold', 'Nunito Black (rounded)')
 
 # Composition coordinates, y down from the top edge. The title and subtitle are the Menu Plate's (cap 30, at most
 # 80 wide; 4.5 below it the 4.7 subtitle); the tap row and the QR are the Stand's. The QR panel border is two
@@ -58,14 +59,20 @@ def rounded_rect(x0, y0, x1, y1, radius):
 def title_geom(text, font, cap, max_width, cx, top):
     """`text` in a Menu font, cap height `cap` (less if wider than max_width), its cap line at `top`."""
     import face_composition_tile as composition
-    prop = composition._font(composition.MENU_FONTS[font][0])
+    fontfile, upper, tracking = composition.MENU_FONTS[font]
+    prop = composition._font(fontfile)
     ref = TextPath((0, 0), 'H', size=100, prop=prop).get_extents().height
-    path = TextPath((0, 0), text, size=100, prop=prop)
-    ext = path.get_extents()
-    scale = min(cap / ref, max_width / ext.width)
+    # A font with tracking (MENU in spaced capitals): one letter at a time, each after the last one's ink.
+    rings, pen = [], 0.0
+    for letter in (text.upper() if upper else [text]):
+        path = TextPath((0, 0), letter, size=100, prop=prop)
+        rings += [[(x + pen - (path.get_extents().x0 if upper else 0), y) for x, y in ring] for ring in path.to_polygons(closed_only=True)]
+        pen += path.get_extents().width + tracking * ref
+    xs = [x for ring in rings for x, _ in ring]
+    x0, width = min(xs), max(xs) - min(xs)
+    scale = min(cap / ref, max_width / width)
     cap = ref * scale
-    geom = fa.even_odd([[(cx - ext.width * scale / 2 + (x - ext.x0) * scale, top + cap - y * scale) for x, y in ring]
-                        for ring in path.to_polygons(closed_only=True)])
+    geom = fa.even_odd([[(cx - width * scale / 2 + (x - x0) * scale, top + cap - y * scale) for x, y in ring] for ring in rings])
     return geom, cap
 
 
@@ -112,6 +119,7 @@ def build(code, batch, serial, out_dir, nfc_mount='sticker_10x20', theme='white'
     if nfc_mount not in ig.nfc_mounts.NFC_MOUNTS:
         raise ValueError('unsupported nfc_mount')
     large.configure()
+    ig.H = H  # a Plate built earlier in this process leaves its own height there (tile_per_code)
     code = fa.normalize_code(code)
     art = layout(code, theme, font, qr=qr)
     ink = fa.to_card(art['ink'])

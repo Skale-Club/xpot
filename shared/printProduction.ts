@@ -306,6 +306,19 @@ export function withNfcVariant<V extends { params: Record<string, unknown>; reci
   };
 }
 
+/** The Menu title fonts, all approved (print-pipeline/builders MENU_FONTS): chosen per print, each is its own print file. */
+export const PRINT_MENU_FONTS = [
+  "Inria Serif Bold", "Inria Serif Bold Italic", "Metropolis Medium, MENU spaced", "Inter SemiBold, MENU spaced", "Metropolis Bold", "Nunito Black (rounded)",
+] as const;
+export type PrintMenuFont = (typeof PRINT_MENU_FONTS)[number];
+export const PRINT_DEFAULT_MENU_FONT: PrintMenuFont = "Inria Serif Bold";
+const MENU_BUILDERS = ["plate.menu", "stand.menu"];
+
+/** The fonts a version's builder can draw: none on anything but a Menu piece. */
+export function menuFontsOf(builder: string | null | undefined): readonly PrintMenuFont[] {
+  return builder && MENU_BUILDERS.includes(builder) ? PRINT_MENU_FONTS : [];
+}
+
 /** "What you need" for one NFC type: its sticker instead of whichever the model lists. */
 export function materialsForNfc(materials: readonly PrintMaterial[] | null | undefined, variant: PrintNfcVariant | null | undefined): PrintMaterial[] {
   const list = materials ?? [];
@@ -410,6 +423,8 @@ export const printJobCreateSchema = z.object({
   plates: z.number().int().positive().max(PRINT_MAX_PLATES).optional(),
   /** Which NFC goes inside: required when the model's current version offers a choice. */
   nfcMount: z.enum(PRINT_NFC_MOUNTS).optional(),
+  /** The Menu title font; omitted: the one the version's params name. Refused on anything but a Menu piece. */
+  menuFont: z.enum(PRINT_MENU_FONTS).optional(),
   notes: optionalText(2000),
   /**
    * Link an existing batch instead of issuing codes (the orders behind batches made before this catalog existed).
@@ -562,6 +577,7 @@ export interface PrintJobItem {
   batchCode: string | null;
   /** The NFC type chosen; null on a plate of a version with no choice. */
   nfcMount: PrintNfcMount | null;
+  menuFont: string | null;
   /** Serialized orders: pieces in stock (not pending, not damaged) out of the batch's pieces. */
   receivedCount: number | null;
   /** Serialized orders: pieces still pending (a plate printed before stock followed "printed" may still have some). */
@@ -611,6 +627,7 @@ export interface PrintRequestItem {
   /** Pieces asked for (a part's plates may round it up to whole beds). */
   quantity: number;
   nfcMount: PrintNfcMount | null;
+  menuFont: string | null;
   notes: string | null;
   createdAt: string;
   /** Some plate still to build or print. */
@@ -673,6 +690,7 @@ export interface PrintNowPlate {
   batchCode: string | null;
   modelTitle: string;
   nfcMount: PrintNfcMount | null;
+  menuFont: string | null;
   files: Array<{ id: string; kind: PrintFileKind; filename: string; sha256: string; bytes: number; url: string }>;
 }
 
@@ -755,6 +773,8 @@ export interface PrintGenerateFace {
   /** The NFC types to ask about, with what each one changes; empty on a version with no choice. */
   nfcMounts: PrintNfcMount[];
   nfcVariants: PrintNfcVariants;
+  /** The title fonts to ask about; empty on anything but a Menu piece. */
+  menuFonts: readonly PrintMenuFont[];
 }
 
 export interface PrintGenerateOption {
@@ -808,6 +828,7 @@ export function printGenerateOptions(models: readonly PrintModelItem[]): PrintGe
                 materials: model.materials ?? [],
                 nfcMounts: nfcMountsOf(model.currentVersion!.nfcVariants),
                 nfcVariants: model.currentVersion!.nfcVariants ?? {},
+                menuFonts: menuFontsOf(model.currentVersion!.builder),
               };
             }),
         })),
@@ -822,6 +843,7 @@ export const printGenerateSchema = z.object({
   quantity: z.number().int().positive().max(10_000),
   /** Which NFC goes inside (as printJobCreateSchema's). */
   nfcMount: z.enum(PRINT_NFC_MOUNTS).optional(),
+  menuFont: z.enum(PRINT_MENU_FONTS).optional(),
   notes: optionalText(2000),
   /** Whose pieces (as printJobCreateSchema's `organization`): omitted, the company's or the branch's own. */
   organization: z.union([z.string().trim().min(1).max(80), z.number().int().positive()]).optional(),

@@ -50,7 +50,8 @@ KINDS = {
 }
 
 # The faces' fonts (Windows): the Stand and Plate text, and the approved Menu titles.
-FONTS = ['segoeuib.ttf', 'segoeuiz.ttf', 'InriaSerif-Bold.otf', 'InriaSerif-BoldItalic.otf', 'Metropolis-Medium.otf']
+FONTS = ['segoeuib.ttf', 'segoeuiz.ttf', 'InriaSerif-Bold.otf', 'InriaSerif-BoldItalic.otf', 'Metropolis-Medium.otf',
+         'Inter_24pt-SemiBold.ttf', 'Metropolis-Bold.otf', 'NunitoW900.ttf']
 PACKAGES = ['numpy', 'shapely', 'manifold3d', 'trimesh', 'matplotlib', 'fitz', 'segno', 'cv2', 'scipy', 'lxml', 'PIL']
 
 

@@ -40,7 +40,7 @@ def request_folder(plate: dict, tz=None) -> str:
     created = datetime.fromisoformat(plate['requestCreatedAt'].replace('Z', '+00:00'))
     created = created.astimezone(tz) if tz else created.astimezone()
     nfc = NFC_NAMES.get(plate.get('nfcMount'))
-    what = f"{plate['modelTitle']} - {nfc}" if nfc else plate['modelTitle']
+    what = ' - '.join(part for part in (plate['modelTitle'], plate.get('menuFont'), nfc) if part)
     return _safe(f"{created:%Y-%m-%d %Hh%M} - {what} - {plate['requestQuantity']} un - {plate['requestId'][:8]}")
 
 

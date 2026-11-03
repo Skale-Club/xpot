@@ -142,7 +142,7 @@ export function PrintJobPage({ id, go }: { id: string; go: Go }) {
   const damaged = job.damagedCount ?? 0;
   const state = outcome === "pending" ? "printedPending" : outcome === "count" ? "printedCount" : outcome ? "printedDone"
     : building === "computerOff" ? "buildingOff" : building === "quiet" ? "buildingQuiet" : job.status;
-  const summary = [t.plural("pieceCount", job.quantity), minutes ? minutesText(minutes) : null, swaps ? t.plural("swapCount", swaps) : null, report.qr_check ? t("statQrCheck") + ": " + report.qr_check : null]
+  const summary = [t.plural("pieceCount", job.quantity), job.menuFont, minutes ? minutesText(minutes) : null, swaps ? t.plural("swapCount", swaps) : null, report.qr_check ? t("statQrCheck") + ": " + report.qr_check : null]
     .filter(Boolean).join(" · ");
   const body = (() => {
     switch (state) {

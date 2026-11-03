@@ -29,8 +29,6 @@ BRAND_COLOUR = {'zelle': '#6C1CD3', 'cashapp': '#00E013', 'paypal': '#008CFF'}
 BACKLOG = {
     'plate-large-venmo-white': ('plate-large-venmo-mixed', 'plate.venmo', {'size': 'large', 'theme': 'white'}),
     'plate-large-venmo-black': ('plate-large-venmo-mixed', 'plate.venmo', {'size': 'large', 'theme': 'black', 'qr': 'inverted'}),
-    'plate-large-menu-italic-white': ('plate-large-menu-white', 'plate.menu', {'size': 'large', 'theme': 'white', 'font': 'Inria Serif Bold Italic'}),
-    'plate-large-menu-metropolis-white': ('plate-large-menu-white', 'plate.menu', {'size': 'large', 'theme': 'white', 'font': 'Metropolis Medium, MENU spaced'}),
     'plate-large-zelle-white': ('plate-large-venmo-mixed', 'plate.pay', {'brand': 'zelle', 'theme': 'white'}),
     'plate-large-cashapp-white': ('plate-large-venmo-mixed', 'plate.pay', {'brand': 'cashapp', 'theme': 'white'}),
     'plate-large-paypal-white': ('plate-large-venmo-mixed', 'plate.pay', {'brand': 'paypal', 'theme': 'white'}),

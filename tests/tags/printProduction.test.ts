@@ -29,6 +29,7 @@ import {
   type PrintModelItem,
   type PrintModelVersionItem,
 } from "../../shared/printProduction";
+import { PRINT_MENU_FONTS, menuFontsOf } from "../../shared/printProduction";
 
 describe("print batch codes", () => {
   it("takes the number after the highest one used this year, and ignores other prefixes and years", () => {
@@ -296,5 +297,15 @@ describe("models released to an organization", () => {
     expect(modelReleased(["plate-large-menu-white"], "plate-large-menu-white")).toBe(true);
     expect(modelReleased(["plate-large-menu-white"], "stand-large-google-white")).toBe(false);
     expect(modelReleased([], "plate-large-menu-white")).toBe(false);
+  });
+});
+
+describe("menuFontsOf", () => {
+  it("offers the six title fonts on a Menu piece and none on another", () => {
+    expect(PRINT_MENU_FONTS).toHaveLength(6);
+    expect(menuFontsOf("plate.menu")).toEqual(PRINT_MENU_FONTS);
+    expect(menuFontsOf("stand.menu")).toEqual(PRINT_MENU_FONTS);
+    expect(menuFontsOf("plate.google")).toEqual([]);
+    expect(menuFontsOf(null)).toEqual([]);
   });
 });
