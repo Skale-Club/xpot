@@ -360,6 +360,8 @@ export function XpotCheckIn() {
   // No result is marked until the rep picks one: a default would file a closed door as a conversation.
   const [checkoutStatus, setCheckoutStatus] = useState<VisitStatus | null>(null);
   const [createLeadDialogOpen, setCreateLeadDialogOpen] = useState(false);
+  // The live map is a card only while its tile loads; without one it is a small line and the column goes to the company.
+  const [mapFailed, setMapFailed] = useState(false);
   const [activeVisitPanel, setActiveVisitPanel] = useState<"sales" | "note" | "checkout" | "cancel" | null>(null);
   // Expiration can finish a visit while a dialog is open, without navigating away.
   // Its choice and open panel must not carry over into the next check-in.
@@ -521,19 +523,16 @@ export function XpotCheckIn() {
               }}
             />
           )}
+          <VisitAction
+            icon={CircleCheck}
+            title={t("finishVisit")}
+            hint={t("finishVisitHint")}
+            tone="emerald"
+            disabled={limitReached}
+            testId="button-finish-visit"
+            onClick={() => { setCheckoutStatus((current) => defaultCheckoutStatus(current, visitHasSale) as VisitStatus | null); setActiveVisitPanel("checkout"); }}
+          />
         </div>
-
-        <Button
-          type="button"
-          variant="brand"
-          size="lg"
-          onClick={() => { setCheckoutStatus((current) => defaultCheckoutStatus(current, visitHasSale) as VisitStatus | null); setActiveVisitPanel("checkout"); }}
-          disabled={limitReached}
-          className="relative min-h-12 w-full text-base font-bold"
-          data-testid="button-finish-visit"
-        >
-          <CircleCheck aria-hidden="true" />{t("finishVisit")}
-        </Button>
 
         {/* Secondary on purpose: a mistaken check-in is discarded, not checked out with an outcome. */}
         <div className="relative flex justify-center">
@@ -602,59 +601,92 @@ export function XpotCheckIn() {
     </div>
   );
 
+  const liveMap = geoState.lat != null && geoState.lng != null ? (
+    <LiveMap
+      lat={geoState.lat}
+      lng={geoState.lng}
+      accuracy={geoState.accuracy}
+      leadLat={selectedLeadLocation ? Number(selectedLeadLocation.lat) : null}
+      leadLng={selectedLeadLocation ? Number(selectedLeadLocation.lng) : null}
+      leadName={selectedLeadLocation ? selectedLead?.name : undefined}
+      failed={mapFailed}
+      onFailedChange={setMapFailed}
+    />
+  ) : null;
+  const mapCard = liveMap && !mapFailed ? liveMap : null;
+  const recentVisits = (visitsQuery.data || []).filter((v) => v.checkedOutAt).slice(0, 5);
+  // The side column exists while it has something to hold: the chosen company, or a map that loaded.
+  const hasSide = Boolean(selectedLead) || Boolean(mapCard);
+
+  const startCheckIn = () => {
+    const input = { leadId: Number(selectedLeadId), lat: geoState.lat, lng: geoState.lng, gpsAccuracyMeters: geoState.accuracy };
+    if (!hasLocation) setOverridePrompt({ input, miss: null });
+    else checkInMutation.mutate(input);
+  };
+
   return (
     <>
-    <div className="space-y-4">
-      <div className="lg:grid lg:grid-cols-[minmax(0,1fr)_minmax(340px,420px)] lg:items-start lg:gap-6">
-      <div className="space-y-4">
-      <div className={`px-1 ${EYEBROW}`}>{t("checkInHeading")}</div>
-      <div className="rounded-2xl" style={GLASS_RAISED}>
-        <div className="px-4 py-5 space-y-5 sm:px-6">
-          {nextRouteStop && !selectedLead ? (
-            <button
-              type="button"
-              onClick={() => pickNextStop.mutate(nextRouteStop)}
-              disabled={pickNextStop.isPending}
-              className="flex min-h-12 w-full min-w-0 items-center gap-2.5 rounded-2xl border border-blue-400/25 bg-blue-500/[0.1] px-4 text-left text-sm font-semibold text-blue-100 transition active:scale-[0.99]"
-              data-testid="check-in-next-stop"
-            >
-              <MapPinCheck className="h-4 w-4 shrink-0" aria-hidden="true" />
-              <span className="min-w-0 truncate">{tp("stopNext", { name: nextRouteStop.name })}</span>
-            </button>
-          ) : null}
-          <PlaceLeadSearch
-            value={checkInSearch}
-            onChange={(next) => { setCheckInSearch(next); if (!next) setSelectedLeadId(""); }}
-            geoState={geoState}
-            placeholder={t("searchPlaceholder")}
-            busy={createLeadMutation.isPending}
-            onOpenChange={setCheckInDropdownOpen}
-            onPickLead={(lead) => pickLocalLeadForCheckIn(lead)}
-            onPickPlace={(place, match) => { void pickGooglePlaceForCheckIn(place, match).catch(() => {}); }}
-            onCreate={() => setCreateLeadDialogOpen(true)}
-            onNearby={() => { void loadCurrentLocation(); setCheckInSearch(t("nearbyQuery")); }}
-          />
+    {/* The search comes first on every screen. On a computer the chosen company and the map take the right column
+        and the recent visits sit under the search; on a phone they follow it in that order. */}
+    <div className={`grid grid-cols-[minmax(0,1fr)] gap-x-6 gap-y-4 lg:items-start ${hasSide ? "lg:grid-cols-[minmax(0,1fr)_minmax(340px,420px)]" : ""}`}>
+      <div className="min-w-0 space-y-4 lg:col-start-1">
+        <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
+          <div className={`px-1 ${EYEBROW}`}>{t("checkInHeading")}</div>
+          {mapFailed ? liveMap : null}
+        </div>
+        <div className="rounded-2xl" style={GLASS_RAISED}>
+          <div className="px-4 py-5 space-y-5 sm:px-6">
+            {nextRouteStop && !selectedLead ? (
+              <button
+                type="button"
+                onClick={() => pickNextStop.mutate(nextRouteStop)}
+                disabled={pickNextStop.isPending}
+                className="flex min-h-12 w-full min-w-0 items-center gap-2.5 rounded-2xl border border-blue-400/25 bg-blue-500/[0.1] px-4 text-left text-sm font-semibold text-blue-100 transition active:scale-[0.99]"
+                data-testid="check-in-next-stop"
+              >
+                <MapPinCheck className="h-4 w-4 shrink-0" aria-hidden="true" />
+                <span className="min-w-0 truncate">{tp("stopNext", { name: nextRouteStop.name })}</span>
+              </button>
+            ) : null}
+            <PlaceLeadSearch
+              value={checkInSearch}
+              onChange={(next) => { setCheckInSearch(next); if (!next) setSelectedLeadId(""); }}
+              geoState={geoState}
+              placeholder={t("searchPlaceholder")}
+              busy={createLeadMutation.isPending}
+              onOpenChange={setCheckInDropdownOpen}
+              onPickLead={(lead) => pickLocalLeadForCheckIn(lead)}
+              onPickPlace={(place, match) => { void pickGooglePlaceForCheckIn(place, match).catch(() => {}); }}
+              onCreate={() => setCreateLeadDialogOpen(true)}
+              onNearby={() => { void loadCurrentLocation(); setCheckInSearch(t("nearbyQuery")); }}
+            />
 
-          {withoutLocation && !hasLocation ? (
-            <InlineAlert
-              tone="warning"
-              icon={MapPinOff}
-              action={(
-                <Button type="button" variant="ghost" size="sm" onClick={() => void loadCurrentLocation()} loading={isLocating} className="text-amber-200">
-                  {t("useLocationInstead")}
-                </Button>
-              )}
-            >
-              {t("noLocationBanner")}
-            </InlineAlert>
-          ) : null}
+            {withoutLocation && !hasLocation ? (
+              <InlineAlert
+                tone="warning"
+                icon={MapPinOff}
+                action={(
+                  <Button type="button" variant="ghost" size="sm" onClick={() => void loadCurrentLocation()} loading={isLocating} className="text-amber-200">
+                    {t("useLocationInstead")}
+                  </Button>
+                )}
+              >
+                {t("noLocationBanner")}
+              </InlineAlert>
+            ) : null}
 
-          {/* GPS error */}
-          {geoState.error && !withoutLocation ? (
-            <InlineAlert tone="error">{t("gpsUnavailable")}</InlineAlert>
-          ) : null}
+            {/* GPS error */}
+            {geoState.error && !withoutLocation ? (
+              <InlineAlert tone="error">{t("gpsUnavailable")}</InlineAlert>
+            ) : null}
 
-          {/* Selected lead preview */}
+            {selectedLead ? null : <p className="text-sm text-white/45">{t("chooseLeadHint")}</p>}
+          </div>
+        </div>
+      </div>
+
+      {hasSide ? (
+        <div className="min-w-0 space-y-4 lg:sticky lg:top-6 lg:col-start-2 lg:row-start-1 lg:row-span-2">
           {selectedLead ? (
             <>
               <div className="group relative w-full rounded-2xl border border-blue-400/25 bg-blue-500/[0.1] p-4 text-left">
@@ -676,7 +708,7 @@ export function XpotCheckIn() {
                     <span className="truncate">{t("noAddress")}</span>
                   </div>
                 )}
-                
+
                 <div className="mt-3 flex flex-col gap-2">
                   {selectedLead.phone && (
                     <a href={phoneHref(selectedLead.phone)} onClick={e => e.stopPropagation()} className="flex min-h-8 w-fit items-center gap-1.5 text-xs text-white/70 transition-colors hover:text-white">
@@ -707,68 +739,37 @@ export function XpotCheckIn() {
                 </>
                 )}
               </div>
-            </>
-          ) : null}
 
-          {/* Slider */}
-          <div className={checkInDropdownOpen ? "pointer-events-none" : ""}>
-            {(() => {
-              const startCheckIn = () => {
-                const input = { leadId: Number(selectedLeadId), lat: geoState.lat, lng: geoState.lng, gpsAccuracyMeters: geoState.accuracy };
-                if (!hasLocation) setOverridePrompt({ input, miss: null });
-                else checkInMutation.mutate(input);
-              };
-              // A mouse has no use for a slider: on a computer it is a button, shown once a company is chosen.
-              if (isDesktop) {
-                return selectedLead ? (
+              <div className={checkInDropdownOpen ? "pointer-events-none" : ""}>
+                {/* A mouse has no use for a slider: on a computer it is a button. */}
+                {isDesktop ? (
                   <Button type="button" variant="brand" size="lg" onClick={startCheckIn} loading={checkInMutation.isPending || createLeadMutation.isPending} className="w-full font-bold" data-testid="check-in-button">
                     <MapPinCheck aria-hidden="true" />{t("checkInAt", { name: selectedLead.name })}
                   </Button>
-                ) : <p className="text-sm text-white/45">{t("chooseLeadHint")}</p>;
-              }
-              return selectedLead ? (
-                <ConfirmSlider
-                  label={t("slideToCheckIn")}
-                  helperText={t("confirmVisitStart", { name: selectedLead.name })}
-                  loading={checkInMutation.isPending || createLeadMutation.isPending}
-                  disabled={!selectedLeadId || createLeadMutation.isPending}
-                  onConfirm={startCheckIn}
-                />
-              ) : <p className="text-sm text-white/45">{t("chooseLeadHint")}</p>;
-            })()}
-          </div>
+                ) : (
+                  <ConfirmSlider
+                    label={t("slideToCheckIn")}
+                    helperText={t("confirmVisitStart", { name: selectedLead.name })}
+                    loading={checkInMutation.isPending || createLeadMutation.isPending}
+                    disabled={!selectedLeadId || createLeadMutation.isPending}
+                    onConfirm={startCheckIn}
+                  />
+                )}
+              </div>
+            </>
+          ) : null}
+          {mapCard}
         </div>
-      </div>
-
-      </div>
-
-      <div className="mt-4 space-y-4 lg:sticky lg:top-6 lg:mt-0">
-      {/* Live position — with the selected lead's pin once there is one, so the
-          rep can see how far they still are from the door. */}
-      {geoState.lat != null && geoState.lng != null ? (
-        <LiveMap
-          lat={geoState.lat}
-          lng={geoState.lng}
-          accuracy={geoState.accuracy}
-          leadLat={selectedLeadLocation ? Number(selectedLeadLocation.lat) : null}
-          leadLng={selectedLeadLocation ? Number(selectedLeadLocation.lng) : null}
-          leadName={selectedLeadLocation ? selectedLead?.name : undefined}
-        />
       ) : null}
 
-      {/* Recent visits */}
-      {(() => {
-        const recent = (visitsQuery.data || []).filter((v) => v.checkedOutAt).slice(0, 5);
-        if (!recent.length) return null;
-        return (
-          <div className="space-y-2">
-            <div className={`px-1 ${EYEBROW}`}>{t("recentVisits")}</div>
-            {recent.map((visit) => <VisitRow key={visit.id} visit={visit} />)}
+      {recentVisits.length ? (
+        <div className="min-w-0 space-y-2 lg:col-start-1">
+          <div className={`px-1 ${EYEBROW}`}>{t("recentVisits")}</div>
+          <div className={`grid grid-cols-[minmax(0,1fr)] gap-2 ${hasSide ? "" : "sm:grid-cols-[repeat(2,minmax(0,1fr))]"}`}>
+            {recentVisits.map((visit) => <VisitRow key={visit.id} visit={visit} />)}
           </div>
-        );
-      })()}
-      </div>
-      </div>
+        </div>
+      ) : null}
     </div>
 
     <CheckInOverrideDialog

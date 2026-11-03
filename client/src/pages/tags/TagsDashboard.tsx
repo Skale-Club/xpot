@@ -191,8 +191,8 @@ export function TopLists({ data }: { data: TagDashboard }) {
   );
 }
 
-/** Home for a manager in a panel's work view: the whole fleet's numbers. A reseller's Home is TagsTodo; their numbers are Results. */
-export function TagsDashboard() {
+/** The numbers on Home: the viewer's own pieces, or the whole fleet's for a manager in a panel's work view. A reseller sees them under TagsTodo. */
+export function TagsDashboard({ afterTodo = false }: { afterTodo?: boolean }) {
   const t = useT(tagsMessages);
   const tc = useT(commonMessages);
   const [, navigate] = useLocation();
@@ -212,7 +212,8 @@ export function TagsDashboard() {
           {t("fleetViewing")}
         </p>
       )}
-      {data && data.chipsMissing > 0 && (() => {
+      {/* Under the To do block a chip still being set up is already its "isn't ready" row; only a live piece's missing chip is said again, in red. */}
+      {data && data.chipsMissing > 0 && (!afterTodo || data.chipsMissingLive > 0) && (() => {
         // Red only when a piece already in the customer's hands fails; one still being set up is only waiting.
         const urgent = data.chipsMissingLive > 0;
         return (
@@ -238,7 +239,7 @@ export function TagsDashboard() {
         <ErrorState message={errorText(error, tc("requestFailed"))} onRetry={() => void refetch()} />
       ) : (
         <div className="grid grid-cols-2 gap-2 lg:grid-cols-4 lg:gap-4" data-testid="tags-summary">
-          <KpiTile accent="violet" icon={Package} loading={isLoading} label={t("statWithResellers")} value={data ? formatCount(data.inStock, t.locale) : "—"} />
+          <KpiTile accent="violet" icon={Package} loading={isLoading} label={fleet ? t("statWithResellers") : t("statInStock")} value={data ? formatCount(data.inStock, t.locale) : "—"} />
           <KpiTile accent="violet" icon={Radio} loading={isLoading} label={t("statActive")} value={data ? formatCount(data.active, t.locale) : "—"} />
           <KpiTile accent="violet" icon={DollarSign} loading={isLoading} label={t("statSold30")} value={data ? formatCount(data.soldInPeriod, t.locale) : "—"} />
           <KpiTile accent="violet" icon={ScanLine} loading={isLoading} label={t("statScans30")} value={total != null ? formatCount(total, t.locale) : "—"} />

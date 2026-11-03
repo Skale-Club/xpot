@@ -265,7 +265,7 @@ export default function HomeScreen() {
 
       {isComputer && codeForm}
 
-      {/* A reseller: what is waiting for them, and the results one link away. A manager in a panel's work view: the whole fleet's numbers. */}
+      {/* A reseller: what is waiting for them, then their numbers. A manager in a panel's work view: the whole fleet's numbers. */}
       {fleet ? <TagsDashboard /> : <TagsTodo />}
       <OrdersPanel all={fleet}/>
 

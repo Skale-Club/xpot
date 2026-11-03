@@ -1,7 +1,7 @@
 import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useLocation } from "wouter";
-import { Building2, ChevronRight, ScanLine } from "lucide-react";
+import { Building2, ChevronRight, Package, Radio, ScanLine } from "lucide-react";
 import type { LeadTagSummary } from "@shared/tagsApi";
 import { useT } from "@/i18n";
 import { commonMessages } from "@/i18n/messages/common";
@@ -10,6 +10,7 @@ import { CompactDataTable, type CompactDataColumn } from "@/components/xpot/Comp
 import { FilterBar, FilterSearch } from "@/components/xpot/filters";
 import { useUrlFilters } from "@/hooks/use-url-filters";
 import { ListPager, usePagedList } from "@/components/xpot/pagination";
+import { KpiTile } from "@/components/xpot/DashboardKit";
 import { Button } from "@/components/ui/button";
 import { EmptyState, ErrorState } from "@/components/xpot/EmptyState";
 import { ListSkeleton } from "@/components/xpot/ListSkeleton";
@@ -27,9 +28,6 @@ type Customer = LeadTagSummary & {
   /** Pieces of this customer not ready to hand over (a link to set, a chip to write). */
   toFinish: number;
 };
-
-/** A search box only earns its place once the list is long enough to need one. */
-const SEARCH_FROM = 8;
 
 /** Customers who own at least one of the signed-in reseller's Tags pieces. */
 export default function CustomersScreen() {
@@ -71,6 +69,10 @@ export default function CustomersScreen() {
   const query = search.trim().toLocaleLowerCase();
   const filtered = useMemo(() => (query ? customers.filter((customer) => customer.searchText.includes(query)) : customers), [customers, query]);
   const paged = usePagedList(filtered, { resetKey: query });
+  const totals = useMemo(
+    () => customers.reduce((sum, customer) => ({ pieces: sum.pieces + customer.pieces, live: sum.live + customer.live, scans: sum.scans + customer.scansLast30 }), { pieces: 0, live: 0, scans: 0 }),
+    [customers],
+  );
   const fmt = (n: number) => formatCount(n, t.locale);
   const loading = (leadsQuery.isLoading && !leadsQuery.data) || (summariesQuery.isLoading && !summariesQuery.data);
   const error = leadsQuery.error || summariesQuery.error;
@@ -138,7 +140,7 @@ export default function CustomersScreen() {
   return (
     <section data-testid="tags-customers-screen">
       <div className="lg:hidden">
-        <TopBar title={t("customersTitle")} />
+        <TopBar title={t("customersTitle")} eyebrow={!loading ? t.plural("customersCount", customers.length) : undefined} />
       </div>
 
       {loading ? (
@@ -153,13 +155,19 @@ export default function CustomersScreen() {
         />
       ) : (
         <>
-          {(customers.length >= SEARCH_FROM || query) && (
-            <FilterBar
-              testId="customers-filters"
-              search={<FilterSearch value={search} onChange={(q) => filters.set({ q })} placeholder={t("customersSearch")} testId="input-customer-search" />}
-              summary={{ shown: filtered.length, total: customers.length, active: Boolean(query), onClear: () => filters.reset() }}
-            />
-          )}
+          <div className="grid grid-cols-2 gap-2.5 lg:grid-cols-4">
+            <KpiTile accent="violet" icon={Building2} value={fmt(customers.length)} label={t("customersTitle")} />
+            <KpiTile accent="violet" icon={Package} value={fmt(totals.pieces)} label={t("customersPieces")} />
+            <KpiTile accent="violet" icon={Radio} value={fmt(totals.live)} label={t("customersLive")} />
+            <KpiTile accent="violet" icon={ScanLine} value={fmt(totals.scans)} label={t("customersScans30")} />
+          </div>
+
+          <FilterBar
+            className="mt-4"
+            testId="customers-filters"
+            search={<FilterSearch value={search} onChange={(q) => filters.set({ q })} placeholder={t("customersSearch")} testId="input-customer-search" />}
+            summary={{ shown: filtered.length, total: customers.length, active: Boolean(query), onClear: () => filters.reset() }}
+          />
 
           {filtered.length ? (
             <div className="mt-4">

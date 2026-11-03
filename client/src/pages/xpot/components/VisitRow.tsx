@@ -4,6 +4,7 @@ import { ConfirmDialog } from "@/components/xpot/ConfirmDialog";
 import { BackLink } from "@/components/xpot/PageHeader";
 import { EYEBROW, GLASS_CLASS, GLASS_SUBTLE_CLASS } from "@/components/xpot/surface";
 import { formatDate, formatTime } from "@/lib/format";
+import { VisitNoteMarks } from "./VisitsTable";
 import { LocationExceptionBadge, LocationExceptionNotice, StatusBadge, StatusPicker } from "./VisitStatus";
 import type { VisitLocationFields, VisitStatus } from "./VisitStatus";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -12,7 +13,7 @@ import { VoiceRecorder } from "./VoiceRecorder";
 import { InlineField } from "./InlineField";
 import { displayPhone, formatCents, formatDuration, formatVisitWhen, phoneHref } from "../utils";
 import type { SalesLead, SalesVisitNote } from "../types";
-import { Building2, CalendarClock, ChevronRight, CircleCheck, Clock3, DollarSign, ExternalLink, Mic, Phone, Sparkles, Trash2 } from "lucide-react";
+import { Building2, CalendarClock, CircleCheck, Clock3, DollarSign, ExternalLink, Mic, Phone, Sparkles, Trash2 } from "lucide-react";
 import { VisitTextNote } from "./VisitTextNote";
 import { isOpenVisit } from "../visitRules";
 import { LeadCardBody } from "./LeadCardBody";
@@ -357,17 +358,24 @@ export function VisitRow({ visit, onOpen }: { visit: VisitLike; onOpen?: () => v
       onClick={openVisit}
       className={`w-full rounded-2xl p-4 text-left transition-colors hover:bg-white/[0.06] ${GLASS_CLASS}`}
     >
-      {/* The company's name is what is looked for, so it gets the room; the rest is the day, the hour and the town. */}
-      <div className="flex items-start gap-3">
-        <div className="min-w-0 flex-1">
-          <div className="line-clamp-2 text-sm font-bold text-white">{visit.lead?.name || tl("leadNumber", { id: visit.leadId })}</div>
-          <div className="mt-0.5 truncate text-[11px] tabular-nums text-white/45">
-            {[when ? `${when.date} · ${when.time}` : "—", visit.lead?.locations?.[0]?.city].filter(Boolean).join(" · ")}
+      <LeadCardBody
+        wrapName
+        lead={{
+          name: visit.lead?.name || tl("leadNumber", { id: visit.leadId }),
+          phone: visit.lead?.phone,
+          website: visit.lead?.website,
+          industry: visit.lead?.industry,
+          ghlContactId: (visit.lead as any)?.ghlContactId,
+          photos: (visit.lead as any)?.photos,
+          locations: visit.lead?.locations,
+        }}
+        subtitle={
+          <div className="text-[11px] tabular-nums text-white/40">
+            {when ? `${when.date} · ${when.time}` : "—"}
           </div>
-          <div className="mt-1.5 flex flex-wrap items-center gap-1.5"><StatusBadge status={visit.status} expiredAt={visit.expiredAt} /><LocationExceptionBadge visit={visit} /></div>
-        </div>
-        <ChevronRight className="mt-1 h-4 w-4 shrink-0 text-white/25" aria-hidden="true" />
-      </div>
+        }
+        right={<div className="flex flex-col items-end gap-1"><StatusBadge status={visit.status} expiredAt={visit.expiredAt} /><LocationExceptionBadge visit={visit} /><VisitNoteMarks visit={visit} /></div>}
+      />
     </button>
   );
 }

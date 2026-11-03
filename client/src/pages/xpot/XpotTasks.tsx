@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { CalendarClock, Check, Flag, MoreVertical, Pencil, Plus, RotateCcw, Users, X } from "lucide-react";
+import { CalendarClock, Check, Clock3, Flag, Pencil, Plus, RotateCcw, Users, X } from "lucide-react";
 import { Link, useRouter } from "wouter";
 import { FilterBar, FilterChips, FilterSearch, FilterSelect, FilterToggle } from "@/components/xpot/filters";
 import { useUrlFilters } from "@/hooks/use-url-filters";
@@ -53,25 +53,6 @@ function bucket(task: EnrichedTask): BucketKey {
   if (diff === 0) return "bucketToday";
   if (diff === 1) return "bucketTomorrow";
   return "bucketUpcoming";
-}
-
-/** The less used actions of a task (edit, cancel) behind one menu, so the card shows only what is done in the field. */
-function TaskMenu({ label, items }: { label: string; items: Array<{ key: string; label: string; icon: typeof X; run: () => void }> }) {
-  const [open, setOpen] = useState(false);
-  return (
-    <div className="relative -mr-2 -mt-2 shrink-0" onBlur={(event) => { if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setOpen(false); }}>
-      <Button type="button" variant="ghost" size="icon" onClick={() => setOpen((value) => !value)} aria-label={label} title={label} aria-expanded={open} className="text-white/40"><MoreVertical aria-hidden="true" /></Button>
-      {open ? (
-        <div role="menu" className="absolute right-0 top-full z-30 mt-1 min-w-[10rem] overflow-hidden rounded-xl border border-white/10 bg-[#0d1322] py-1 shadow-[0_16px_40px_rgba(0,0,0,0.5)]">
-          {items.map(({ key, label: itemLabel, icon: Icon, run }) => (
-            <button key={key} type="button" role="menuitem" onClick={() => { setOpen(false); run(); }} className="flex min-h-10 w-full items-center gap-2.5 px-3 text-left text-sm text-white/80 hover:bg-white/[0.06]">
-              <Icon className="h-4 w-4" aria-hidden="true" />{itemLabel}
-            </button>
-          ))}
-        </div>
-      ) : null}
-    </div>
-  );
 }
 
 export function XpotTasks() {
@@ -278,14 +259,12 @@ export function XpotTasks() {
             </div>
             {task.description && <p className="mt-2 line-clamp-2 text-sm text-white/50">{task.description}</p>}
           </div>
-          <TaskMenu
-            label={t("moreActions")}
-            items={[
-              { key: "edit", label: t("edit"), icon: Pencil, run: () => editTask(task) },
-              ...(task.status !== "completed" && task.status !== "cancelled" ? [{ key: "cancel", label: t("cancel"), icon: X, run: () => changeStatus.mutate({ id: task.id, action: "cancel" }) }] : []),
-            ]}
-          />
+          <Button type="button" variant="ghost" size="icon" onClick={() => editTask(task)} aria-label={t("edit")} title={t("edit")} className="-mr-2 -mt-2 text-white/40"><Pencil aria-hidden="true" /></Button>
         </div>
+        {task.status !== "completed" && task.status !== "cancelled" && <div className="mt-3 flex justify-end gap-2 border-t border-white/5 pt-3">
+          {task.status === "pending" && <button onClick={() => changeStatus.mutate({ id: task.id, action: "start" })} className="flex items-center gap-1 rounded-lg px-2 py-1 text-xs text-indigo-300 hover:bg-indigo-500/10" data-testid={`task-start-${task.id}`}><Clock3 className="h-3 w-3" /> {t("start")}</button>}
+          <button onClick={() => changeStatus.mutate({ id: task.id, action: "cancel" })} className="flex items-center gap-1 rounded-lg px-2 py-1 text-xs text-white/35 hover:bg-white/5"><X className="h-3 w-3" /> {t("cancel")}</button>
+        </div>}
         {(task.status === "completed" || task.status === "cancelled") && <div className="mt-3 flex justify-end border-t border-white/5 pt-3"><button onClick={() => changeStatus.mutate({ id: task.id, action: "reopen" })} className="flex items-center gap-1 rounded-lg px-2 py-1 text-xs text-indigo-300 hover:bg-indigo-500/10"><RotateCcw className="h-3 w-3" /> {t("reopen")}</button></div>}
       </article>)}</div>
     </section>)}

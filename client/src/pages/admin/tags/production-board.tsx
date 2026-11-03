@@ -28,11 +28,12 @@ import { PRODUCTION_BASE, minutesText, usePrintComputers, usePrintModels, usePri
 import { needsPrintComputer, orderedPath } from "./production-workflow";
 import { relativeTime } from "@/pages/my/format";
 
-// Tags › Production's first screen: how print production actually runs. The first thing on it is what to print now.
-//   To print        the print jobs not printed yet (and the failed ones), by what each needs: its file, the printer,
-//                   "mark printed". Failed first; a print computer line says whether the files are being made.
+// Tags › Production's first screen: how print production actually runs. The pieces to make come first (the
+// plates and stands are what the owner reaches for), then what is waiting to print.
 //   To generate     serialized pieces (Stands, Plates): a short step-by-step (colour → face → quantity) asks for new
 //                   pieces; each print job gets its own batch of fresh serials, pending in stock until it is printed.
+//   To print        the print jobs not printed yet (and the failed ones), by what each needs: its file, the printer,
+//                   "mark printed". Failed first; a print computer line says whether the files are being made.
 //   Always ready    parts with no serial (Stand bases, G tokens), one card per piece: the next step asks which version,
 //                   with a 3D view and the fixed file to download, any time.
 
@@ -63,18 +64,6 @@ export function ProductionBoard({ go, onOtherWays }: { go: Go; onOtherWays?: () 
 
   return (
     <div className="space-y-8" data-testid="production-board">
-      <section className="space-y-3" aria-labelledby="production-pending-title" data-testid="production-pending-area">
-        <div className="flex flex-wrap items-end justify-between gap-2">
-          <SectionHeading id="production-pending-title" title={b("pendingTitle")} />
-          <Button type="button" variant="ghost" size="sm" onClick={() => go(`${PRODUCTION_BASE}/queue`)}>
-            {b("allOrders")}
-            <ChevronRight />
-          </Button>
-        </div>
-        <PrintComputerLine go={go} waiting={waiting} />
-        <ToPrintList go={go} emptyHint={b("pendingEmptyHint")} />
-      </section>
-
       <section className="space-y-3" aria-labelledby="production-generate-title" data-testid="production-generate-area">
         <SectionHeading id="production-generate-title" title={b("generateTitle")} intro={b("generateIntro")} />
         {options.length ? (
@@ -86,6 +75,18 @@ export function ProductionBoard({ go, onOtherWays }: { go: Go; onOtherWays?: () 
         ) : (
           <EmptyState tone="tags" icon={Shapes} title={b("generateEmpty")} hint={t("catalogEmptyHint")} />
         )}
+      </section>
+
+      <section className="space-y-3" aria-labelledby="production-pending-title" data-testid="production-pending-area">
+        <div className="flex flex-wrap items-end justify-between gap-2">
+          <SectionHeading id="production-pending-title" title={b("pendingTitle")} />
+          <Button type="button" variant="ghost" size="sm" onClick={() => go(`${PRODUCTION_BASE}/queue`)}>
+            {b("allOrders")}
+            <ChevronRight />
+          </Button>
+        </div>
+        <PrintComputerLine go={go} waiting={waiting} />
+        <ToPrintList go={go} emptyHint={b("pendingEmptyHint")} />
       </section>
 
       {isAdmin ? <section className="space-y-3" aria-labelledby="production-ready-title" data-testid="production-ready-area">

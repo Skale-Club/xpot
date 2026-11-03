@@ -90,7 +90,7 @@ function TodayList({ blocks, loading, error, retry }: Today) {
     <ul className="divide-y divide-white/[0.06] overflow-hidden rounded-2xl border border-white/10 bg-white/[0.02]" data-testid="today-list">
       {block.rows.map((row) => <li key={row.id}>
         <Link href={row.href} className="group flex items-center gap-4 px-4 py-3.5 transition-colors hover:bg-white/[0.04]" data-testid={`today-${row.id}`}>
-          <span className={`w-12 shrink-0 text-right text-2xl font-semibold tabular-nums ${row.urgent ? "text-red-300" : "text-white"}`}>{row.count}</span>
+          <span className={`w-12 shrink-0 text-right text-2xl font-semibold tabular-nums ${row.urgent ? "text-red-300" : "text-amber-200"}`}>{row.count}</span>
           <span className="min-w-0 flex-1"><span className="block text-sm font-medium text-white">{words(row.label)}</span><span className="mt-0.5 block text-xs leading-relaxed text-white/50">{words(row.hint)}</span></span>
           <ArrowRight className="h-4 w-4 shrink-0 text-white/35 transition-transform group-hover:translate-x-1" aria-hidden="true" />
         </Link>
@@ -107,7 +107,7 @@ export function AdminHome() {
   const t = useT(workspacesMessages);
   const { data: me } = useQuery<XpotMeResponse>({ queryKey: ["/api/xpot/me"], retry: false });
   const profile = profileOfMe(me);
-  // The screen's title is the top bar's (and the phone's, in the frame): here only what the list is. The sidebar reaches the rest.
+  // The screen's title is the top bar's, and the gold bar above it says whose panel this is. The sidebar reaches the rest.
   return <div className="space-y-6" data-testid="management-home">
     <p className="max-w-2xl text-sm leading-relaxed text-white/50">{t("todayIntro")}</p>
     <OrdersPanel all/>
