@@ -35,6 +35,7 @@ export function CompactDataTable<T>({
   getRowTestId,
   isRowSelected,
   stickyHeadTop,
+  dense = false,
 }: {
   columns: readonly CompactDataColumn<T>[];
   rows: readonly T[];
@@ -56,6 +57,8 @@ export function CompactDataTable<T>({
    * never scrolls sideways by itself (a scrolling box would hold the headings back): give it columns that fit.
    */
   stickyHeadTop?: number;
+  /** Tighter cell padding, for a table with many columns. */
+  dense?: boolean;
 }) {
   function handleKeyDown(event: KeyboardEvent<HTMLTableRowElement>, row: T) {
     if (!onRowClick || event.target !== event.currentTarget) return;
@@ -76,7 +79,7 @@ export function CompactDataTable<T>({
                 scope="col"
                 style={{ ...(column.width ? { width: column.width } : null), ...(stickyHeadTop === undefined ? null : { top: stickyHeadTop }) }}
                 aria-sort={column.ariaSort}
-                className={`whitespace-nowrap px-4 py-2.5 ${stickyHeadTop === undefined ? "" : "sticky z-10 bg-[#101018]"} ${ALIGN[column.align ?? "left"]} ${column.headerClassName ?? ""}`}
+                className={`whitespace-nowrap ${dense ? "px-2.5" : "px-4"} py-2.5 ${stickyHeadTop === undefined ? "" : "sticky z-10 bg-[#101018]"} ${ALIGN[column.align ?? "left"]} ${column.headerClassName ?? ""}`}
               >
                 {column.label}
               </th>
@@ -104,7 +107,7 @@ export function CompactDataTable<T>({
                   <td
                     key={column.key}
                     style={column.width ? { width: column.width } : undefined}
-                    className={`px-4 py-3 ${ALIGN[column.align ?? "left"]} ${column.cellClassName ?? ""}`}
+                    className={`${dense ? "px-2.5" : "px-4"} py-3 ${ALIGN[column.align ?? "left"]} ${column.cellClassName ?? ""}`}
                   >
                     {column.render(row)}
                   </td>

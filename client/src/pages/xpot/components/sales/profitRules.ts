@@ -18,3 +18,19 @@ export function profitOnCostedProducts(byProduct: readonly ProductSales[]): { pr
     products: costed.length,
   };
 }
+
+/**
+ * How much of the period's sales a profit can honestly be told about: none of it (no product has a cost), only the
+ * costed products, or all of it. Only "all" lets the per-day profit and today's profit be shown, since those are
+ * summed over every product sold.
+ */
+export function profitCoverage(byProduct: readonly ProductSales[]): "none" | "partial" | "all" {
+  const { products } = profitOnCostedProducts(byProduct);
+  if (products === 0) return "none";
+  return products === byProduct.length ? "all" : "partial";
+}
+
+/** Profit as a percent of the sales it is taken from (the costed products), rounded. */
+export function marginPercent(costed: { profitCents: number; revenueCents: number }): number {
+  return costed.revenueCents > 0 ? Math.round((costed.profitCents / costed.revenueCents) * 100) : 0;
+}

@@ -317,6 +317,11 @@ function DashboardOverview() {
       title={t("yourDay")}
       icon={CalendarClock}
       bodyClassName="p-0"
+      action={(
+        <Button type="button" variant="ghost" size="sm" onClick={() => setLocation(todayRoute ? `/route?routeId=${todayRoute.id}` : "/route")} className="text-blue-300">
+          {t("viewRoute")} <ChevronRight aria-hidden="true" />
+        </Button>
+      )}
     >
       <div className="border-b border-white/[0.06] bg-gradient-to-r from-indigo-500/[0.075] via-blue-500/[0.035] to-transparent">
       <button
@@ -430,11 +435,12 @@ function DashboardOverview() {
 
   const attentionBlock = (
     <DashboardSection title={t("needsAttention")} icon={AlertTriangle} bodyClassName="p-0">
-      {sectionPending(2, salesSummary.isLoading) ?? ((metrics?.overdueTasks ?? 0) > 0 || (salesSummary.data?.consignment.dueCount ?? 0) > 0 ? (
+      {sectionPending(2, salesSummary.isLoading) ?? ((metrics?.overdueTasks ?? 0) > 0 || (salesSummary.data?.consignment.dueCount ?? 0) > 0 || (metrics?.openOpportunities ?? 0) > 0 ? (
         <AttentionList>
           {/* Late is red, as on the sales card above and TASK_TONE.overdue; amber is only "needs a step". */}
-          {(metrics?.overdueTasks ?? 0) > 0 ? <AttentionItem icon={Clock3} title={t.plural("overdueTasksTitle", metrics?.overdueTasks ?? 0)} tone="red" onClick={() => setLocation("/tasks")} /> : null}
-          {(salesSummary.data?.consignment.dueCount ?? 0) > 0 ? <AttentionItem icon={DollarSign} title={t.plural("settlementsDueTitle", salesSummary.data?.consignment.dueCount ?? 0)} tone={MONEY_DUE_TONE.overdue} onClick={() => setLocation(salesPath("consignments"))} /> : null}
+          {(metrics?.overdueTasks ?? 0) > 0 ? <AttentionItem icon={Clock3} eyebrow={t("taskOverdue")} title={t("overdueTasksTitle")} detail={t.plural("overdueTasksDetail", metrics?.overdueTasks ?? 0)} tone="red" onClick={() => setLocation("/tasks")} /> : null}
+          {(salesSummary.data?.consignment.dueCount ?? 0) > 0 ? <AttentionItem icon={DollarSign} eyebrow={t("salesOnStreet")} title={t("settlementsDueTitle")} detail={t.plural("settlementsDueDetail", salesSummary.data?.consignment.dueCount ?? 0)} tone={MONEY_DUE_TONE.overdue} onClick={() => setLocation(salesPath("consignments"))} /> : null}
+          {(metrics?.openOpportunities ?? 0) > 0 ? <AttentionItem icon={Target} eyebrow={t("metricOpportunities")} title={t("openOpportunitiesTitle")} detail={t.plural("openOpportunitiesDetail", metrics?.openOpportunities ?? 0)} tone="blue" onClick={() => setLocation(salesPath("pipeline"))} /> : null}
         </AttentionList>
       ) : (
         <EmptyState compact dense icon={Check} title={t("attentionClear")} hint={t("attentionClearHint")} cardStyle={SECTION_EMPTY} />
@@ -538,13 +544,6 @@ function DashboardOverview() {
         {tpiece("moreDetails")}
       </summary>
       {kpiGrid}
-      {(metrics?.openOpportunities ?? 0) > 0 ? (
-        <button type="button" onClick={() => setLocation(salesPath("pipeline"))} className="group flex min-h-11 w-full items-center gap-2 rounded-xl px-1 text-left text-sm font-semibold text-white/65 transition-colors hover:text-white/90" data-testid="dashboard-open-deals">
-          <Target className="h-4 w-4 shrink-0 text-blue-300" aria-hidden="true" />
-          <span className="min-w-0 flex-1 truncate">{t.plural("openDealsLink", metrics?.openOpportunities ?? 0)}</span>
-          <ChevronRight className="h-4 w-4 shrink-0 text-white/25 transition group-hover:text-white/50" aria-hidden="true" />
-        </button>
-      ) : null}
       {isDesktop ? (
         <>
           <div className="grid grid-cols-[minmax(0,1fr)_360px] items-start gap-6">

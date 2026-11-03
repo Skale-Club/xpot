@@ -25,6 +25,7 @@ const en = {
   colScans: "Scans",
   colScanned: "Scanned",
   cardScanned: "Scanned {date}",
+  cardStats: "QR {qr} · NFC {nfc} · last {last}",
   totalPieces_one: "{count} piece",
   totalPieces_other: "{count} pieces",
   emptyWhere_house: "Nothing in company stock.",
@@ -34,12 +35,6 @@ const en = {
   emptyWhere_live: "Nothing is live yet.",
   emptyWhere_notReceived: "Every piece has arrived.",
   seeAllPieces: "See all pieces",
-  modelName_Plate_Small: "Small plate",
-  modelName_Plate_Large: "Large plate",
-  modelName_Stand_Small: "Small stand",
-  modelName_Stand_Large: "Large stand",
-  modelName_Sign_Small: "Small sign",
-  modelName_Sign_Large: "Large sign",
 
   // New single piece
   pieceCreated: "Piece {code} created",
@@ -104,7 +99,6 @@ const en = {
   activateNeedsCustomer: "Choose a customer before putting it live.",
   activateNeedsType: "Choose a destination type before putting it live.",
   activateNeedsUrl: "Set a destination before putting it live.",
-  liveExplain: "Live: scanning the piece opens its destination.",
   damagedExplain: "Damaged — this physical piece is out of usable stock and retained in the batch for quality-control reporting.",
 
   // Piece screen: details
@@ -252,6 +246,7 @@ export const manageTagsPiecesMessages: Dictionary<typeof en> = {
     colScans: "Leituras",
     colScanned: "Lida em",
     cardScanned: "Lida em {date}",
+    cardStats: "QR {qr} · NFC {nfc} · última {last}",
     totalPieces_one: "{count} peça",
     totalPieces_other: "{count} peças",
     emptyWhere_house: "Nada no estoque da empresa.",
@@ -261,12 +256,6 @@ export const manageTagsPiecesMessages: Dictionary<typeof en> = {
     emptyWhere_live: "Nada no ar ainda.",
     emptyWhere_notReceived: "Todas as peças já chegaram.",
     seeAllPieces: "Ver todas as peças",
-    modelName_Plate_Small: "Placa pequena",
-    modelName_Plate_Large: "Placa grande",
-    modelName_Stand_Small: "Display pequeno",
-    modelName_Stand_Large: "Display grande",
-    modelName_Sign_Small: "Letreiro pequeno",
-    modelName_Sign_Large: "Letreiro grande",
 
     pieceCreated: "Peça {code} criada",
     pieceCreatedHint: "Ela está no estoque da empresa.",
@@ -326,7 +315,6 @@ export const manageTagsPiecesMessages: Dictionary<typeof en> = {
     activateNeedsCustomer: "Escolha um cliente antes de colocar no ar.",
     activateNeedsType: "Escolha um tipo de destino antes de colocar no ar.",
     activateNeedsUrl: "Defina um destino antes de colocar no ar.",
-    liveExplain: "No ar: quem lê a peça abre o destino dela.",
     damagedExplain: "Estragada — esta peça física saiu do estoque utilizável e ficou registrada no lote para controle de qualidade.",
 
     sameAsBatch: "Igual ao lote",
@@ -465,6 +453,7 @@ export const manageTagsPiecesMessages: Dictionary<typeof en> = {
     colScans: "Lecturas",
     colScanned: "Leída el",
     cardScanned: "Leída el {date}",
+    cardStats: "QR {qr} · NFC {nfc} · última {last}",
     totalPieces_one: "{count} pieza",
     totalPieces_other: "{count} piezas",
     emptyWhere_house: "Nada en el stock de la empresa.",
@@ -474,12 +463,6 @@ export const manageTagsPiecesMessages: Dictionary<typeof en> = {
     emptyWhere_live: "Nada activo todavía.",
     emptyWhere_notReceived: "Todas las piezas ya llegaron.",
     seeAllPieces: "Ver todas las piezas",
-    modelName_Plate_Small: "Placa pequeña",
-    modelName_Plate_Large: "Placa grande",
-    modelName_Stand_Small: "Soporte pequeño",
-    modelName_Stand_Large: "Soporte grande",
-    modelName_Sign_Small: "Letrero pequeño",
-    modelName_Sign_Large: "Letrero grande",
 
     pieceCreated: "Pieza {code} creada",
     pieceCreatedHint: "Está en el stock de la empresa.",
@@ -539,7 +522,6 @@ export const manageTagsPiecesMessages: Dictionary<typeof en> = {
     activateNeedsCustomer: "Elige un cliente antes de activarla.",
     activateNeedsType: "Elige un tipo de destino antes de activar.",
     activateNeedsUrl: "Define un destino antes de activarla.",
-    liveExplain: "Activa: al leer la pieza se abre su destino.",
     damagedExplain: "Dañada — esta pieza física salió del stock utilizable y quedó registrada en el lote para control de calidad.",
 
     sameAsBatch: "Igual que el lote",

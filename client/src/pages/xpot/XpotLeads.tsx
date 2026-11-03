@@ -30,7 +30,7 @@ import { useIsDesktop } from "@/hooks/use-is-desktop";
 import { BottomSheet } from "@/pages/tags/ui";
 import { leadPiecesPath } from "@/pages/tags/lib";
 import { useViewerAccess } from "@/lib/adminMode";
-import { CheckInAction, LeadRowFacts, LeadsTable } from "./components/leads/LeadsTable";
+import { CheckInAction, LeadRowFacts, LeadsTable, RowAction } from "./components/leads/LeadsTable";
 import { LeadDetailPane } from "./components/leads/LeadDetailPane";
 import { CreateLeadDialog } from "./components/CreateLeadDialog";
 import { useT } from "@/i18n";
@@ -75,8 +75,9 @@ function LeadPiecesChip({ lead, summary, onOpen }: { lead: FullSalesLead; summar
   );
 }
 
-function LeadCard({ lead, onOpen, onMore, pieces, onOpenPieces, lastVisit, worked, followUp, activeVisitLeadId, onCheckIn, onBackToVisit }: {
+function LeadCard({ lead, onOpen, onMore, onSell, pieces, onOpenPieces, lastVisit, worked, followUp, activeVisitLeadId, onCheckIn, onBackToVisit }: {
   lead: FullSalesLead;
+  onSell: (lead: FullSalesLead) => void;
   activeVisitLeadId: number | null;
   onCheckIn: (lead: FullSalesLead) => void;
   onBackToVisit: () => void;
@@ -125,6 +126,9 @@ function LeadCard({ lead, onOpen, onMore, pieces, onOpenPieces, lastVisit, worke
       />
       {/* What the rep does on the street: go there, then start the visit. */}
       <div className="mt-3 flex items-center gap-2 border-t border-white/[0.06] pt-3" onClick={(e) => e.stopPropagation()}>
+        <RowAction title={t("salesAndConsignment")} onClick={() => onSell(lead)} className="border border-white/10 text-emerald-300 hover:text-emerald-200">
+          <DollarSign aria-hidden="true" />
+        </RowAction>
         <CheckInAction lead={lead} activeVisitLeadId={activeVisitLeadId} onCheckIn={onCheckIn} onBackToVisit={onBackToVisit} />
         {routeUrl ? (
           <Button asChild variant="secondary" size="sm">
@@ -548,6 +552,7 @@ export function XpotLeads() {
                   lead={lead}
                   onOpen={() => openLead(lead)}
                   onMore={() => setActionLead(lead)}
+                  onSell={setSalesLead}
                   activeVisitLeadId={activeVisitLeadId}
                   onCheckIn={checkIn}
                   onBackToVisit={backToVisit}

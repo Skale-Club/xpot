@@ -49,12 +49,15 @@ export function LeadCardBody({
   subtitle,
   right,
   compact,
+  wrapName,
 }: {
   lead: LeadLike;
   subtitle?: React.ReactNode;
   right?: React.ReactNode;
   /** The list card: name, city and state, what was sold. Phone, website and the route belong to the company's own page. */
   compact?: boolean;
+  /** Let a long name take two lines instead of cutting it (a visit is looked for by its company's name). */
+  wrapName?: boolean;
 }) {
   const t = useT(salesModuleMessages);
   const tl = useT(leadsMessages);
@@ -91,7 +94,7 @@ export function LeadCardBody({
       {/* Info */}
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-2">
-          <div className="truncate text-[15px] font-semibold text-white">{lead.name}</div>
+          <div className={`${wrapName ? "line-clamp-2" : "truncate"} text-[15px] font-semibold text-white`}>{lead.name}</div>
           {lead.ghlContactId && <Pill tone="slate" className="shrink-0">GHL</Pill>}
         </div>
         <div className="mt-0.5 space-y-0.5">

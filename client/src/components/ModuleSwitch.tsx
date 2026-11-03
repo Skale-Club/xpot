@@ -24,16 +24,20 @@ export function rememberModule(module: XpotModule) {
   }
 }
 
-/** Where to land after sign-in: the last module used, if still allowed. */
-export function homeForModules(modules: XpotModule[]): string {
+/** The last module used, if still allowed; otherwise the first the person has. */
+export function homeModule(modules: XpotModule[]): XpotModule {
   let last: string | null = null;
   try {
     last = window.localStorage.getItem(LAST_MODULE_KEY);
   } catch {
     last = null;
   }
-  const preferred = modules.find((m) => m === last) ?? modules[0] ?? "visits";
-  return moduleEntryPath(preferred);
+  return modules.find((m) => m === last) ?? modules[0] ?? "visits";
+}
+
+/** Where to land after sign-in: the last module used, if still allowed. */
+export function homeForModules(modules: XpotModule[]): string {
+  return moduleEntryPath(homeModule(modules));
 }
 
 /**

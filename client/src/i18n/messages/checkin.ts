@@ -73,6 +73,7 @@ const en = {
   visitTags: "Sell a piece",
   visitTagsHint: "QR or NFC for this company",
   finishVisit: "Finish visit",
+  finishVisitHint: "Result and check-out",
   cancelVisit: "Cancel visit",
   cancelVisitTitle: "Cancel this visit?",
   cancelVisitDesc: "The visit is discarded and saved as cancelled, with no result. If it is a stop on your route, that stop is marked as skipped.",
@@ -128,7 +129,7 @@ const en = {
 
   // Live map
   mapAlt: "Your current location",
-  mapLive: "Location OK",
+  mapLive: "Live",
   openInMaps: "Open in Google Maps",
 
   // Voice recorder
@@ -274,6 +275,7 @@ export const checkinMessages: Dictionary<typeof en> = {
     visitTags: "Vender peça",
     visitTagsHint: "QR ou NFC para esta empresa",
     finishVisit: "Finalizar visita",
+    finishVisitHint: "Resultado e check-out",
     cancelVisit: "Cancelar visita",
     cancelVisitTitle: "Cancelar esta visita?",
     cancelVisitDesc: "A visita é descartada e salva como cancelada, sem resultado. Se for uma parada da sua rota, essa parada fica como pulada.",
@@ -324,7 +326,7 @@ export const checkinMessages: Dictionary<typeof en> = {
     exceptionAccuracy: "localização com precisão de cerca de {accuracy}",
 
     mapAlt: "Sua localização atual",
-    mapLive: "Localização OK",
+    mapLive: "Ao vivo",
     openInMaps: "Abrir no Google Maps",
 
     micDenied: "Acesso ao microfone negado",
@@ -461,6 +463,7 @@ export const checkinMessages: Dictionary<typeof en> = {
     visitTags: "Vender pieza",
     visitTagsHint: "QR o NFC para esta empresa",
     finishVisit: "Finalizar visita",
+    finishVisitHint: "Resultado y check-out",
     cancelVisit: "Cancelar visita",
     cancelVisitTitle: "¿Cancelar esta visita?",
     cancelVisitDesc: "La visita se descarta y se guarda como cancelada, sin resultado. Si es una parada de tu ruta, esa parada queda como omitida.",
@@ -511,7 +514,7 @@ export const checkinMessages: Dictionary<typeof en> = {
     exceptionAccuracy: "ubicación con precisión de unos {accuracy}",
 
     mapAlt: "Tu ubicación actual",
-    mapLive: "Ubicación OK",
+    mapLive: "En vivo",
     openInMaps: "Abrir en Google Maps",
 
     micDenied: "Acceso al micrófono denegado",
