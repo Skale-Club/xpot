@@ -1,10 +1,11 @@
 import { drizzle } from "drizzle-orm/node-postgres";
 import pg from "pg";
 import * as schema from "#shared/schema.js";
+import { resolveDatabaseUrl } from "./lib/database-target.js";
 
 const { Pool } = pg;
 
-const rawDatabaseUrl = process.env.DATABASE_URL || process.env.POSTGRES_URL;
+const rawDatabaseUrl = resolveDatabaseUrl();
 
 if (!rawDatabaseUrl) {
   throw new Error(

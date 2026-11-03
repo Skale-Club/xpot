@@ -13,13 +13,14 @@ import { readdirSync, readFileSync } from "fs";
 import { join, resolve } from "path";
 import pg from "pg";
 import { inferLegacySalesBaseline, type SchemaColumn } from "./migration-baseline.js";
+import { resolveDatabaseUrl } from "../server/lib/database-target.js";
 
 const { Client } = pg;
 
 /** Arbitrary constant: the advisory-lock key every Xpot migration run shares. */
 const MIGRATION_LOCK_KEY = 72_110_001;
 
-const rawUrl = process.env.DATABASE_URL || process.env.POSTGRES_URL;
+const rawUrl = resolveDatabaseUrl();
 if (!rawUrl) {
   console.error("DATABASE_URL or POSTGRES_URL must be set");
   process.exit(1);
@@ -38,6 +39,19 @@ async function main() {
     ssl: useSsl ? { rejectUnauthorized: false } : false,
   });
   await client.connect();
+  // An inspection must never create the ledger, acquire the migration lock or
+  // execute migration SQL. This is safe against a shared development schema.
+  if (process.argv.includes("--plan")) {
+    try {
+      await client.query("BEGIN READ ONLY");
+      const ledger = (await client.query("SELECT to_regclass('public._xpot_migrations') AS ledger")).rows[0].ledger;
+      const applied = new Set<string>(ledger ? (await client.query<{ name: string }>("SELECT name FROM _xpot_migrations")).rows.map(row => row.name) : []);
+      const files = readdirSync(MIGRATIONS_DIR).filter(file => file.endsWith(".sql")).sort();
+      console.log(JSON.stringify({ mode: "read-only-plan", applied: applied.size, pending: files.filter(file => !applied.has(file)) }, null, 2));
+      await client.query("COMMIT");
+    } finally { await client.end(); }
+    return;
+  }
   try {
     await client.query("SELECT pg_advisory_lock($1)", [MIGRATION_LOCK_KEY]);
     await client.query(`

@@ -1,3 +1,4 @@
+import "dotenv/config";
 import { spawn } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
@@ -32,6 +33,9 @@ async function runNpmScript(npmCli: string, script: string): Promise<number | nu
 
 /** Best effort: a failed pull never stops the app from opening, it just keeps the data it has. */
 async function pullProductionData(npmCli: string) {
+  // Opening localhost should preserve development edits and avoid copying live
+  // customer data. Snapshot refresh is a separate, explicit opt-in operation.
+  if (process.env.XPOT_REFRESH_DEV_SNAPSHOT !== "true") return;
   if (Date.now() - lastPullAt() < PULL_EVERY_MS) return;
   console.log("[local] Refreshing local data from production (npm run db:pull) ...");
   const code = await runNpmScript(npmCli, "db:pull");
@@ -93,8 +97,8 @@ async function main() {
   // The pull copies only tables shared by local and production. Bring the
   // local schema fully up to date first so a fresh/legacy database cannot
   // silently omit newer data such as branding, Tags or landing content.
-  console.log("[local] Ensuring the local database schema is current (npm run migrate) ...");
-  const migrationCode = await runNpmScript(npmCli, "migrate");
+  console.log("[local] Ensuring the development database schema is current (npm run migrate:dev) ...");
+  const migrationCode = await runNpmScript(npmCli, "migrate:dev");
   if (migrationCode !== 0) throw new Error("Local database migration failed; production data was not copied.");
 
   await pullProductionData(npmCli);
@@ -103,7 +107,7 @@ async function main() {
     cwd: projectRoot,
     env: process.env,
     stdio: "inherit",
-    windowsHide: false,
+    windowsHide: true,
   });
 
   const stopServer = () => {

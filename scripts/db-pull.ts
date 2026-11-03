@@ -1,5 +1,5 @@
 // npm run db:pull — refresh the local database with a copy of production.
-// `npm run local` runs it on its own when the last pull is over 6 hours old.
+// `npm run local` refreshes stale snapshots only with XPOT_REFRESH_DEV_SNAPSHOT=true.
 //
 // 1. Over SSH, find the xpot-db container's address and credentials. They stay
 //    in memory; the database is never exposed to the internet.
@@ -21,10 +21,11 @@ import { createConnection } from "net";
 import { join, resolve } from "path";
 import pg from "pg";
 import { isXpotDataTable, missingRequiredColumns, type DatabaseColumn } from "./db-pull-schema.js";
+import { resolveDatabaseUrl } from "../server/lib/database-target.js";
 
 const PROD_SSH = process.env.XPOT_PROD_SSH;
 const PROD_CONTAINER = process.env.XPOT_PROD_DB_CONTAINER || "7l8mjbkk16mk0ss9dviw9lzj";
-const LOCAL_URL = process.env.DATABASE_URL || process.env.POSTGRES_URL;
+const LOCAL_URL = resolveDatabaseUrl({ ...process.env, NODE_ENV: "development" });
 const TUNNEL_PORT = 55432;
 const BACKUP_DIR = resolve(process.cwd(), "..", "xpot-db-backups");
 /** When the last pull succeeded; `npm run local` reads it to pull at most every few hours. */
@@ -268,7 +269,7 @@ async function main() {
     await prod.query("COMMIT");
     mkdirSync(resolve(PULL_STAMP, ".."), { recursive: true });
     writeFileSync(PULL_STAMP, JSON.stringify({ pulledAt: new Date().toISOString() }));
-    console.log("✓ done: localhost now shows production data (a snapshot; npm run local refreshes it every 6 hours)");
+    console.log("✓ done: the Supabase development database now contains the snapshot; local startup refreshes it only when explicitly enabled");
   } finally {
     await prod.end().catch(() => undefined);
     await local.end().catch(() => undefined);

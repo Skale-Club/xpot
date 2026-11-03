@@ -28,8 +28,9 @@ export function log(message: string, source = "express") {
  */
 export function assertRequiredEnv(env: NodeJS.ProcessEnv = process.env): void {
   const required = ["SESSION_SECRET", "SUPABASE_URL", "SUPABASE_ANON_KEY", "SUPABASE_SERVICE_ROLE_KEY"];
-  if (!env.DATABASE_URL && !env.POSTGRES_URL) required.unshift("DATABASE_URL (or POSTGRES_URL)");
-  const missing = required.filter((name) => name.startsWith("DATABASE_URL") || !env[name]);
+  const hasDatabase = env.NODE_ENV === "development" ? !!env.DEV_DATABASE_URL : !!(env.DATABASE_URL || env.POSTGRES_URL);
+  if (!hasDatabase) required.unshift(env.NODE_ENV === "development" ? "DEV_DATABASE_URL" : "DATABASE_URL (or POSTGRES_URL)");
+  const missing = required.filter((name) => name === "DATABASE_URL (or POSTGRES_URL)" || !env[name]);
   if (missing.length) {
     throw new Error(`Missing required environment: ${missing.join(", ")}`);
   }
