@@ -98,8 +98,8 @@ function ProductCard({ product, currency }: { product: TagShopProduct; currency:
           </div>
           {quantity > 1 && (
             <div className="rounded-xl border border-white/10 bg-black/20 px-3 py-2" data-testid="shop-total">
-              <p className="flex items-baseline justify-between gap-2 text-sm">
-                <span className="text-white/60">{t("shopTotalFor", { count: totals.quantity })}</span>
+              <p className="flex flex-wrap items-baseline justify-between gap-x-2 text-sm">
+                <span className="whitespace-nowrap text-white/60">{t("shopTotalFor", { count: totals.quantity })}</span>
                 <span className="flex items-baseline gap-2">
                   {totals.retailCents !== null && <span className="text-xs text-white/40 line-through">{formatMoney(totals.retailCents, currency)}</span>}
                   <span className="font-bold text-white">{formatMoney(totals.wholesaleCents, currency)}</span>
