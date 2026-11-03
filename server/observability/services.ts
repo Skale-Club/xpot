@@ -194,7 +194,7 @@ export function infraFromEnv(env: Env = process.env): ServicesInput["infra"] {
   const has = (...names: string[]) => names.every((name) => Boolean(env[name]?.trim()));
   return {
     r2: isR2Configured(),
-    supabase: has("SUPABASE_URL", "SUPABASE_SERVICE_ROLE_KEY"),
+    supabase: env.NODE_ENV !== "production" && has("SUPABASE_URL", "SUPABASE_SERVICE_ROLE_KEY"),
     engine: isEngineConfigured(),
     routeOptimization: isGoogleRouteOptimizationConfigured(),
     push: has("VAPID_PUBLIC_KEY", "VAPID_PRIVATE_KEY"),

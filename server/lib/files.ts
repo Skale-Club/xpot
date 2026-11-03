@@ -130,8 +130,8 @@ export function parseAudioDataUrl(data: string): { buffer: Buffer; contentType: 
 
 // ─── Backends ────────────────────────────────────────────────────────────────
 
-function r2Config() {
-  const { R2_ACCOUNT_ID, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY, R2_BUCKET, R2_ENDPOINT } = process.env;
+function r2Config(env: NodeJS.ProcessEnv = process.env) {
+  const { R2_ACCOUNT_ID, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY, R2_BUCKET, R2_ENDPOINT } = env;
   if (!R2_ACCESS_KEY_ID || !R2_SECRET_ACCESS_KEY || !R2_BUCKET || !(R2_ACCOUNT_ID || R2_ENDPOINT)) return null;
   const endpoint = (R2_ENDPOINT || `https://${R2_ACCOUNT_ID}.r2.cloudflarestorage.com`).replace(/\/+$/, "");
   return { accessKeyId: R2_ACCESS_KEY_ID, secretAccessKey: R2_SECRET_ACCESS_KEY, bucket: R2_BUCKET, endpoint };
@@ -142,7 +142,7 @@ export function isR2Configured(): boolean {
 }
 
 function isSupabaseConfigured(): boolean {
-  return Boolean(process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY);
+  return process.env.NODE_ENV !== "production" && Boolean(process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY);
 }
 
 const xmlDecode = (s: string) =>
@@ -269,11 +269,11 @@ export function publicStore(): FileStore | null {
 const PUBLIC_KEY_PATTERN = /^(?:avatars\/\d+|branding)\/[A-Za-z0-9_-][A-Za-z0-9._-]*\.(?:png|jpe?g|webp|svg|ico|gif|avif)$/i;
 
 /** Public assets must never expose the private photo/audio bucket. */
-function publicR2Config() {
-  const bucket = process.env.R2_PUBLIC_BUCKET;
-  const base = process.env.R2_PUBLIC_BASE_URL;
+function publicR2Config(env: NodeJS.ProcessEnv = process.env) {
+  const bucket = env.R2_PUBLIC_BUCKET;
+  const base = env.R2_PUBLIC_BASE_URL;
   if (!bucket && !base) return null;
-  const config = r2Config();
+  const config = r2Config(env);
   if (!bucket || !base || !config || bucket === config.bucket) {
     throw new Error("Public R2 assets require a separate R2_PUBLIC_BUCKET, R2_PUBLIC_BASE_URL and complete R2 credentials.");
   }
@@ -284,6 +284,14 @@ function publicR2Config() {
     throw new Error("R2_PUBLIC_BASE_URL must be an HTTPS URL without credentials, query or fragment.");
   }
   return { ...config, bucket, baseUrl: url.toString().replace(/\/+$/, "") };
+}
+
+/** Production cannot boot with a hidden managed-storage fallback. */
+export function assertProductionFileStores(env: NodeJS.ProcessEnv = process.env): void {
+  if (env.NODE_ENV !== "production") return;
+  if (!r2Config(env) || !publicR2Config(env)) {
+    throw new Error("Production requires private R2 storage and a separate public R2 bucket/domain.");
+  }
 }
 
 export function publicR2Store(): FileStore | null {

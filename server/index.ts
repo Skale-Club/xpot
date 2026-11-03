@@ -15,7 +15,7 @@ const PORT = Number(process.env.PORT) || 2110;
 
 (async () => {
   // Ensure Supabase Storage bucket exists before accepting requests.
-  if (process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY) {
+  if (process.env.NODE_ENV !== "production" && process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY) {
     await ensureUploadBucket();
   }
 
