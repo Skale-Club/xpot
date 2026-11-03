@@ -462,7 +462,15 @@ export function PhoneSignIn({ onSignedIn }: { onSignedIn: () => void | Promise<u
         </Button>
         {config?.provider === 'google' && <>
           <div className="flex items-center gap-3 text-xs text-white/45"><span className="h-px flex-1 bg-white/15" />{t('or')}<span className="h-px flex-1 bg-white/15" /></div>
-          <Button type="button" variant="outline" size="lg" className="w-full" disabled={busy} onClick={() => void google()}>{t('continueGoogle')}</Button>
+          <Button type="button" variant="outline" size="lg" className="w-full" disabled={busy} onClick={() => void google()}>
+            <svg aria-hidden="true" focusable="false" viewBox="0 0 24 24" className="h-5 w-5 shrink-0">
+              <path fill="#4285F4" d="M22.56 12.25c0-.73-.06-1.42-.19-2.09H12v3.96h5.92c-.26 1.28-1.02 2.37-2.15 3.1v2.58h3.48c2.04-1.88 3.21-4.65 3.21-7.55Z" />
+              <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.48-2.58c-.98.66-2.24 1.06-3.8 1.06-2.87 0-5.3-1.94-6.17-4.54H2.23v2.66C4.04 20.53 7.73 23 12 23Z" />
+              <path fill="#FBBC05" d="M5.83 14.28A6.6 6.6 0 0 1 5.48 12c0-.79.14-1.55.35-2.28V7.06H2.23A10.94 10.94 0 0 0 1 12c0 1.78.43 3.45 1.23 4.94l3.6-2.66Z" />
+              <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.65l3.15-3.15C17.45 2.09 14.97 1 12 1 7.73 1 4.04 3.47 2.23 7.06l3.6 2.66C6.7 7.12 9.13 5.38 12 5.38Z" />
+            </svg>
+            {t('continueGoogle')}
+          </Button>
         </>}
       </form>
   );
