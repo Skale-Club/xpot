@@ -2,19 +2,11 @@ import { queryClient } from "@/lib/queryClient";
 import { clearModuleRoutes, forgetSignedIn } from "@/lib/xpot";
 import { clearAdminMode } from "@/lib/adminMode";
 
-/** Ends the Supabase and server sessions, drops cached data and this device's management mode, and goes to "/". */
+/** Ends the application and Google sessions and drops per-user cached data. */
 export async function signOut(navigate: (path: string) => void) {
-  try {
-    const { initSupabase } = await import("@/lib/supabase");
-    const supabase = await initSupabase();
-    await supabase.auth.signOut();
-  } catch (err) {
-    console.error("Failed to sign out of Supabase:", err);
-  }
-  await fetch("/api/auth/logout", { method: "POST", credentials: "include" });
-  queryClient.clear();
-  clearModuleRoutes();
-  forgetSignedIn();
-  clearAdminMode();
-  navigate("/");
+  const response = await fetch('/api/auth/logout', { method: 'POST', credentials: 'include' });
+  if (!response.ok) throw new Error('Could not end your session. Please try again.');
+  try { await (await import('@/lib/googleIdentity')).signOutGoogleIdentity(); }
+  catch { console.warn('Google session cleanup could not finish'); }
+  queryClient.clear(); clearModuleRoutes(); forgetSignedIn(); clearAdminMode(); navigate('/');
 }

@@ -4,6 +4,10 @@ import type { Dictionary } from "../index";
 
 const en = {
   title: "Sign in to Xpot",
+  or: 'or',
+  continueGoogle: 'Continue with Google',
+  googleNeedsPhone: 'Confirm your phone once to connect Google to your Xpot account.',
+
   country: "Country",
   phoneLabel: "Phone number",
   phonePlaceholder: "(508) 555-0100",
@@ -68,6 +72,7 @@ export const signinMessages: Dictionary<typeof en> = {
   en,
   pt: {
     title: "Entrar no Xpot",
+    or: 'ou', continueGoogle: 'Continuar com Google', googleNeedsPhone: 'Confirme seu telefone uma vez para conectar o Google à sua conta Xpot.',
     country: "País",
     phoneLabel: "Número de celular",
     phonePlaceholder: "(508) 555-0100",
@@ -129,6 +134,7 @@ export const signinMessages: Dictionary<typeof en> = {
   },
   es: {
     title: "Entrar a Xpot",
+    or: 'o', continueGoogle: 'Continuar con Google', googleNeedsPhone: 'Confirma tu teléfono una vez para conectar Google a tu cuenta Xpot.',
     country: "País",
     phoneLabel: "Número de celular",
     phonePlaceholder: "(508) 555-0100",

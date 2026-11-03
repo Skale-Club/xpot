@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
 import { useLocation } from "wouter";
-import { initSupabase } from "@/lib/supabase";
 import { queryClient } from "@/lib/queryClient";
 import { consumePostLoginRedirect, getXpotHomePath, rememberPostLoginRedirect, signInPath } from "@/lib/xpot";
 import { Loader2 } from "@/components/ui/loader";
@@ -11,16 +10,8 @@ import { translate, useT } from "@/i18n";
 import { landingMessages } from "@/i18n/messages/landing";
 import type { XpotMeResponse } from "./xpot/types";
 
-// /login is a thin OAuth callback handler. The actual sign-in UI lives in the
-// landing page dialog (XpotLandingPage). This page:
-//   1. Surfaces OAuth errors (?error= from Supabase when user cancels Google),
-//      bounces the user back to the landing.
-//   2. Detects the Supabase session from the URL (?code= in PKCE flow),
-//      exchanges it for an Express session via /api/auth/login, then redirects
-//      to /dashboard.
-//   3. If the user already has an Express session, just redirects to /dashboard.
-//   4. If nothing matches (someone who just typed /login), opens the landing
-//      with the sign-in dialog already open; ?next= is kept for after it.
+// Restores an existing application session, or opens passwordless sign-in.
+// Google and phone credentials are checked by Identity Platform in the dialog.
 
 async function getCurrentUser() {
   const response = await fetch("/api/auth/user", { credentials: "include" });
@@ -134,45 +125,7 @@ export default function Login() {
         return;
       }
 
-      // 3. Try to exchange an OAuth session from the URL (PKCE: ?code=…).
-      try {
-        const configResponse = await fetch("/api/supabase-config");
-        const config = await configResponse.json();
-        const hasSupabase = Boolean(config.url && config.anonKey);
-        if (!hasSupabase) {
-          if (mounted) goLanding(translate(landingMessages, "authNotConfigured"));
-          return;
-        }
-
-        const supabase = await initSupabase();
-        const { data } = await supabase.auth.getSession();
-        const accessToken = data.session?.access_token;
-
-        if (!accessToken) {
-          // No callback in flight, no session — go back to landing.
-          if (mounted) goLanding();
-          return;
-        }
-
-        const loginResponse = await fetch("/api/auth/login", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          credentials: "include",
-          body: JSON.stringify({ accessToken }),
-        });
-
-        if (!mounted) return;
-
-        if (!loginResponse.ok) {
-          const result = await loginResponse.json().catch(() => ({}));
-          goLanding(result.message || translate(landingMessages, "signInFailed"));
-          return;
-        }
-
-        await goDashboard();
-      } catch (err: any) {
-        if (mounted) goLanding(err?.message || translate(landingMessages, "signInFailed"));
-      }
+      if (mounted) goLanding();
     }
 
     void run();
