@@ -20,6 +20,15 @@ class ServiceMarkTests(unittest.TestCase):
                 self.assertGreater(coverage, 0.1)
                 self.assertLess(coverage, 0.75, 'Icon must not become a solid background rectangle')
 
+    @unittest.skipUnless(all(find_spec(package) for package in ('shapely', 'fitz', 'matplotlib', 'segno')), 'Optional geometry runtime is not installed')
+    def test_menu_styles_load_the_shared_font_catalog(self):
+        from builders.service import layout, STYLES
+        for style in STYLES:
+            with self.subTest(style=style):
+                art = layout('menu', 'plate', 'small', 'A7K3P9X2', 'white', style)
+                self.assertFalse(art['ink'].is_empty)
+                self.assertTrue(art['ink'].is_valid)
+
 
 if __name__ == '__main__':
     unittest.main()

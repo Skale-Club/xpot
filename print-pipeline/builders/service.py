@@ -109,9 +109,9 @@ def layout(face, product, size, code, theme='white', style='classic'):
     title_top = margin + tap_h + (4 if size == 'small' else 6)
     title_bottom = qr_y - border - (8 if size == 'small' else 10)
     if face == 'menu':
-        from face_composition_tile import MENU_FONTS_STUDY, _font
+        from face_composition_tile import MENU_FONTS, _font
         from matplotlib.textpath import TextPath
-        fontfile, upper, tracking = MENU_FONTS_STUDY[STYLES[style]]
+        fontfile, upper, tracking = MENU_FONTS[STYLES[style]]
         prop = _font(fontfile)
         ref = TextPath((0, 0), 'H', size=100, prop=prop).get_extents().height
         rings, pen = [], 0.
