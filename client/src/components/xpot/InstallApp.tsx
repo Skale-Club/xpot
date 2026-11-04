@@ -8,9 +8,8 @@ import { shellMessages } from "@/i18n/messages/shell";
 import { GradientTopLine } from "@/components/xpot/GradientTopLine";
 
 // "Install app", offered where the rep goes looking (the Settings header on a
-// phone, the sidebar footer, Settings › Sign-in on desktop) and nowhere else:
-// no banner, no pop-up on load. Renders nothing when the app is already
-// installed or the browser can't install it.
+// phone, its top bar on desktop) and nowhere else: no banner, no pop-up on load.
+// Renders nothing when the app is already installed or the browser can't install it.
 
 /**
  * Where Share lives: Safari's bottom bar on iPhone (behind ••• in the compact
@@ -93,30 +92,6 @@ function useInstallAction() {
   };
   const dialog = mode === "prompt" ? null : <InstructionsDialog mode={mode} open={open} onOpenChange={setOpen} />;
   return { onClick, dialog };
-}
-
-/** Sidebar footer item, styled like its neighbours. */
-export function InstallAppSidebarItem({ collapsed }: { collapsed: boolean }) {
-  const t = useT(shellMessages);
-  const action = useInstallAction();
-  if (!action) return null;
-  return (
-    <>
-      <button
-        type="button"
-        onClick={action.onClick}
-        title={collapsed ? t("installApp") : undefined}
-        className={`flex h-10 w-full items-center gap-3 rounded-xl text-sm font-medium text-white/50 transition-colors hover:bg-white/[0.04] hover:text-white/85 ${
-          collapsed ? "justify-center px-0" : "px-3"
-        }`}
-        data-testid="sidebar-install-app"
-      >
-        <Download className="h-[18px] w-[18px] shrink-0" />
-        {!collapsed && <span className="truncate">{t("installApp")}</span>}
-      </button>
-      {action.dialog}
-    </>
-  );
 }
 
 /**

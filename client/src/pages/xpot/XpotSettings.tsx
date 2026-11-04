@@ -508,7 +508,7 @@ export function XpotSettings() {
   if (isDesktop) {
     const open = openSection ?? "profile";
     return (
-      <AppLayout title={t("title")} size="wide">
+      <AppLayout title={t("title")} size="wide" topBarActions={<InstallAppHeaderButton />}>
         <div className="mx-auto grid w-full max-w-4xl grid-cols-[13rem_minmax(0,1fr)] items-start gap-8">
           <nav aria-label={t("title")} className="sticky top-24 space-y-6" data-testid="settings-menu">
             {menu.map((group) => (

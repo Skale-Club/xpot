@@ -58,7 +58,6 @@ import { TagsTabBar } from "@/pages/tags/TagsTabBar";
 import { PANEL_ACCENT, PANEL_ICON, SidebarPanelRows, type Accent } from "./panelSwitch";
 import { panelHome, panelOfPath, panelsOf, type Panel } from "./panels";
 import { SignOutConfirm } from "./SignOutConfirm";
-import { InstallAppSidebarItem } from "./InstallApp";
 import { UserGreeting } from "./UserGreeting";
 import { useAvatarUpload } from "./useAvatarUpload";
 import { ScreenErrorBoundary } from "./ScreenErrorBoundary";
@@ -413,7 +412,6 @@ function DesktopSidebar({ collapsed, onToggle, pending }: { collapsed: boolean; 
         {panel && !collapsed ? <p className="truncate px-3 pb-2 text-xs text-white/35">{name}</p> : null}
         {/* Going to another panel is changing page: down here, never as tabs above the menu. */}
         <SidebarPanelRows collapsed={collapsed} />
-        {!panel && <InstallAppSidebarItem collapsed={collapsed} />}
         {!panel ? <SidebarLink item={{ href: "/settings", label: t("navSettings"), icon: Settings, match: starts("/settings") }} collapsed={collapsed} active={starts("/settings")(location)} accent={MODULE_ACCENT.visits} /> : null}
         <button
           type="button"
