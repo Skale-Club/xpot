@@ -12,7 +12,7 @@ import type { Panel } from "./panels";
 
 // The panel's bottom bar on a phone, in the panel's colour: its first screens;
 // "More" opens the rest of the menu, grouped as in the sidebar, and the way to
-// the person's other panels (the phone has no sidebar selector).
+// the person's other panels (the phone has no sidebar).
 
 const MORE = "__more";
 

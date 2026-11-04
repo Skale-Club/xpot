@@ -12,7 +12,6 @@ import {
   PanelLeftOpen,
   Search,
   Settings,
-  ShieldCheck,
   type LucideIcon,
 } from "lucide-react";
 import type { XpotModule } from "@shared/modules";
@@ -56,7 +55,7 @@ import { useCompanyGroups } from "./companyNav";
 import { ShellHeader } from "./ShellHeader";
 import { VisitsTabBar } from "./VisitsTabBar";
 import { TagsTabBar } from "@/pages/tags/TagsTabBar";
-import { PANEL_ACCENT, SidebarPanelSelector, type Accent } from "./panelSwitch";
+import { PANEL_ACCENT, PANEL_ICON, SidebarPanelRows, type Accent } from "./panelSwitch";
 import { panelHome, panelOfPath, panelsOf, type Panel } from "./panels";
 import { SignOutConfirm } from "./SignOutConfirm";
 import { InstallAppSidebarItem } from "./InstallApp";
@@ -75,7 +74,7 @@ import { usePageScroll } from "@/hooks/use-page-scroll";
 // sidebar and a top bar take over, and those mobile pieces are hidden. Three
 // panels, told apart by colour: Visits (the modules), Production and Admin (the
 // management surface, with its amber bar at the top); the way between them is the
-// selector at the top of the sidebar, and on a phone a round button per panel on
+// rows at the foot of the sidebar, and on a phone a round button per panel on
 // the header (ShellHeader) and the amber bar. An owner has no panel: their team's
 // screens are the Company group of Visits and Tags, in that module's chrome.
 
@@ -334,7 +333,7 @@ function DesktopSidebar({ collapsed, onToggle, pending }: { collapsed: boolean; 
     : "";
   const initials = name.split(" ").map((n) => n[0]).slice(0, 2).join("").toUpperCase();
   const firstName = name.split(" ")[0] ?? "";
-  const several = panelsOf(profile, modules).length > 1;
+  const PanelIcon = PANEL_ICON[currentPanel];
 
   return (
     <aside
@@ -394,9 +393,7 @@ function DesktopSidebar({ collapsed, onToggle, pending }: { collapsed: boolean; 
       </div> : null}
 
       <div className="space-y-2 px-3 pb-3">
-        {/* Someone with several panels picks one here; the active tab names the panel, so no second heading. */}
-        <SidebarPanelSelector collapsed={collapsed} />
-        {panel ? (several ? null : <div className={`flex min-h-20 items-center gap-3 border-b border-amber-200/10 pb-4 text-amber-100 ${collapsed ? "justify-center" : "px-2"}`} title={panelName}><span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-amber-300/25 bg-amber-300/10"><ShieldCheck className="h-5 w-5" /></span>{!collapsed && <span className="text-base font-semibold leading-snug">{panelName}</span>}</div>) : <SidebarModuleSwitch collapsed={collapsed} module={module} modules={modules} label={moduleLabel} />}
+        {panel ? <div className={`flex min-h-20 items-center gap-3 border-b border-white/10 pb-4 text-white ${collapsed ? "justify-center" : "px-2"}`} title={panelName}><span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-white/10" style={{ background: accent.soft }}><PanelIcon className={`h-5 w-5 ${accent.text}`} /></span>{!collapsed && <span className="text-base font-semibold leading-snug">{panelName}</span>}</div> : <SidebarModuleSwitch collapsed={collapsed} module={module} modules={modules} label={moduleLabel} />}
         {module === "visits" && !panel && !pending ? <PersistentRouteProgress collapsed={collapsed} className={collapsed ? "mt-2" : "mt-2.5"} /> : null}
       </div>
 
@@ -414,6 +411,8 @@ function DesktopSidebar({ collapsed, onToggle, pending }: { collapsed: boolean; 
 
       <div className="space-y-1 border-t border-white/[0.07] px-3 py-3">
         {panel && !collapsed ? <p className="truncate px-3 pb-2 text-xs text-white/35">{name}</p> : null}
+        {/* Going to another panel is changing page: down here, never as tabs above the menu. */}
+        <SidebarPanelRows collapsed={collapsed} />
         {!panel && <InstallAppSidebarItem collapsed={collapsed} />}
         {!panel ? <SidebarLink item={{ href: "/settings", label: t("navSettings"), icon: Settings, match: starts("/settings") }} collapsed={collapsed} active={starts("/settings")(location)} accent={MODULE_ACCENT.visits} /> : null}
         <button

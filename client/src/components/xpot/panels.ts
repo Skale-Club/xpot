@@ -8,7 +8,7 @@ import type { XpotModule } from "@shared/modules";
 
 export type Panel = "admin" | "production" | "visits";
 
-/** The panels a person has, in the order the selector lists them: the default app first. */
+/** The panels a person has, in the order the shell lists them: the default app first. */
 export function panelsOf(profile: Profile | null | undefined, modules: readonly XpotModule[]): Panel[] {
   if (!profile) return [];
   const panels: Panel[] = [];
