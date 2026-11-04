@@ -1,5 +1,5 @@
 import type { CSSProperties, ReactNode } from "react";
-import { CalendarCheck, Contact, DollarSign, Facebook, Globe, Instagram, Linkedin, Mail, Phone, Sparkles, Tag, UtensilsCrossed, Wifi, Youtube } from "lucide-react";
+import { CalendarCheck, Contact, DollarSign, Facebook, Globe, Instagram, Linkedin, Mail, Phone, Sparkles, Tag, Utensils, Wifi, Youtube } from "lucide-react";
 import { isTagFace, type TagFace } from "@shared/tagFace";
 import { useT } from "@/i18n";
 import { tagsMessages } from "@/i18n/messages/tags";
@@ -50,7 +50,7 @@ const TILES: Record<TagFace, Tile> = {
   website: { background: "#2563eb", color: "#fff", glyph: (c) => <Globe className={c} /> },
   phone: { background: "#16a34a", color: "#fff", glyph: (c) => <Phone className={c} /> },
   email: { background: "#f59e0b", color: "#fff", glyph: (c) => <Mail className={c} /> },
-  menu: { background: "#ea580c", color: "#fff", glyph: (c) => <UtensilsCrossed className={c} /> },
+  menu: { background: "#ea580c", color: "#fff", glyph: (c) => <Utensils className={c} /> },
   booking: { background: "#0d9488", color: "#fff", glyph: (c) => <CalendarCheck className={c} /> },
   vcard: { background: "#7c3aed", color: "#fff", glyph: (c) => <Contact className={c} /> },
   venmo: { background: "#008CFF", color: "#fff", glyph: (c) => <VenmoGlyph className={c} /> },
