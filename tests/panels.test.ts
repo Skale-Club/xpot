@@ -2,6 +2,7 @@
 // panels each profile has, which panel a path belongs to, and where a panel starts. The shell reads this one table, so a
 // wrong answer puts a screen under the wrong menu or hides a panel from someone who has it.
 
+import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { panelHome, panelOfPath, panelsOf, type Panel } from "../client/src/components/xpot/panels";
 import type { Profile } from "../shared/profiles";
@@ -133,5 +134,21 @@ describe("panelHome", () => {
     expect(panelOfPath(panelHome("production", "platform"), "platform")).toBe("production");
     expect(panelOfPath(panelHome("production", "partner"), "partner")).toBe("production");
     expect(panelOfPath(panelHome("visits", "partner"), "partner")).toBe("visits");
+  });
+});
+
+// The app is the visits platform; going to Production or Admin is changing page, chosen at the foot of the sidebar. Tabs
+// above the menu were rejected by the owner twice. (The tests run without JSX, so this reads the source.)
+describe("the way between panels on desktop", () => {
+  const layout = readFileSync("client/src/components/xpot/AppLayout.tsx", "utf8");
+
+  it("sits at the foot of the sidebar, after the menu and above Install app", () => {
+    const rows = layout.indexOf("<SidebarPanelRows");
+    expect(rows).toBeGreaterThan(layout.indexOf("</ScrollingNav>"));
+    expect(rows).toBeLessThan(layout.indexOf("<InstallAppSidebarItem"));
+  });
+
+  it("is rendered once, so nothing above the menu competes with Visits | Tags", () => {
+    expect(layout.match(/<SidebarPanelRows/g)).toHaveLength(1);
   });
 });

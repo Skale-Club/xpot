@@ -12,8 +12,10 @@ import { usePanelNames } from "./panelNames";
 import { panelOfPath, panelsOf, type Panel } from "./panels";
 import { MODULE_ACCENT } from "./surface";
 
-// The way between the person's panels (components/xpot/panels.ts): a selector at the top of the desktop sidebar, and on a
-// phone, which has no sidebar, a button per other panel in the shell header (Visits) and the amber bar (the others).
+// The way between the person's panels (components/xpot/panels.ts). The app is the visits platform; going to Production or
+// Admin is a choice to change page, so it sits at the foot of the desktop sidebar, never as tabs at its top (those belong
+// to Visits | Tags). A phone, which has no sidebar, has a button per other panel in the shell header (Visits) and the
+// amber bar (the others).
 
 export type Accent = { solid: string; soft: string; strong: string; text: string };
 /** Admin and the management surface are amber; Production wears the Tags violet and Visits its blue (components/xpot/surface.ts). */
@@ -21,7 +23,7 @@ export const MANAGEMENT_ACCENT: Accent = { solid: "#fbbf24", soft: "rgba(251,191
 export const PANEL_ACCENT: Record<Panel, Accent> = { admin: MANAGEMENT_ACCENT, production: MODULE_ACCENT.tags, visits: MODULE_ACCENT.visits };
 export const PANEL_ICON: Record<Panel, LucideIcon> = { admin: ShieldCheck, production: Printer, visits: MapPinned };
 
-/** The person's panels, the one they are in, and the way to another. An owner has one (Visits), so no selector (docs/PANELS_EXECUTION_PLAN.md F4). */
+/** The person's panels, the one they are in, and the way to another. An owner has one (Visits), so no way out (docs/PANELS_EXECUTION_PLAN.md F4). */
 export function usePanelSwitch() {
   const [location, navigate] = useLocation();
   const search = useSearch();
@@ -43,44 +45,31 @@ export function usePanelSwitch() {
   return { panels, current, go, label: panelLabel };
 }
 
-/**
- * The panel selector at the top of the sidebar: the twin of SidebarModuleSwitch, every panel the person has in its own
- * colour. With three, the name goes under the icon so "Production" fits the sidebar's width.
- */
-export function SidebarPanelSelector({ collapsed }: { collapsed: boolean }) {
+/** A row of the sidebar's foot per other panel the person has, in the style of the Settings row under them. */
+export function SidebarPanelRows({ collapsed }: { collapsed: boolean }) {
   const t = useT(workspacesMessages);
   const { panels, current, go, label } = usePanelSwitch();
-  if (panels.length < 2) return null;
-  const stacked = panels.length > 2 && !collapsed;
+  const others = panels.filter((panel) => panel !== current);
+  if (others.length === 0) return null;
   return (
-    <div
-      role="tablist"
-      aria-label={t("switchPanel")}
-      className={`flex gap-1 rounded-2xl border border-white/10 bg-white/[0.03] p-1 ${collapsed ? "flex-col" : ""}`}
-      data-testid="sidebar-panel-selector"
-    >
-      {panels.map((panel) => {
+    <nav aria-label={t("switchPanel")} className="space-y-1" data-testid="sidebar-panels">
+      {others.map((panel) => {
         const Icon = PANEL_ICON[panel];
-        const accent = PANEL_ACCENT[panel];
-        const active = panel === current;
         return (
           <button
             key={panel}
             type="button"
-            role="tab"
-            aria-selected={active}
-            title={collapsed ? label(panel) : undefined}
             onClick={() => go(panel)}
-            disabled={active}
-            className={`relative flex min-w-0 flex-1 items-center justify-center rounded-xl font-semibold transition-colors disabled:cursor-default ${stacked ? "h-12 flex-col gap-0.5 px-1 text-[11px]" : "h-9 gap-2 text-sm"} ${active ? "text-white" : "text-white/45 hover:text-white/80"}`}
+            title={collapsed ? label(panel) : undefined}
+            aria-label={label(panel)}
+            className={`flex h-10 w-full items-center rounded-xl text-sm font-medium text-white/50 transition-colors hover:bg-white/[0.04] hover:text-white/85 ${collapsed ? "justify-center" : "gap-3 px-3"}`}
             data-testid={`sidebar-panel-${panel}`}
           >
-            {active && <span className="absolute inset-0 rounded-xl" style={{ background: accent.strong }} />}
-            <Icon className={`relative h-4 w-4 shrink-0 ${active ? accent.text : ""}`} />
-            {!collapsed && <span className="relative max-w-full truncate">{label(panel)}</span>}
+            <Icon className="h-[18px] w-[18px] shrink-0" />
+            {!collapsed && <span className="truncate">{label(panel)}</span>}
           </button>
         );
       })}
-    </div>
+    </nav>
   );
 }

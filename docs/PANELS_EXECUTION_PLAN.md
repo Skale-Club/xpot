@@ -18,6 +18,11 @@ dados mas montou os menus por tarefa, dentro de um painel só por perfil. É ess
 | Visits e Tags dentro de Visitas | O seletor atual Visits \| Tags **continua** dentro do painel Visitas nesta rodada; o seletor novo fica acima dele | Fundir os dois mexe nas telas do vendedor, que estão funcionando, e não foi o que o dono pediu |
 | Dono de equipe até a F4 | Na F1 ele continua com o painel atual, sem o nome antigo mudar de lugar; a F4 leva para Visitas | Cada fase precisa deixar todos os perfis funcionando |
 
+**Correção do dono (2026-11-04), vale sobre todo o resto, inclusive a tabela acima:** a troca de painel **não** é uma aba no
+topo da barra lateral. A plataforma inteira já é a plataforma de visitas; entrar em Produção ou Admin é escolher trocar de
+página, então fica no pé da barra lateral, em linhas (`SidebarPanelRows`), acima de Install app. No topo fica só Visits | Tags.
+Toda menção abaixo a um "seletor no topo" está superada.
+
 ---
 
 ## 1. O que o dono descreveu
@@ -90,9 +95,8 @@ owner (vende, tem    ✗            ✗             ✓ + "Empresa"
 member               ✗            ✗             ✓
 ```
 
-Um lugar é um conjunto de telas com o próprio menu, a própria cor e o próprio "Hoje". A pessoa troca de lugar por um
-seletor fixo no topo da barra lateral (como hoje Visitas | Tags), que só lista os lugares que ela tem. Quem tem um só não
-vê seletor.
+Um lugar é um conjunto de telas com o próprio menu, a própria cor e o próprio "Hoje". A pessoa troca de lugar pelas linhas
+no pé da barra lateral, que só listam os outros lugares que ela tem. Quem tem um só não vê nenhuma.
 
 - **Visitas** é o app atual (módulos Visitas e Tags: Início, Rota, Empresas, Visitas, Tarefas, Vendas; Minhas peças,
   Clientes, Loja). Continua o padrão e a tela de entrada de todo mundo.
