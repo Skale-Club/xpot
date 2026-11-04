@@ -343,7 +343,9 @@ export async function updateOrganization(
   input: { name?: string; isActive?: boolean; printsOwnPieces?: boolean; distribution?: Distribution; releasedPrintModels?: string[] | null },
   actor: OrganizationActor,
 ) {
-  if (!managesEveryOrganization(actor)) throw new OrganizationError("Only an Xpot admin or a manager can do this.", 403, "manager_required");
+  // An organization's owner may rename it (assertOrganizationAccess below); everything else is the platform's.
+  const renameOnly = Object.keys(input).every((key) => key === "name");
+  if (!managesEveryOrganization(actor) && !renameOnly) throw new OrganizationError("Only an Xpot admin or a manager can do this.", 403, "manager_required");
   // Production is the owners' (docs/organizations-execution-plan.md): only they let a branch print its own pieces,
   // say which of our models it may print, and who handles its orders.
   if ((input.printsOwnPieces !== undefined || input.releasedPrintModels !== undefined || input.distribution !== undefined) && !actor.user.isAdmin) {

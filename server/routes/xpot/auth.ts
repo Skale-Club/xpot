@@ -6,6 +6,7 @@ import { requireXpotUser, ensureXpotRep } from "./middleware.js";
 import { discardFiles, isRepAvatarUrl, publicUploadsConfigured, putPublicFile } from "../../lib/files.js";
 import { randomUUID } from "crypto";
 import { listOrganizations, membershipsForRep } from "../../organizations/service.js";
+import { profileNameParts } from "#shared/profileName.js";
 import { eq } from "drizzle-orm";
 import { db } from "../../db.js";
 import { users } from "#shared/schema.js";
@@ -33,7 +34,8 @@ export function createAuthRouter() {
         : null;
       res.json({
         // The sign-in phone (users.phone) is not the profile's contact phone (rep.phone); Settings shows both.
-        user: { ...actor!.user, phone: account?.phone ?? null },
+        // The name is the one the app shows everywhere: the session only holds what it was at sign-in.
+        user: { ...actor!.user, ...profileNameParts(actor!.rep.displayName, actor!.user.firstName, actor!.user.lastName), phone: account?.phone ?? null },
         rep: actor!.rep,
         // Which of the four panels this person gets (shared/profiles.ts).
         profile: profileOf({ user: actor!.user, organizations }),
@@ -54,7 +56,6 @@ export function createAuthRouter() {
   });
 
   const updateProfileSchema = z.object({
-    displayName: z.string().min(1).max(100).optional(),
     phone: z.string().max(30).optional().nullable(),
     avatarUrl: z.string().url().optional().nullable(),
     firstName: z.string().max(100).optional().nullable(),
@@ -94,7 +95,6 @@ export function createAuthRouter() {
         }
         repPatch.routeReturnHome = routeReturnHome;
       }
-      if (repData.displayName !== undefined) repPatch.displayName = repData.displayName;
       if (repData.phone !== undefined) repPatch.phone = repData.phone ?? undefined;
       if (repData.avatarUrl !== undefined) {
         // Only clearing it, or the rep's own uploaded picture (POST /me/avatar
@@ -110,9 +110,10 @@ export function createAuthRouter() {
       if (firstName !== undefined) userPatch.firstName = firstName;
       if (lastName !== undefined) userPatch.lastName = lastName;
 
-      // Auto-update rep.displayName from firstName/lastName when displayName isn't explicitly sent.
-      if (repData.displayName === undefined && (firstName !== undefined || lastName !== undefined)) {
-        const fullName = [firstName ?? actor!.user.firstName, lastName ?? actor!.user.lastName]
+      // A person has one name: the one the app shows is always their first and last name.
+      if (firstName !== undefined || lastName !== undefined) {
+        // `null` clears a name, so it must not fall back to the saved one.
+        const fullName = [firstName !== undefined ? firstName : actor!.user.firstName, lastName !== undefined ? lastName : actor!.user.lastName]
           .filter(Boolean).join(" ").trim() || actor!.rep.displayName;
         if (fullName) repPatch.displayName = fullName;
       }

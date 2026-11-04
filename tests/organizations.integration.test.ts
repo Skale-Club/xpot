@@ -138,3 +138,24 @@ describe("Organizations API authorization", () => {
     expect((await request(app, "POST", `/api/xpot/organizations/${organizationId}/members`, { repId: otherId, membershipRole: "member" })).status).toBe(403);
   });
 });
+
+describe("renaming an organization", () => {
+  it("its owner can change the name and nothing else; an employee and an outsider cannot", async () => {
+    const ownerId = await seedRep("owner");
+    const employeeId = await seedRep("employee");
+    await seedRep("outsider");
+    const organization = await seedOrganization("Old name", "old-name");
+    await addMembership(organization, ownerId, "admin");
+    await addMembership(organization, employeeId, "member");
+    const path = `/api/xpot/organizations/${organization}`;
+
+    const renamed = await request(appFor("owner"), "PATCH", path, { name: "Skale Club" });
+    expect(renamed.status).toBe(200);
+    expect(renamed.body.name).toBe("Skale Club");
+    expect((await request(appFor("owner"), "PATCH", path, { name: "Skale Club", isActive: false })).status).toBe(403);
+    expect((await request(appFor("owner"), "PATCH", path, { printsOwnPieces: true })).status).toBe(403);
+    expect((await request(appFor("employee"), "PATCH", path, { name: "Mine now" })).status).toBe(403);
+    expect((await request(appFor("outsider"), "PATCH", path, { name: "Mine now" })).status).toBe(403);
+    expect((await one(`SELECT name, is_active FROM organizations WHERE id = $1`, [organization]))).toEqual({ name: "Skale Club", is_active: true });
+  });
+});

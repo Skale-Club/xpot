@@ -5,6 +5,7 @@ import type { Dictionary } from "../index";
 
 const en = {
   title: "Settings",
+  groupAccount: "My account",
   languageHint: "Choose the language of the app on this device.",
 
   // Profile
@@ -15,8 +16,6 @@ const en = {
   firstNamePlaceholder: "First name",
   lastName: "Last name",
   lastNamePlaceholder: "Last name",
-  displayName: "Display name",
-  displayNamePlaceholder: "Display name",
   phone: "Phone",
   saving: "Saving…",
   saveProfile: "Save profile",
@@ -41,6 +40,7 @@ export const settingsMessages: Dictionary<typeof en> = {
   en,
   pt: {
     title: "Configurações",
+    groupAccount: "Minha conta",
     languageHint: "Escolha o idioma do app neste aparelho.",
 
     sectionProfile: "Perfil",
@@ -49,8 +49,6 @@ export const settingsMessages: Dictionary<typeof en> = {
     firstNamePlaceholder: "Nome",
     lastName: "Sobrenome",
     lastNamePlaceholder: "Sobrenome",
-    displayName: "Nome de exibição",
-    displayNamePlaceholder: "Nome de exibição",
     phone: "Telefone",
     saving: "Salvando…",
     saveProfile: "Salvar perfil",
@@ -68,6 +66,7 @@ export const settingsMessages: Dictionary<typeof en> = {
   },
   es: {
     title: "Ajustes",
+    groupAccount: "Mi cuenta",
     languageHint: "Elige el idioma de la app en este dispositivo.",
 
     sectionProfile: "Perfil",
@@ -76,8 +75,6 @@ export const settingsMessages: Dictionary<typeof en> = {
     firstNamePlaceholder: "Nombre",
     lastName: "Apellido",
     lastNamePlaceholder: "Apellido",
-    displayName: "Nombre visible",
-    displayNamePlaceholder: "Nombre visible",
     phone: "Teléfono",
     saving: "Guardando…",
     saveProfile: "Guardar perfil",

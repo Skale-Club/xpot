@@ -145,26 +145,3 @@ export function InstallAppHeaderButton({ className = "" }: { className?: string 
     </>
   );
 }
-
-/** A row for Settings: what installing gets you, and the button. */
-export function InstallAppRow({ className = "" }: { className?: string }) {
-  const t = useT(shellMessages);
-  const action = useInstallAction();
-  if (!action) return null;
-  return (
-    <>
-      <div className={`flex items-center gap-3 rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-3 ${className}`} data-testid="settings-install-app-row">
-        <Download className="h-4 w-4 shrink-0 text-white/50" />
-        <p className="min-w-0 flex-1 text-xs text-white/50">{t("installAppHint")}</p>
-        <button
-          type="button"
-          onClick={action.onClick}
-          className="shrink-0 rounded-xl border border-white/10 bg-white/[0.06] px-3 py-2 text-xs font-semibold text-white transition-colors hover:bg-white/[0.1]"
-        >
-          {t("installApp")}
-        </button>
-      </div>
-      {action.dialog}
-    </>
-  );
-}
