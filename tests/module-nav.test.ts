@@ -66,7 +66,7 @@ describe("one panel per profile", () => {
     const groups = groupsOf("platform");
     expect(labelsOf(groups)).toEqual(["", "Make", "Pieces", "Field", "Administration"]);
     expect(itemHrefs(groups, "")).toEqual(["/admin"]);
-    expect(itemHrefs(groups, "Make")).toEqual(["/admin/tags/production", "/admin/tags/provisioners", "/admin/tags/journey"]);
+    expect(itemHrefs(groups, "Make")).toEqual(["/admin/tags/production", "/admin/tags/provisioners"]);
     expect(itemHrefs(groups, "Pieces")).toEqual(["/admin/tags/pieces", "/admin/tags/kits", "/admin/tags/overview"]);
     expect(itemHrefs(groups, "Field")).toEqual(["/admin/work/leads", "/admin/work/tasks", "/admin/work/sales", "/admin/overview"]);
     expect(itemHrefs(groups, "Administration")).toEqual([

@@ -279,9 +279,9 @@ const ADMIN_VIEWER: Viewer = { canManage: true, isAdmin: true };
  *   owner     Today and Team, then Pieces (Stock, Hand out, Team purchases, Pieces results) and Field (Companies,
  *             Tasks, Sales: Visits).
  *   partner   the owner's, with a Make group (Production, Chip writers) in front.
- *   platform  Today; Make (Production, Chip writers, History); Pieces (Stock, Hand out, Pieces results); Field
+ *   platform  Today; Make (Production, Chip writers); Pieces (Stock, Hand out, Pieces results); Field
  *             (Companies, Tasks, Sales, Team results); and Administration, collapsible: organizations, people,
- *             products, shop, integrations, brand, status, check-in rules.
+ *             products, shop, integrations, brand, status, history, check-in rules.
  * `organizationId`: the one organization an owner or a partner runs, so Team and Purchases open its workspace; without
  * one (someone who runs several), Team is the list of their companies.
  * The hrefs are the ones the app always had (docs/MODULES.md: URLs never change).
@@ -311,7 +311,7 @@ export function panelGroups(profile: Profile | null | undefined, modules: readon
   if (profile === "platform") {
     return groups([
       { label: "", items: [today] },
-      { label: names.make, items: [...production, ...stations, ...tagItem("/admin/tags/journey")] },
+      { label: names.make, items: [...production, ...stations] },
       { label: names.pieces, items: [...stock, ...kits, ...overview] },
       { label: names.field, items: [...work, ...(visits ? [{ href: "/admin/overview", label: l.shell("manageTeam"), icon: TrendingUp, match: starts("/admin/overview") }] : [])] },
       {
@@ -322,6 +322,8 @@ export function panelGroups(profile: Profile | null | undefined, modules: readon
           ...(visits ? [{ href: "/admin/products", label: l.shell("manageProducts"), icon: Boxes, match: starts("/admin/products") }] : []),
           ...tagItem("/admin/tags/shop"),
           ...platformItems(l),
+          // The production log: looked up when something needs explaining, not part of making pieces.
+          ...tagItem("/admin/tags/journey"),
           ...(visits ? [{ href: "/admin/settings", label: l.shell("manageCheckInRules"), icon: SlidersHorizontal, match: starts("/admin/settings") }] : []),
         ],
       },
