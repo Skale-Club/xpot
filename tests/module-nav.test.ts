@@ -71,7 +71,7 @@ describe("one panel per profile", () => {
     expect(itemHrefs(groups, "Field")).toEqual(["/admin/work/leads", "/admin/work/tasks", "/admin/work/sales", "/admin/overview"]);
     expect(itemHrefs(groups, "Administration")).toEqual([
       "/organizations", "/admin/reps", "/admin/products", "/admin/tags/shop",
-      "/admin/integrations", "/admin/branding", "/admin/health", "/admin/settings",
+      "/admin/integrations", "/admin/branding", "/admin/health", "/admin/tags/journey", "/admin/settings",
     ]);
     const administration = groups.find((g) => g.label === "Administration")!;
     expect(administration.collapsible).toBe(true);
@@ -83,7 +83,7 @@ describe("one panel per profile", () => {
   });
 
   it("only the platform has Administration items; the other panels never list them", () => {
-    const platformOnly = ["/organizations", "/admin/reps", "/admin/products", "/admin/integrations", "/admin/branding", "/admin/health", "/admin/settings", "/admin/tags/shop"];
+    const platformOnly = ["/organizations", "/admin/reps", "/admin/products", "/admin/integrations", "/admin/branding", "/admin/health", "/admin/tags/journey", "/admin/settings", "/admin/tags/shop"];
     for (const profile of ["owner", "partner"] as const) {
       for (const href of platformOnly) expect(hrefs(groupsOf(profile, both, 7))).not.toContain(href);
       // The companies list is Team's door when there is no single workspace to open; nothing else of the platform's is.
