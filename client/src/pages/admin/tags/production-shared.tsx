@@ -1,9 +1,9 @@
 import { useState } from "react";
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { Download } from "lucide-react";
 import { isSuperAdmin } from "@shared/modules";
 import { productionOrganizations } from "@shared/organizations";
-import type { PrintBed, PrintJobDetail, PrintJobItem, PrintJobStatus, PrintModelItem, PrintModelStatus, PrintRequestItem } from "@shared/printProduction";
+import type { PrintBed, PrintJobItem, PrintJobStatus, PrintModelItem, PrintModelStatus, PrintRequestItem } from "@shared/printProduction";
 import type { ProvisionerDeviceItem } from "@shared/tagsApi";
 import type { XpotMeResponse } from "@/pages/xpot/types";
 import { Button } from "@/components/ui/button";
@@ -14,7 +14,7 @@ import { commonMessages } from "@/i18n/messages/common";
 import { productionMessages } from "@/i18n/messages/production";
 import { productionBoardMessages } from "@/i18n/messages/productionBoard";
 import { serverErrorText } from "@/lib/apiErrors";
-import { AdminHttpError, ADMIN_TAGS_KEY, STALE_MS, errorMessage, getJson, invalidateAdminTags, sendJson, withQuery } from "./api";
+import { AdminHttpError, ADMIN_TAGS_KEY, STALE_MS, getJson, withQuery } from "./api";
 import { printComputers, type BuildState } from "./production-workflow";
 
 // Tags › Production (docs/PRINT_EXECUTION_PLAN.md): the queries, pills and the upload shared by the catalog, the
@@ -127,21 +127,6 @@ export function DownloadFileButton({ id, label, quiet = false, onDownloaded }: {
       {label}
     </Button>
   );
-}
-
-/** The move of a print job that is one click: say it is on the printer. */
-export function usePlateMoves() {
-  const t = useT(productionMessages);
-  const { toast } = useToast();
-  const move = useMutation({
-    mutationFn: ({ id, action }: { id: string; action: "start" }) => sendJson<PrintJobDetail>("POST", `/api/xpot/admin/print-jobs/${id}/transition`, { action }),
-    onSuccess: async (updated) => {
-      await invalidateAdminTags();
-      toast({ title: t("orderNow", { status: t(`jobStatus_${updated.status}` as never) }) });
-    },
-    onError: (err) => toast({ title: t("couldNotUpdateOrder"), description: errorMessage(err), variant: "destructive" }),
-  });
-  return { start: (id: string) => move.mutate({ id, action: "start" }), starting: move.isPending ? move.variables?.id ?? null : null };
 }
 
 /** The newest file of each kind a plate offers: the Bambu Studio project and the checked slice. */

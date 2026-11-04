@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useMutation } from "@tanstack/react-query";
-import { AlertTriangle, ChevronRight, Play, Printer, RotateCcw } from "lucide-react";
+import { AlertTriangle, ChevronRight, Printer, RotateCcw } from "lucide-react";
 import { type PrintJobItem, type PrintModelItem, type PrintRequestItem } from "@shared/printProduction";
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/xpot/ConfirmDialog";
@@ -13,7 +13,7 @@ import { productionMessages } from "@/i18n/messages/production";
 import { errorMessage, formatDate, invalidateAdminTags, sendJson } from "./api";
 import { Loading, LoadError } from "./pieces-shared";
 import { Pill } from "@/components/xpot/StatusPill";
-import { DownloadFileButton, JobStatusPill, PRODUCTION_BASE, plateDownloads, useBuildSentence, usePlateMoves, usePrintComputers, usePrintModels, usePrintRequests, useProductionAccess, type JobFilter } from "./production-shared";
+import { DownloadFileButton, JobStatusPill, PRODUCTION_BASE, plateDownloads, useBuildSentence, usePrintComputers, usePrintModels, usePrintRequests, useProductionAccess, type JobFilter } from "./production-shared";
 import { ProductionIdentity } from "./production-identity";
 import { PrintedDialog } from "./production-printed-dialog";
 
@@ -188,15 +188,13 @@ export function ToPrintList({ go, emptyHint }: { go: Go; emptyHint: string }) {
   );
 }
 
-/** The dialogs a row's buttons open (Did it come off well, Print again) and the one-click moves, shared by every row of a list. */
+/** The dialogs a row's buttons open (Did it come off well, Print again), shared by every row of a list. */
 function useRowActions() {
   const [printing, setPrinting] = useState<PrintJobItem | null>(null);
   const [redoing, setRedoing] = useState<PrintJobItem | null>(null);
-  const moves = usePlateMoves();
   const { loaded, computers } = usePrintComputers();
   const sentence = useBuildSentence();
   return {
-    moves,
     build: (plate: PrintJobItem) => { const state = buildState(plate, loaded ? computers : null); return state ? { state, text: sentence(plate, state) } : null; },
     markPrinted: setPrinting,
     printAgain: setRedoing,
@@ -222,13 +220,6 @@ function PlateRow({ plate, go, showStatus, rows }: { plate: PrintJobItem; go: Go
     switch (action) {
       case "download":
         return file ? <DownloadFileButton key={action} id={file.id} label={t("downloadSliced")} quiet={!primary} /> : null;
-      case "start":
-        return (
-          <Button key={action} type="button" variant={primary ? "brand" : "secondary"} accent="tags" size="sm" loading={rows.moves.starting === plate.id} onClick={() => rows.moves.start(plate.id)} data-testid="production-plate-start">
-            <Play />
-            {t("startPrinting")}
-          </Button>
-        );
       case "markPrinted":
         return (
           <Button key={action} type="button" variant="brand" accent="tags" size="sm" onClick={() => rows.markPrinted(plate)} data-testid="production-plate-printed">

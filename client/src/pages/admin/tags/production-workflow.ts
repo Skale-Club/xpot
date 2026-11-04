@@ -153,18 +153,16 @@ export function boardGroups(requests: readonly PrintRequestItem[]): Array<{ grou
 }
 
 /** What a plate's row lets the operator do, left to right; the first is the main one. */
-export type PlateAction = "download" | "start" | "markPrinted" | "printAgain";
+export type PlateAction = "download" | "markPrinted" | "printAgain";
 
 /**
- * Marking printed comes only after the job is on the printer (started), so it is never offered for a job without a
- * file or before the file was taken. A job with no file yet offers nothing: the print computer makes it. A failed one
- * offers printing again.
+ * Whether it printed is what the operator answers, so marking printed comes first and the file second. A job with no
+ * file yet offers nothing: the print computer makes it. A failed one offers printing again.
  */
 export function plateActions(job: Pick<PrintJobItem, "status" | "downloads" | "redoneBy">): PlateAction[] {
   const hasFile = job.downloads.length > 0;
   switch (job.status) {
     case "ready":
-      return hasFile ? ["download", "start"] : [];
     case "printing":
       return hasFile ? ["markPrinted", "download"] : ["markPrinted"];
     case "failed":

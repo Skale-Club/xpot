@@ -64,14 +64,14 @@ describe("unified production", () => {
     const job = (status: string, files = 1, redoneBy: string | null = null) => ({ status, redoneBy, downloads: Array.from({ length: files }, (_, i) => ({ id: String(i), kind: "gcode_3mf", filename: "x" })) }) as never;
     expect(plateActions(job("requested", 0))).toEqual([]);
     expect(plateActions(job("building", 0))).toEqual([]);
-    expect(plateActions(job("ready"))).toEqual(["download", "start"]);
-    expect(plateActions(job("ready", 0))).toEqual([]);
+    expect(plateActions(job("ready"))).toEqual(["markPrinted", "download"]);
+    expect(plateActions(job("ready", 0))).toEqual(["markPrinted"]);
     expect(plateActions(job("printing"))).toEqual(["markPrinted", "download"]);
     expect(plateActions(job("failed"))).toEqual(["printAgain"]);
     expect(plateActions(job("failed", 1, "next"))).toEqual([]);
     expect(plateActions(job("printed"))).toEqual([]);
     expect(plateActions(job("cancelled"))).toEqual([]);
-    for (const status of ["requested", "building", "ready", "failed", "cancelled", "printed"]) expect(plateActions(job(status))).not.toContain("markPrinted");
+    for (const status of ["requested", "building", "failed", "cancelled", "printed"]) expect(plateActions(job(status))).not.toContain("markPrinted");
   });
   it("groups the board by what the operator must do, failed first, and only the last attempt of each plate", () => {
     const plate = (plateNumber: number, status: string, createdAt: string, redoneBy: string | null = null) => ({ plateNumber, status, createdAt, redoneBy }) as never;
