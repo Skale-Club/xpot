@@ -1,4 +1,5 @@
 import express, { type Express, type NextFunction, type Request, type RequestHandler, type Response } from "express";
+import { resolve } from "path";
 import { z } from "zod";
 import {
   PRINT_PREVIEW_CATALOG_PATH,
@@ -458,6 +459,14 @@ export function registerProductionRoutes(app: Express, deps: { device: readonly 
     } catch (err) {
       fail(res, err, "Failed to upload the print file");
     }
+  });
+
+  // The print code itself, for Xpot Desktop on a computer that was just connected (scripts/build.ts packs it).
+  app.get("/api/provisioner/bench-bundle", ...bench, (_req, res) => {
+    res.set("Cache-Control", "no-store");
+    res.sendFile(resolve(process.cwd(), "dist/bench/print-pipeline.tgz"), (err) => {
+      if (err && !res.headersSent) res.status(404).json({ message: "This server has no print code to send", code: "bench_bundle_missing" });
+    });
   });
 
   // What the bench's Print Now folder should hold: plates to print and recently printed, with signed file links.

@@ -11,6 +11,7 @@
 
 import { build as esbuild } from "esbuild";
 import { spawnSync } from "child_process";
+import { copyFileSync, mkdirSync } from "fs";
 import { resolve } from "path";
 import { fileURLToPath } from "url";
 
@@ -89,11 +90,26 @@ function buildClient() {
   }
 }
 
+/**
+ * What Xpot Desktop needs from the server: the program and its setup file are public (dist/public/desktop), the print code
+ * goes only to a connected computer (dist/bench, GET /api/provisioner/bench-bundle).
+ */
+function buildBench() {
+  console.log("→ Packing the print code ...");
+  mkdirSync(resolve(ROOT, "dist/bench"), { recursive: true });
+  const result = spawnSync("tar", ["-czf", "dist/bench/print-pipeline.tgz", "--exclude=__pycache__", "--exclude=tests", "-C", "print-pipeline", "."], { cwd: ROOT, stdio: "inherit" });
+  if (result.status !== 0) process.exit(result.status ?? 1);
+  mkdirSync(resolve(ROOT, "dist/public/desktop"), { recursive: true });
+  copyFileSync(resolve(ROOT, "print-pipeline/desktop.py"), resolve(ROOT, "dist/public/desktop/desktop.py"));
+  copyFileSync(resolve(ROOT, "print-pipeline/setup/XpotDesktopSetup.cmd"), resolve(ROOT, "dist/public/desktop/XpotDesktopSetup.cmd"));
+}
+
 async function main() {
   await buildServer();
   await buildMigrate();
   await buildFilesMigrate();
   buildClient();
+  buildBench();
   console.log("\n✓ Build complete: dist/index.cjs + dist/migrate.cjs + dist/migrate-files.cjs + dist/shrink-photos.cjs + dist/public/");
 }
 

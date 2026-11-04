@@ -19,7 +19,7 @@ python print-pipeline/bench.py doctor
 
 `doctor` checks the packages, Bambu Studio (`C:\Program Files\Bambu Studio\bambu-studio.exe`, or `XPOT_BAMBU_STUDIO`)
 and the fonts the faces use (Segoe UI Bold and Bold Italic from Windows; Inria Serif Bold and Bold Italic and
-Metropolis Medium and Bold, Inter SemiBold and Nunito Black installed for the user). Fonts are never in the repository.
+Metropolis Medium and Bold, Inter SemiBold and Nunito Black, kept in `fonts/` and installed for the user). Segoe UI is Windows's own and is never in the repository.
 
 ```bash
 python print-pipeline/bench.py pair <code>

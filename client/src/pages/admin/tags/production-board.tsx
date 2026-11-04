@@ -24,6 +24,7 @@ import { DesignPreview, GenerateDialog } from "./production-generate";
 import { printStyle } from "@shared/printDesigns";
 import { Piece3D } from "./production-piece-3d";
 import { ToPrintList } from "./production-orders";
+import { ThisComputer } from "./production-this-computer";
 import type { PreviewState } from "./production-preview-3d";
 import { PRODUCTION_BASE, minutesText, usePrintComputers, usePrintModels, usePrintRequests, useProductionAccess } from "./production-shared";
 import { needsPrintComputer, orderedPath, serializedRequests } from "./production-workflow";
@@ -114,6 +115,7 @@ export function PrintingView({ go }: { go: Go }) {
           <ChevronRight />
         </Button>
       </div>
+      <ThisComputer />
       <PrintComputerLine go={go} waiting={waiting} />
       <ToPrintList go={go} emptyHint={b("pendingEmptyHint")} />
     </section>
