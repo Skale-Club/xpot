@@ -1,5 +1,5 @@
 // The panel home's "Today" rows (client/src/pages/admin/home-model.ts), by profile: zero rows are dropped, the
-// platform gets three blocks (people and orders, production, pieces), a partner the company's production for their organization, an owner
+// platform gets one block (people and orders: Admin's Today; production and the Tags queues are Production's), a partner the company's production for their organization, an owner
 // their team's purchases and the Tags queues; files are "stuck" only after two hours, failed plates not printed again
 // show up, and a pending order is never counted twice.
 
@@ -47,33 +47,23 @@ describe("todayRows: platform", () => {
     expect(todayRows({ profile: "platform", requests: [], queues: queues(), pendingOrders: 0, pendingPeople: 0 })).toEqual([]);
   });
 
-  it("splits the work in three blocks (people and orders, production, pieces), hiding zeros", () => {
+  it("is the People and orders block, hiding zeros: Admin's Today has no production or piece rows", () => {
     const blocks = todayBlocks({
       profile: "platform", now: NOW, pendingPeople: 3, pendingOrders: 2,
       requests: [request(plate("ready", 1), plate("building", 2, 4), plate("failed", 3, 1))],
       queues: queues({ chipPending: 4, batchesNotReceived: 1 }),
     });
-    expect(blocks.map((block) => block.id)).toEqual(["people", "production", "pieces"]);
+    expect(blocks.map((block) => block.id)).toEqual(["people"]);
     expect(blocks[0].rows.map((row) => [row.id, row.count, row.href])).toEqual([
       ["peopleWaiting", 3, "/admin/reps?status=pending"],
       ["stuscleOrders", 2, "/admin/tags/kits?view=orders"],
     ]);
-    expect(blocks[1].rows.map((row) => [row.id, row.count, row.href])).toEqual([
-      // What broke first (stuck files, failed prints), then what is next in line; batches awaiting pieces are production's too.
-      ["filesStuck", 1, "/admin/tags/production/queue"],
-      ["printsFailed", 1, "/admin/tags/production/queue"],
-      ["platesToPrint", 1, "/admin/tags/production/queue"],
-      ["batchesNotReceived", 1, "/admin/tags/batches?pending=1"],
-    ]);
-    expect(blocks[2].rows.map((row) => [row.id, row.count, row.href])).toEqual([
-      ["chipPending", 4, "/admin/tags/overview/chipPending"],
-    ]);
   });
 
-  it("drops a block that is left empty", () => {
+  it("drops the block when nothing waits for the platform, whatever the production holds", () => {
     expect(todayBlocks({ profile: "platform", pendingPeople: 1, queues: queues() }).map((block) => block.id)).toEqual(["people"]);
-    expect(todayBlocks({ profile: "platform", queues: queues({ noProduct: 2 }) }).map((block) => block.id)).toEqual(["pieces"]);
-    expect(todayBlocks({ profile: "platform", requests: [request("ready")] }).map((block) => block.id)).toEqual(["production"]);
+    expect(todayBlocks({ profile: "platform", queues: queues({ noProduct: 2 }) })).toEqual([]);
+    expect(todayBlocks({ profile: "platform", requests: [request("ready")] })).toEqual([]);
   });
 
   it("counts the wholesale orders once, from the orders list, not from the overview's identical queue", () => {
@@ -122,10 +112,10 @@ describe("todayRows: every overview queue reaches Today", () => {
   const hrefOf = (id: keyof TagQueueCounts) => `/admin/tags${needsActionQueues(counts, true).find((card) => card.id === id)!.href}`;
   const rowOf = (rows: ReturnType<typeof todayRows>, id: string) => rows.find((row) => row.id === id);
 
-  it.each(queueIds)("platform: %s", (id) => {
-    // The wholesale orders come from their own list (same count in the platform block); the rest from the overview.
+  it("platform: only the wholesale orders, from their own list; the other queues are Production's, not Admin's Today", () => {
     const rows = todayRows({ profile: "platform", queues: counts, pendingOrders: counts.stuscleOrders });
-    expect(rowOf(rows, id)).toMatchObject({ count: counts[id], href: hrefOf(id) });
+    expect(rowOf(rows, "stuscleOrders")).toMatchObject({ count: counts.stuscleOrders, href: hrefOf("stuscleOrders") });
+    for (const id of queueIds.filter((queue) => queue !== "stuscleOrders")) expect(rowOf(rows, id), id).toBeUndefined();
   });
 
   it.each(queueIds.filter((id) => id !== "stuscleOrders"))("partner: %s", (id) => {

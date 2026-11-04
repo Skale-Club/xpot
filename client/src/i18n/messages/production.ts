@@ -5,7 +5,6 @@ import type { Dictionary } from "../index";
 // "print order" = ordem de impressão / orden de impresión; "bed" = bancada / cama; "part" = peça sem código / pieza sin código.
 
 const en = {
-  productionNav: "Production",
   tabCatalog: "Models",
   tabQueue: "All orders",
 
@@ -336,7 +335,6 @@ const en = {
 export const productionMessages: Dictionary<typeof en> = {
   en,
   pt: {
-    productionNav: "Produção",
     tabCatalog: "Modelos",
     tabQueue: "Todos os pedidos",
 
@@ -655,7 +653,6 @@ export const productionMessages: Dictionary<typeof en> = {
     printCount_other: "Fazer {count} peças",
   },
   es: {
-    productionNav: "Producción",
     tabCatalog: "Modelos",
     tabQueue: "Todos los pedidos",
 

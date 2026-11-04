@@ -184,7 +184,7 @@ describe("Distribution", () => {
     expect(en[reasonKey("handOut", "set_up")!]).toMatch(/remove the customer/i);
     expect(en[reasonKey("takeBack", "set_up")!]).toMatch(/remove the customer/i);
     expect(en[reasonKey("takeBack", "sold")!]).toMatch(/sold/i);
-    expect(en[reasonKey("takeBack", "not_with_reseller")!]).toMatch(/not with a reseller/i);
+    expect(en[reasonKey("takeBack", "not_with_reseller")!]).toMatch(/not with a person/i);
     expect(en[reasonKey("handOut", "with_reseller")!]).toContain("{name}");
     expect(reasonKey("handOut", "something_new")).toBe("reasonUnknown");
   });

@@ -1,35 +1,42 @@
-import { useQuery } from "@tanstack/react-query";
-import type { Profile } from "@shared/profiles";
 import { useT } from "@/i18n";
 import { workspacesMessages } from "@/i18n/messages/workspaces";
-import { ownedOrganizations } from "@/lib/adminMode";
-import type { XpotMeResponse } from "@/pages/xpot/types";
 import type { PanelNames } from "./moduleNav";
+import type { Panel } from "./panels";
 
 /**
- * The panel's name by profile, and the words its sidebar, phone bar and palette use (i18n/messages/workspaces.ts).
- * The platform team's is "Skale Club"; everyone else's is "My company" ("My companies" for an owner of several): a partner
- * sells and has a team too, so its panel is not "Production". A member has no panel.
+ * The panels' names and the words their sidebar, phone bar and palette use (i18n/messages/workspaces.ts). The three
+ * panels are Admin, Production and Visits (components/xpot/panels.ts); no panel carries a company's name. An owner's
+ * team is the Company group of Visits, named in `names`.
  */
 export function usePanelNames() {
   const t = useT(workspacesMessages);
-  const { data: me } = useQuery<XpotMeResponse>({ queryKey: ["/api/xpot/me"], retry: false });
-  const runsSeveral = ownedOrganizations(me?.organizations).length > 1;
-  const panelName = (profile: Profile | null | undefined) => t(profile === "platform" ? "panelPlatform" : runsSeveral ? "panelCompanies" : "panelCompany");
+  /** The name of a panel: the selector's label, the amber bar's and the title's. */
+  const panelLabel = (panel: Panel) => t(panel === "admin" ? "panelAdmin" : panel === "production" ? "panelProduction" : "panelVisits");
   const names: PanelNames = {
     today: t("todayTitle"),
-    platform: t("panelPlatform"),
-    company: t("panelCompany"),
-    make: t("groupMake"),
+    companiesGroup: t("groupCompanies"),
+    platformGroup: t("groupPlatform"),
     pieces: t("groupPieces"),
-    field: t("groupField"),
-    administration: t("groupAdministration"),
+    operation: t("groupOperation"),
+    make: t("groupMake"),
+    printing: t("panelPrinting"),
+    models: t("panelModels"),
+    customers: t("panelCustomers"),
     team: t("panelTeam"),
     companies: t("panelCompanies"),
     stock: t("panelStock"),
     kits: t("panelKits"),
-    purchases: t("panelPurchases"),
     tagsOverview: t("panelTagsOverview"),
+    company: t("groupCompany"),
+    companyOverview: t("companyOverview"),
+    companyPieces: t("companyPieces"),
+    companyKits: t("companyKits"),
+    companyPurchases: t("companyPurchases"),
+    companyResults: t("companyResults"),
+    companyTeamResults: t("companyTeamResults"),
+    companyCustomers: t("companyCustomers"),
+    companyTasks: t("companyTasks"),
+    companySales: t("companySales"),
   };
-  return { panelName, names };
+  return { panelLabel, names };
 }

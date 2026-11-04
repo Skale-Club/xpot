@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { isTagPieceQueue } from "@shared/tagQueues";
 import { productionPath } from "./production-workflow";
 import { useIsSuperAdmin } from "@/components/xpot/AdminBadge";
+import { useViewerAccess } from "@/lib/adminMode";
 import { useProductionAccess } from "./production-shared";
 import { useT } from "@/i18n";
 import { manageMessages } from "@/i18n/messages/manage";
@@ -36,6 +37,7 @@ export function AdminTags() {
   const [location, setLocation] = useLocation();
   const tm = useT(manageMessages);
   const tw = useT(workspacesMessages);
+  const { profile } = useViewerAccess();
   const [tabSegment, idSegment, ...more] = location.replace(/^\/admin\/tags\/?/, "").split("/");
   // Overview, Inventory and Distribution are every panel's (the server narrows them to the owner's or the partner's
   // organization). The shop, the Journey and, for anyone but a partner, Production and the NFC writers are the
@@ -51,7 +53,7 @@ export function AdminTags() {
   const id = idSegment ? decodeURIComponent(idSegment) : null;
   const go = (path: string) => setLocation(`${ADMIN_TAGS_BASE}${productionPath(path)}`);
   const requested = TABS.find((item) => item.id === tabSegment);
-  if ((requested && "adminOnly" in requested && !reaches(requested.id)) || (tabSegment === "batches" && !reaches("production"))) return <EmptyState icon={ShieldAlert} title={tm("accessRestricted")} hint={tm("noAdminPermission")} action={<Button variant="secondary" onClick={() => setLocation("/admin")}>{tw("todayTitle")}</Button>} />;
+  if ((requested && "adminOnly" in requested && !reaches(requested.id)) || (tabSegment === "batches" && !reaches("production"))) return <EmptyState icon={ShieldAlert} title={tm("accessRestricted")} hint={tm("noAdminPermission")} action={<Button variant="secondary" onClick={() => setLocation("/admin")}>{tw(profile === "owner" ? "companyOverview" : "todayTitle")}</Button>} />;
 
   return (
     <div className="space-y-5">

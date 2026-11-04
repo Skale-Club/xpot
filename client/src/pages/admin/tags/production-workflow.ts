@@ -1,4 +1,4 @@
-import { PRINT_MAX_PLATES, planRedoCodes, splitIntoPlates, type PrintJobItem, type PrintModelItem, type PrintNfcMount, type PrintRedoCodes, type PrintRequestItem } from "@shared/printProduction";
+import { PRINT_MAX_PLATES, isAlwaysReadyPart, planRedoCodes, splitIntoPlates, type PrintJobItem, type PrintModelItem, type PrintNfcMount, type PrintRedoCodes, type PrintRequestItem } from "@shared/printProduction";
 
 export interface ExistingProductionBatch {
   id: string;
@@ -301,6 +301,14 @@ export function filamentColours(model: Pick<PrintModelItem, "currentVersion"> | 
 export function assemblyParts(model: Pick<PrintModelItem, "currentVersion"> | undefined, models: ReadonlyMap<string, Pick<PrintModelItem, "title">>, nfcMount?: PrintNfcMount | null): string[] {
   const selected = nfcMount ? model?.currentVersion?.nfcVariants?.[nfcMount]?.consumes : undefined;
   return (selected ?? model?.currentVersion?.consumes ?? []).map((c) => `${c.perPiece} ${plainTitle(models.get(c.part)?.title ?? c.part)}`);
+}
+
+/** The always-ready parts below their reorder point, worst first (the biggest shortfall, then by title). Serial pieces and parts with no reorder point are never listed. */
+export function missingParts<T extends Pick<PrintModelItem, "kind" | "status" | "currentVersion" | "title" | "onHand" | "partReorderAt" | "lowStock">>(models: readonly T[]): T[] {
+  const shortfall = (part: T) => (part.partReorderAt ?? 0) - part.onHand;
+  return models
+    .filter((part) => isAlwaysReadyPart(part) && part.lowStock && part.partReorderAt != null)
+    .sort((x, y) => shortfall(y) - shortfall(x) || x.title.localeCompare(y.title));
 }
 
 // ─── History ──────────────────────────────────────────────────────────────────────────────────────────────────

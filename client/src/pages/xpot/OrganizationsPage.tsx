@@ -19,7 +19,7 @@ import { DANGER_OUTLINE, GLASS_CLASS, GLASS_SUBTLE_CLASS } from "@/components/xp
 import { Tabs } from "@/components/xpot/Tabs";
 import { apiRequest } from "@/lib/queryClient";
 import { describeApiError } from "@/lib/apiErrors";
-import { managementReach, ownedOrganizationId } from "@/lib/adminMode";
+import { managementReach, ownedOrganizationId, profileOfMe } from "@/lib/adminMode";
 import { formatDate } from "@/lib/dates";
 import { formatMoney, formatPhone } from "@/lib/format";
 import { useToast } from "@/hooks/use-toast";
@@ -285,7 +285,8 @@ function OrganizationWorkspace({ organizationId }: { organizationId: number }) {
     if (value) listParams.set(key, value);
   }
   const listHref = `/organizations${listParams.size ? `?${listParams}` : ""}`;
-  const [backHref, backLabel] = ownedOrganizationId(me) === organizationId ? ["/admin", twp("todayTitle")] : [listHref, t("backToList")];
+  // (An owner's Today is the Overview of their Company group.)
+  const [backHref, backLabel] = ownedOrganizationId(me) === organizationId ? ["/admin", profileOfMe(me) === "owner" ? twp("companyOverview") : twp("todayTitle")] : [listHref, t("backToList")];
   // The owner follows what the team bought; an employee has no list of it (the server refuses).
   const purchases = useQuery<Purchase[]>({ queryKey: [`${base}/purchases`], enabled: tab === "purchases" && mayManageTeam });
   // Companies open where this viewer works with them: Visits if they have it, else Tags.

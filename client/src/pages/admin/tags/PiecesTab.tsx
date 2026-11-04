@@ -2,7 +2,7 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState, type FormEve
 import { useSearchParams } from "wouter";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { Building2, Layers, MapPin, Network, Nfc, Package, Plus, SlidersHorizontal, Users } from "lucide-react";
-import { FilterBar, FilterChips, FilterSearch, FilterSelect, FilterToggle } from "@/components/xpot/filters";
+import { FILTER_CHIP_ON, FilterBar, FilterChips, FilterSearch, FilterSelect, FilterToggle } from "@/components/xpot/filters";
 import { currentSearch, useUrlFilters } from "@/hooks/use-url-filters";
 import { ListPager, useOffsetPages } from "@/components/xpot/pagination";
 import { TAG_PRODUCT_TYPES } from "@shared/tags";
@@ -31,6 +31,8 @@ import { pieceScreenMessages } from "@/i18n/messages/pieceScreen";
 import { manageTagsMessages } from "@/i18n/messages/manageTags";
 import { manageTagsPiecesMessages } from "@/i18n/messages/manageTagsPieces";
 import { manageTagsBatchesMessages } from "@/i18n/messages/manageTagsBatches";
+import { piecesByPersonMessages } from "@/i18n/messages/piecesByPerson";
+import { nextPersonFilter, personChips, type PersonPieceCount } from "./pieces-by-person";
 
 /** Pieces per server page; the next page loads as you reach the end. */
 const PAGE = 100;
@@ -159,6 +161,7 @@ export function PiecesTab({ go }: { go: (path: string) => void }) {
   const tm = useT(manageTagsPiecesMessages);
   const tc = useT(commonMessages);
   const tg = useT(manageTagsMessages);
+  const tpp = useT(piecesByPersonMessages);
   const labels = useTagLabels();
   const urlFilters = useUrlFilters(PIECE_FILTERS);
   const filters = urlFilters.values;
@@ -231,6 +234,16 @@ export function PiecesTab({ go }: { go: (path: string) => void }) {
     queryFn: () => getJson(`/api/xpot/admin/tags/overview?timezoneOffset=${new Date().getTimezoneOffset()}`),
     staleTime: STALE_MS,
   });
+  // One chip per person with their piece count, for whoever runs a team (the platform reads the whole stock instead).
+  // The counts come from the server in the viewer's scope; they are never added up from the loaded page.
+  const showPeople = !!profile && profile !== "platform" && reps.some((r) => r.isActive);
+  const { data: personCounts = [] } = useQuery<PersonPieceCount[]>({
+    queryKey: [ADMIN_TAGS_KEY, "by-person"],
+    queryFn: () => getJson("/api/xpot/admin/tags/by-person"),
+    staleTime: STALE_MS,
+    enabled: showPeople,
+  });
+  const peopleChips = showPeople ? personChips(reps, personCounts) : [];
   const hasFilters = urlFilters.activeCount() > 0;
   const where = whereSelection(filters);
   // A chip counts the whole stock: under another filter it would say one thing while the list shows another.
@@ -329,6 +342,30 @@ export function PiecesTab({ go }: { go: (path: string) => void }) {
     <div className="space-y-4" data-testid="admin-tags-pieces">
       {/* On a computer the chips and the filters stay in view while the list scrolls. */}
       <div ref={stickyRef} className="space-y-3 md:sticky md:top-0 md:z-20 md:-mx-1 md:bg-[#05080f]/90 md:px-1 md:pb-3 md:pt-1 md:backdrop-blur-md lg:top-16" data-testid="admin-pieces-sticky">
+      {peopleChips.length ? (
+        // Own buttons, not FilterChips: a chip here reads "name held · n sold", and FilterChips ends at the count.
+        <div role="group" aria-label={tpp("groupLabel")} className="-mx-0.5 flex gap-1.5 overflow-x-auto px-0.5 pb-0.5 [scrollbar-width:none] lg:flex-wrap lg:overflow-visible [&::-webkit-scrollbar]:hidden">
+          {peopleChips.map((p) => {
+            const on = p.id === filters.rep;
+            return (
+              <button
+                key={p.id}
+                type="button"
+                aria-pressed={on}
+                onClick={() => set({ rep: nextPersonFilter(filters.rep, p.id) })}
+                className={`inline-flex h-8 shrink-0 items-center gap-1.5 rounded-full border px-3 text-xs font-semibold outline-none transition-colors ${
+                  on ? FILTER_CHIP_ON.tags.chip : "border-white/[0.08] bg-white/[0.03] text-white/50 hover:border-white/[0.15] hover:text-white/80"
+                }`}
+                data-testid={`admin-pieces-person-${p.id}`}
+              >
+                {p.label}
+                <span className={`rounded-full px-1.5 py-px text-[10px] tabular-nums ${on ? FILTER_CHIP_ON.tags.count : "bg-white/[0.06] text-white/40"}`}>{p.held}</span>
+                {p.sold > 0 ? <span className="text-[10px] font-medium tabular-nums opacity-70">· {tpp("sold", { count: p.sold })}</span> : null}
+              </button>
+            );
+          })}
+        </div>
+      ) : null}
       <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
         <FilterChips<WhereChip | "">
           ariaLabel={tg("stockSummary")}

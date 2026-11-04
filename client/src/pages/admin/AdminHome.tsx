@@ -1,7 +1,6 @@
 import { Link } from "wouter";
 import { useQueries, useQuery } from "@tanstack/react-query";
 import { ArrowRight, CheckCircle2 } from "lucide-react";
-import { COMPANY_ORGANIZATION_SLUG } from "@shared/organizations";
 import { useT } from "@/i18n";
 import { OrdersPanel } from '@/pages/tags/CustomerOrders';
 import { workspacesMessages } from "@/i18n/messages/workspaces";
@@ -29,21 +28,15 @@ function usePendingOrders() {
 
 type Today = { blocks: TodayBlock[]; loading: boolean; error: unknown; retry: () => void };
 
-/**
- * Platform: people to approve, Stuscle orders to separate and the Tags queues of every organization (the list a queue
- * opens holds every organization's pieces, so its count does too), then its own company's production.
- */
-function usePlatformToday(me: XpotMeResponse | undefined): Today {
-  const companyId = me?.organizations?.find((organization) => organization.slug === COMPANY_ORGANIZATION_SLUG)?.id;
-  const overview = useTagOverview();
-  const requests = usePrintRequests("all", undefined, companyId);
+/** Admin: people to approve and Stuscle orders to separate. Production's rows live in Production (its board). */
+function usePlatformToday(): Today {
   const orders = usePendingOrders();
   const people = useQuery<Array<{ access: string }>>({ queryKey: ["/api/xpot/admin/reps"] });
   return {
-    loading: overview.isLoading || requests.isLoading || orders.isLoading || people.isLoading,
-    blocks: todayBlocks({ profile: "platform", requests: requests.data, queues: overview.data?.queues, pendingOrders: pendingOf(orders.data), pendingPeople: people.data?.filter((person) => person.access === "pending").length }),
-    error: overview.error ?? requests.error ?? orders.error ?? people.error,
-    retry: () => { void overview.refetch(); void requests.refetch(); void orders.refetch(); void people.refetch(); },
+    loading: orders.isLoading || people.isLoading,
+    blocks: todayBlocks({ profile: "platform", pendingOrders: pendingOf(orders.data), pendingPeople: people.data?.filter((person) => person.access === "pending").length }),
+    error: orders.error ?? people.error,
+    retry: () => { void orders.refetch(); void people.refetch(); },
   };
 }
 
@@ -83,8 +76,8 @@ function TodayList({ blocks, loading, error, retry }: Today) {
   // A list that failed to load is never "Nothing waiting": say so, and keep whatever did load.
   const failure = error ? <LoadError compact what={t("todayWhat")} error={error} onRetry={retry} /> : null;
   if (!blocks.length) return failure ?? <EmptyState compact dense tone="tags" icon={CheckCircle2} title={t("todayNothing")} hint={t("todayNothingHint")} />;
-  // Only the platform's home is split, by the kind of work, each block with its heading; one list needs none.
-  const headings: Partial<Record<TodayBlock["id"], string>> = { people: t("todayBlockPeople"), production: t("todayBlockProduction"), pieces: t("todayBlockPieces") };
+  // The platform's home has its heading; the single list of everyone else needs none.
+  const headings: Partial<Record<TodayBlock["id"], string>> = { people: t("todayBlockPeople") };
   return <div className="space-y-5">{failure}{blocks.map((block) => <section key={block.id} className="space-y-2" aria-label={headings[block.id]} data-testid={`today-block-${block.id}`}>
     {headings[block.id] ? <h2 className="text-xs font-semibold uppercase tracking-wider text-white/40">{headings[block.id]}</h2> : null}
     <ul className="divide-y divide-white/[0.06] overflow-hidden rounded-2xl border border-white/10 bg-white/[0.02]" data-testid="today-list">
@@ -99,7 +92,7 @@ function TodayList({ blocks, loading, error, retry }: Today) {
   </section>)}</div>;
 }
 
-function PlatformToday({ me }: { me: XpotMeResponse | undefined }) { return <TodayList {...usePlatformToday(me)} />; }
+function PlatformToday() { return <TodayList {...usePlatformToday()} />; }
 function PartnerToday() { return <TodayList {...usePartnerToday()} />; }
 function OwnerToday({ me }: { me: XpotMeResponse | undefined }) { return <TodayList {...useOwnerToday(me)} />; }
 
@@ -111,6 +104,6 @@ export function AdminHome() {
   return <div className="space-y-6" data-testid="management-home">
     <p className="max-w-2xl text-sm leading-relaxed text-white/50">{t("todayIntro")}</p>
     <OrdersPanel all/>
-    {profile === "platform" ? <PlatformToday me={me} /> : profile === "partner" ? <PartnerToday /> : profile === "owner" ? <OwnerToday me={me} /> : null}
+    {profile === "platform" ? <PlatformToday /> : profile === "partner" ? <PartnerToday /> : profile === "owner" ? <OwnerToday me={me} /> : null}
   </div>;
 }

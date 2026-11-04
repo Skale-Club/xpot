@@ -54,13 +54,18 @@ export function clearAdminMode() {
   try { window.localStorage.removeItem("xpot.adminMode"); } catch { /* Storage can be blocked. */ }
 }
 
-/** User screens always use personal data. Management is explicit in the URL and the panel navigation. */
+/**
+ * User screens always use personal data. Management is explicit in the URL and the panel navigation.
+ * `adminMode` is the data scope (the manage header, by path); `panelChrome` is the look: a panel's own bar, sidebar and
+ * colour. They differ for an owner, whose management screens are the Company group of Visits, in Visits' chrome.
+ */
 export function useViewerAccess() {
   const { data: me } = useQuery<XpotMeResponse>({ queryKey: ["/api/xpot/me"], retry: false });
   const [path] = useLocation();
   const router = useRouter();
   const hasAdminAccess = canManage(me);
   const reach = managementReach(me);
+  const profile = profileOfMe(me);
   const adminMode = reach !== null && workspaceForPath(`${router.base}${path}`) === "management";
-  return { me, profile: profileOfMe(me), hasAdminAccess, reach, adminMode, canManage: hasAdminAccess && adminMode, isSuperAdmin: isSuperAdmin(me) && adminMode };
+  return { me, profile, hasAdminAccess, reach, adminMode, panelChrome: adminMode && profile !== "owner", canManage: hasAdminAccess && adminMode, isSuperAdmin: isSuperAdmin(me) && adminMode };
 }

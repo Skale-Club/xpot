@@ -2211,6 +2211,24 @@ export async function getAnalytics(scope: AnalyticsScope, from: Date, to: Date):
   };
 }
 
+/**
+ * What each person holds and what they sold, within the viewer's scope. `held` is the stock they still have
+ * (available, reserved, internal use); `sold` is the pieces sold. Damaged, lost, retired and pending pieces count in
+ * neither. People with neither are absent.
+ */
+export async function countPiecesByPerson(scope: OrganizationScope): Promise<Array<{ repId: number; held: number; sold: number }>> {
+  const found = await rows<{ rep_id: number; held: number; sold: number }>(sql`
+    SELECT t.rep_id,
+           (count(*) FILTER (WHERE t.stock_status IN ('available', 'reserved', 'internal_use')))::int AS held,
+           (count(*) FILTER (WHERE t.stock_status = 'sold'))::int AS sold
+    FROM tags t
+    WHERE t.rep_id IS NOT NULL AND ${inOrganizations(sql`t.organization_id`, scope)}
+    GROUP BY t.rep_id
+    HAVING count(*) FILTER (WHERE t.stock_status IN ('available', 'reserved', 'internal_use', 'sold')) > 0
+  `);
+  return found.map((r) => ({ repId: Number(r.rep_id), held: Number(r.held), sold: Number(r.sold) }));
+}
+
 export async function getOverview(now: Date = new Date(), timezoneOffsetMinutes = 0, scope: OrganizationScope = null): Promise<TagOverview> {
   const inScope = inOrganizations(sql`t.organization_id`, scope);
   // House stock never adds up across organizations: with every organization in view it means the company's.

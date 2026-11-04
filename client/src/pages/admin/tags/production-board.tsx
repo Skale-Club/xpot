@@ -17,6 +17,7 @@ import { EmptyState } from "@/components/xpot/EmptyState";
 import { useT } from "@/i18n";
 import { productionMessages } from "@/i18n/messages/production";
 import { productionBoardMessages } from "@/i18n/messages/productionBoard";
+import { productionMissingMessages } from "@/i18n/messages/productionMissing";
 import { unifiedProductionMessages } from "@/i18n/messages/unifiedProduction";
 import { useTagLabels } from "./labels";
 import { Loading, LoadError } from "./pieces-shared";
@@ -27,7 +28,7 @@ import { ToPrintList } from "./production-orders";
 import { ThisComputer } from "./production-this-computer";
 import type { PreviewState } from "./production-preview-3d";
 import { PRODUCTION_BASE, minutesText, usePrintComputers, usePrintModels, usePrintRequests, useProductionAccess } from "./production-shared";
-import { needsPrintComputer, orderedPath, serializedRequests } from "./production-workflow";
+import { missingParts, needsPrintComputer, orderedPath, serializedRequests } from "./production-workflow";
 import { relativeTime } from "@/pages/my/format";
 
 // Tags › Production's first screen: what can be made. The print jobs that come out of it live on the Printing tab.
@@ -45,6 +46,7 @@ export function ProductionBoard({ go, onOtherWays }: { go: Go; onOtherWays?: () 
   const t = useT(productionMessages);
   const b = useT(productionBoardMessages);
   const u = useT(unifiedProductionMessages);
+  const m = useT(productionMissingMessages);
   const { data, isLoading, error, refetch } = usePrintModels();
   const { isAdmin } = useProductionAccess();
   const [generating, setGenerating] = useState<PrintGenerateOption | null>(null);
@@ -52,6 +54,7 @@ export function ProductionBoard({ go, onOtherWays }: { go: Go; onOtherWays?: () 
   const [picking, setPicking] = useState<PrintPartFamily<PrintModelItem> | null>(null);
   const parts = models.filter(isAlwaysReadyPart).sort((x, y) => x.sortOrder - y.sortOrder || x.title.localeCompare(y.title));
   const families = printPartFamilies(parts);
+  const missing = useMemo(() => missingParts(models), [data]);
   const options = useMemo(() => printGenerateOptions(data ?? []), [data]);
   const bySlug = new Map(models.map((model) => [model.slug, model]));
   const openModel = (model: PrintModelItem) => go(`${PRODUCTION_BASE}/models/${model.slug}`);
@@ -61,6 +64,30 @@ export function ProductionBoard({ go, onOtherWays }: { go: Go; onOtherWays?: () 
 
   return (
     <div className="space-y-8" data-testid="production-board">
+      {isAdmin && missing.length ? <section className="space-y-3" aria-labelledby="production-missing-title" data-testid="production-missing-area">
+        <SectionHeading id="production-missing-title" title={m("title")} intro={m("intro")} />
+        <ul className="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-3">
+          {missing.map((part) => (
+            <li key={part.id}>
+              <button
+                type="button"
+                onClick={() => openModel(part)}
+                className="flex w-full items-center gap-3 rounded-2xl border border-white/[0.08] bg-white/[0.03] px-3 py-2.5 text-left transition-colors hover:border-violet-400/40 hover:bg-violet-500/[0.06] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-400/60"
+                data-testid="production-missing-part"
+              >
+                <span className="min-w-0 flex-1">
+                  <span className="block text-sm font-semibold leading-snug text-white">{part.title}</span>
+                  <span className="mt-0.5 block text-xs text-amber-200">
+                    {m("onHand", { count: part.onHand })} · {m("reorderAt", { reorder: part.partReorderAt ?? 0 })}
+                  </span>
+                </span>
+                <ChevronRight className="h-4 w-4 shrink-0 text-white/40" aria-hidden="true" />
+              </button>
+            </li>
+          ))}
+        </ul>
+      </section> : null}
+
       <section className="space-y-3" aria-labelledby="production-generate-title" data-testid="production-generate-area">
         <SectionHeading id="production-generate-title" title={b("generateTitle")} intro={b("generateIntro")} />
         {options.length ? (

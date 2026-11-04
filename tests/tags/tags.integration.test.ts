@@ -279,6 +279,18 @@ test.skipIf(!enabled)("tags: kits, reseller isolation, sales, scans, report, pro
     const overview = await api("GET", "/api/xpot/admin/tags/overview", "it-admin");
     assert.deepEqual(overview.json.stock, { house: 5, withResellers: 3 });
     assert.equal(overview.json.counts.active, 2);
+    // Pieces per person (the stock list's chips): held and sold match that person's list, split by stock status.
+    const byPerson = await api("GET", "/api/xpot/admin/tags/by-person", "it-admin");
+    assert.equal(byPerson.status, 200, byPerson.text);
+    for (const name of ["it-ana", "it-bruno"]) {
+      const listed = await api("GET", `/api/xpot/tags?repId=${repId[name]}&hidePending=1`, "it-admin");
+      const counted = byPerson.json.find((p: any) => p.repId === repId[name]);
+      const sold = listed.json.filter((p: any) => p.stockStatus === "sold").length;
+      const held = listed.json.filter((p: any) => ["available", "reserved", "internal_use"].includes(p.stockStatus)).length;
+      assert.equal(counted?.held ?? 0, held, name);
+      assert.equal(counted?.sold ?? 0, sold, name);
+    }
+    assert.equal((await api("GET", "/api/xpot/admin/tags/by-person", "it-ana")).status, 403);
     assert.equal(overview.json.recentEvents[0].productType, "keychain");
     assert.equal(overview.json.recentEvents[0].face, "instagram");
     assert.equal(overview.json.recentEvents[0].batchCode, batch.json.batchCode);

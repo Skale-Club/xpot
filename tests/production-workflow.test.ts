@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { PrintModelItem, PrintRequestItem } from "../shared/printProduction";
 import { parseBatchName, batchTabsFor, pendingBatches } from "../client/src/pages/admin/tags/batches-model";
-import { assemblyParts, buildState, collapsedPlates, damagedToReprint, needsPrintComputer, journeyTitle, personName, plainTitle, batchPrefixFromTitle, boardGroups, chipsWritten, pauseNeedsChips, canAssembleJob, canPrintModel, journeyProgress, latestPlates, pendingPieces, plateActions, printableBeds, printComputers, printedOutcome, printQuantity, productionNeedsAction, productionPath, productionTabFor, showPlateNumber, slugFromTitle } from "../client/src/pages/admin/tags/production-workflow";
+import { assemblyParts, buildState, collapsedPlates, damagedToReprint, needsPrintComputer, journeyTitle, personName, plainTitle, batchPrefixFromTitle, boardGroups, chipsWritten, pauseNeedsChips, canAssembleJob, canPrintModel, journeyProgress, latestPlates, pendingPieces, plateActions, printableBeds, printComputers, printedOutcome, printQuantity, missingParts, productionNeedsAction, productionPath, productionTabFor, showPlateNumber, slugFromTitle } from "../client/src/pages/admin/tags/production-workflow";
 
 const model = {
   id: "model", kind: "serialized", status: "ready", productType: "large_plate", face: "google_review", salesProductId: 1,
@@ -234,5 +234,26 @@ describe("unified production", () => {
       const prefix = batchPrefixFromTitle(title);
       if (prefix) expect(prefix).toMatch(/^[A-Z][A-Z0-9]{1,11}$/);
     }
+  });
+});
+
+describe("missing parts", () => {
+  const version = { beds: [{ label: "x4", copies: 4, fileRef: "f" }] };
+  const part = (title: string, onHand: number, partReorderAt: number | null, lowStock: boolean, extra: Record<string, unknown> = {}) =>
+    ({ id: title, kind: "part", status: "ready", title, onHand, partReorderAt, lowStock, currentVersion: version, ...extra }) as unknown as PrintModelItem;
+
+  it("lists only low parts with a reorder point, worst first", () => {
+    const list = missingParts([
+      part("B · Small", 8, 10, true),
+      part("A · Large", 0, 10, true),
+      part("C · Fine", 50, 10, false),
+      part("D · No point", 0, null, false),
+      part("E · Serial", 0, 10, true, { kind: "serialized" }),
+    ]);
+    expect(list.map((p) => p.title)).toEqual(["A · Large", "B · Small"]);
+  });
+
+  it("is empty when nothing is low", () => {
+    expect(missingParts([part("C · Fine", 50, 10, false)])).toEqual([]);
   });
 });
