@@ -55,7 +55,7 @@ const en = {
   audienceExtraBody: "Start with the hours you have and grow your selling routine at the pace that works for you.",
   audienceMobileTitle: "Already out and about",
   audienceMobileBody: "If your work already takes you around town, add nearby business visits to the route you already make.",
-  audienceIndependentTitle: "Prefer to work independently",
+  audienceIndependentTitle: "Want to run your own route",
   audienceIndependentBody: "Choose your selling hours, manage your own stops and see what you sold and earned.",
 
   // How it works
@@ -95,7 +95,7 @@ const en = {
   faqTitle: "Questions before you start selling",
   faqSub: "What to know about access, daily use and earning with Xpot.",
   faq1Question: "Who is Xpot designed for?",
-  faq1Answer: "Xpot is for independent sellers who want flexible income, whether they sell a few hours a week or build a full-time sales business.",
+  faq1Answer: "Xpot is for people who sell in the field, whether for a few hours a week or as a full-time sales business.",
   faq2Question: "Do I need sales experience?",
   faq2Answer: "No. Xpot guides you through the route, each visit and the next step. You can record a quick voice note and keep moving without filling out long forms.",
   faq3Question: "How do I plan my selling day?",
@@ -176,7 +176,7 @@ export const landingMessages: Dictionary<typeof en> = {
     audienceExtraBody: "Comece com as horas que você tem e amplie sua rotina de vendas no ritmo que fizer sentido para você.",
     audienceMobileTitle: "Já passa o dia na rua",
     audienceMobileBody: "Se o seu trabalho já faz você circular pela cidade, inclua visitas a comércios próximos no caminho que você já percorre.",
-    audienceIndependentTitle: "Prefere trabalhar por conta própria",
+    audienceIndependentTitle: "Quer cuidar da própria rota",
     audienceIndependentBody: "Escolha seus horários, cuide das próprias paradas e acompanhe o que vendeu e quanto ganhou.",
 
     howTitle: "Um app da primeira parada até a última venda",
@@ -212,7 +212,7 @@ export const landingMessages: Dictionary<typeof en> = {
     faqTitle: "Dúvidas antes de começar a vender",
     faqSub: "O que você precisa saber sobre acesso, uso diário e renda com o Xpot.",
     faq1Question: "Para quem o Xpot foi criado?",
-    faq1Answer: "O Xpot é para vendedores independentes que buscam uma renda flexível, seja vendendo algumas horas por semana ou construindo um negócio em tempo integral.",
+    faq1Answer: "O Xpot é para quem faz vendas externas, seja por algumas horas na semana ou como um negócio em tempo integral.",
     faq2Question: "Preciso ter experiência com vendas?",
     faq2Answer: "Não. O Xpot orienta a rota, cada visita e o próximo passo. Você pode gravar um áudio rápido e seguir em frente sem preencher formulários longos.",
     faq3Question: "Como planejo meu dia de vendas?",
@@ -288,7 +288,7 @@ export const landingMessages: Dictionary<typeof en> = {
     audienceExtraBody: "Empieza con las horas que tengas y amplía tu rutina de ventas al ritmo que tenga sentido para ti.",
     audienceMobileTitle: "Ya pasas el día en la calle",
     audienceMobileBody: "Si tu trabajo ya te hace recorrer la ciudad, añade visitas a comercios cercanos al camino que ya haces.",
-    audienceIndependentTitle: "Prefieres trabajar por tu cuenta",
+    audienceIndependentTitle: "Quieres manejar tu propia ruta",
     audienceIndependentBody: "Elige tus horarios, organiza tus propias paradas y sigue lo que vendiste y cuánto ganaste.",
 
     howTitle: "Una app desde la primera parada hasta la última venta",
@@ -324,7 +324,7 @@ export const landingMessages: Dictionary<typeof en> = {
     faqTitle: "Preguntas antes de empezar a vender",
     faqSub: "Lo que necesitas saber sobre acceso, uso diario e ingresos con Xpot.",
     faq1Question: "¿Para quién fue creado Xpot?",
-    faq1Answer: "Xpot es para vendedores independientes que buscan ingresos flexibles, ya sea vendiendo unas horas por semana o construyendo un negocio a tiempo completo.",
+    faq1Answer: "Xpot es para quienes hacen ventas de campo, ya sea unas horas por semana o como un negocio a tiempo completo.",
     faq2Question: "¿Necesito experiencia en ventas?",
     faq2Answer: "No. Xpot orienta la ruta, cada visita y el próximo paso. Puedes grabar un audio rápido y seguir adelante sin completar formularios largos.",
     faq3Question: "¿Cómo planifico mi día de ventas?",

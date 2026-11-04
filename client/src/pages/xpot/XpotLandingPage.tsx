@@ -453,7 +453,7 @@ export function XpotLandingPage() {
             </motion.div>
           </section>
 
-          {/* Independent sellers can use Xpot for flexible hours or full-time work. */}
+          {/* Who Xpot is for: a few hours a week or full-time field sales. */}
           <LandingBand id="audience" tone="alternate" className="scroll-mt-24" contentClassName="space-y-12">
             <Reveal>
               <SectionHeading title={content.audience.title} sub={content.audience.subtitle} />
