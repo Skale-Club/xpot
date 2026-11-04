@@ -113,7 +113,7 @@ export function GenerateDialog({ option, models, onClose, onGenerated }: {
         <div className="flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-contain [color-scheme:dark] md:flex-row md:overflow-hidden [&_*]:[scrollbar-width:thin]">
           <div className="order-1 min-w-0 flex-1 md:order-2 md:overflow-y-auto">
           <fieldset disabled={busy} aria-labelledby={headingId} className="min-w-0 space-y-3 px-5 py-4 sm:px-7">
-            <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5"><h2 ref={heading} id={headingId} tabIndex={-1} className="text-base font-semibold tracking-tight text-white outline-none">{d(`${STEP_KEYS[step]}Title`)}</h2>
+            <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5"><h2 ref={heading} id={headingId} tabIndex={-1} className="text-base font-semibold tracking-tight text-white !shadow-none !outline-none !ring-0">{d(`${STEP_KEYS[step]}Title`)}</h2>
               <p className="text-xs text-white/50">{d(`${STEP_KEYS[step]}Hint`)}</p></div>
             {step === 0 ? <>
               <div className="flex flex-wrap items-center gap-x-1 gap-y-2" aria-label={d("design")}>
