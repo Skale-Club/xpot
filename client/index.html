@@ -51,7 +51,8 @@
       // once the page composites, so a launch into a background tab would
       // otherwise be misread as a hang.
       (function () {
-        var TIMEOUT_MS = 12000;
+        // Local development compiles every module on first load, which is not a hang.
+        var TIMEOUT_MS = /^(localhost|127\.0\.0\.1)$/.test(location.hostname) ? 60000 : 12000;
         var VISIBLE_GRACE_MS = 2000;
         function fail() {
           if (window.__XPOT_BOOTED) return;
