@@ -1,4 +1,4 @@
-import { Suspense, lazy, useMemo, useState } from "react";
+import { Suspense, lazy, useMemo, useRef, useState } from "react";
 import { ChevronRight, Download, Loader2, Shapes } from "lucide-react";
 import {
   isAlwaysReadyPart,
@@ -22,6 +22,7 @@ import { useTagLabels } from "./labels";
 import { Loading, LoadError } from "./pieces-shared";
 import { DesignPreview, GenerateDialog } from "./production-generate";
 import { printStyle } from "@shared/printDesigns";
+import { Piece3D } from "./production-piece-3d";
 import { ToPrintList } from "./production-orders";
 import type { PreviewState } from "./production-preview-3d";
 import { PRODUCTION_BASE, minutesText, usePrintComputers, usePrintModels, usePrintRequests, useProductionAccess } from "./production-shared";
@@ -67,7 +68,7 @@ export function ProductionBoard({ go, onOtherWays }: { go: Go; onOtherWays?: () 
       <section className="space-y-3" aria-labelledby="production-generate-title" data-testid="production-generate-area">
         <SectionHeading id="production-generate-title" title={b("generateTitle")} intro={b("generateIntro")} />
         {options.length ? (
-          <ul className="grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-4">
+          <ul className="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-3">
             {options.map((option) => (
               <ProductCard key={option.productType} option={option} model={bySlug.get(option.colours[0].faces[0].slug)} onOpen={() => setGenerating(option)} />
             ))}
@@ -158,24 +159,42 @@ function ProductCard({ option, model, onOpen }: { option: PrintGenerateOption; m
   const labels = useTagLabels();
   const faces = new Set(option.colours.flatMap((colour) => colour.faces.map((face) => face.face)));
   const sample = option.colours[0].faces[0];
+  // Turning the piece with a mouse or a finger must not open the card when the pointer is let go.
+  const down = useRef<{ x: number; y: number } | null>(null);
+  const dragged = useRef(false);
+  const open = () => {
+    if (dragged.current) { dragged.current = false; return; }
+    onOpen();
+  };
   return (
     <li>
-      <button
-        type="button"
-        onClick={onOpen}
-        className="flex h-full w-full flex-col items-center gap-3 rounded-2xl border border-white/[0.08] bg-white/[0.03] p-3 text-center transition-colors hover:border-violet-400/40 hover:bg-violet-500/[0.06] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-400/60"
+      <div
+        role="button"
+        tabIndex={0}
+        onClick={open}
+        onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); onOpen(); } }}
+        onPointerDown={(event) => { down.current = { x: event.clientX, y: event.clientY }; dragged.current = false; }}
+        onPointerMove={(event) => {
+          if (down.current && Math.hypot(event.clientX - down.current.x, event.clientY - down.current.y) > 6) dragged.current = true;
+        }}
+        onPointerUp={() => { down.current = null; }}
+        className="flex h-full w-full cursor-pointer items-center gap-3 rounded-2xl border border-white/[0.08] bg-white/[0.03] p-2.5 text-left transition-colors hover:border-violet-400/40 hover:bg-violet-500/[0.06] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-400/60"
         data-testid="production-generate-product"
       >
-        <span className="flex h-40 w-full items-center justify-center rounded-xl bg-white/[0.16]">
-          <DesignPreview productType={option.productType} face={sample.face} theme={model?.theme ?? option.colours[0].theme} style={printStyle(model?.currentVersion?.params)} modelSlug={sample.slug} />
+        <span className="relative flex h-28 w-28 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-[radial-gradient(ellipse_at_center,rgba(255,255,255,0.1),transparent_70%)] sm:h-32 sm:w-32">
+          <Piece3D
+            model={model}
+            fallback={<DesignPreview productType={option.productType} face={sample.face} theme={model?.theme ?? option.colours[0].theme} style={printStyle(model?.currentVersion?.params)} modelSlug={sample.slug} />}
+          />
         </span>
-        <span className="space-y-0.5">
-          <span className="block text-sm font-semibold text-white">{labels.product(option.productType)}</span>
+        <span className="min-w-0 flex-1 space-y-0.5">
+          <span className="block text-sm font-semibold leading-snug text-white">{labels.product(option.productType)}</span>
           <span className="block text-xs text-white/50">
             {b.plural("colourCount", option.colours.length)} · {b.plural("faceCount", faces.size)}
           </span>
         </span>
-      </button>
+        <ChevronRight className="h-4 w-4 shrink-0 text-white/40" aria-hidden="true" />
+      </div>
     </li>
   );
 }

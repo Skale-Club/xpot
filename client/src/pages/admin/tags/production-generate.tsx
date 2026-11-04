@@ -19,6 +19,7 @@ import { productionDesignMessages } from "@/i18n/messages/productionDesign";
 import { errorMessage, invalidateAdminTags, sendJson } from "./api";
 import { useTagLabels } from "./labels";
 import { ProductionPlatePreview } from "./production-identity";
+import { Piece3D } from "./production-piece-3d";
 import { MaterialsNeeded } from "./production-materials";
 import { NfcMountChoice, useNfcMountName } from "./production-nfc";
 import { ProductionSteps } from "./production-steps";
@@ -162,7 +163,9 @@ export function GenerateDialog({ option, models, onClose, onGenerated }: {
           </fieldset>
           <aside className="border-t border-white/[0.08] bg-white/[0.025] px-5 py-5 md:border-l md:border-t-0" aria-label={d("summary")} data-testid="production-design-summary">
             <p className="text-xs font-semibold uppercase tracking-widest text-white/40">{d("summary")}</p>
-            <div className="mt-4 flex items-center gap-4 md:flex-col"><div className="flex min-h-32 items-center justify-center md:min-h-48">{preview ?? <TagPieceVisual productType={option.productType} face="google_review" theme={theme} size="lg" still />}</div>
+            <div className="mt-4 flex items-center gap-4 md:flex-col"><div className="relative flex h-40 w-40 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-[radial-gradient(ellipse_at_center,rgba(255,255,255,0.1),transparent_70%)] md:h-52 md:w-full" data-testid="production-design-summary-3d">
+                <Piece3D model={model} fallback={preview ?? <TagPieceVisual productType={option.productType} face="google_review" theme={theme} size="lg" still />} />
+              </div>
               <div className="min-w-0 space-y-2 md:w-full"><p className="text-sm font-semibold text-white">{product}</p><p className="text-sm text-white/65">{faceKey ? labels.face(faceKey) : d("chooseDesign")}</p>
                 {face && colour ? <><p className="text-xs text-white/45">{themeName(colour.theme)} · {styleName(face.style)}</p><p className="text-xs text-white/45">{nfcMount ? nfcName(nfcMount) : n("fixed")}</p>{plan.valid ? <p className="text-xs text-white/65">{t.plural("pieceCount", plan.count)}</p> : null}</> : null}
               </div></div>
