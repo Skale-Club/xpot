@@ -1,5 +1,5 @@
 import type { CSSProperties, ReactNode } from "react";
-import { CalendarCheck, Contact, DollarSign, Facebook, Globe, Instagram, Linkedin, Mail, Phone, Sparkles, Tag, Utensils, Wifi, Youtube } from "lucide-react";
+import { CalendarCheck, Contact, DollarSign, Facebook, Globe, Instagram, Linkedin, Mail, Phone, Sparkles, Tag, Wifi, Youtube } from "lucide-react";
 import { isTagFace, type TagFace } from "@shared/tagFace";
 import { useT } from "@/i18n";
 import { tagsMessages } from "@/i18n/messages/tags";
@@ -33,6 +33,16 @@ function VenmoGlyph({ className }: { className: string }) {
   );
 }
 
+// The word set as a square: ME over NU.
+function MenuGlyph({ className }: { className: string }) {
+  const letters = [["M", 6.25, 11], ["E", 17.75, 11], ["N", 6.25, 22.5], ["U", 17.75, 22.5]] as const;
+  return (
+    <svg viewBox="0 0 24 24" className={className} fill="currentColor" fontFamily="Inter, Arial, sans-serif" fontSize="11.5" fontWeight="800" textAnchor="middle" aria-hidden="true" focusable="false">
+      {letters.map(([letter, x, y]) => <text key={letter} x={x} y={y}>{letter}</text>)}
+    </svg>
+  );
+}
+
 type Tile = { background: string; color: string; glyph: (cls: string) => ReactNode };
 
 const TILES: Record<TagFace, Tile> = {
@@ -50,7 +60,7 @@ const TILES: Record<TagFace, Tile> = {
   website: { background: "#2563eb", color: "#fff", glyph: (c) => <Globe className={c} /> },
   phone: { background: "#16a34a", color: "#fff", glyph: (c) => <Phone className={c} /> },
   email: { background: "#f59e0b", color: "#fff", glyph: (c) => <Mail className={c} /> },
-  menu: { background: "#ea580c", color: "#fff", glyph: (c) => <Utensils className={c} /> },
+  menu: { background: "#ffffff", color: "#000", glyph: (c) => <MenuGlyph className={c} /> },
   booking: { background: "#0d9488", color: "#fff", glyph: (c) => <CalendarCheck className={c} /> },
   vcard: { background: "#7c3aed", color: "#fff", glyph: (c) => <Contact className={c} /> },
   venmo: { background: "#008CFF", color: "#fff", glyph: (c) => <VenmoGlyph className={c} /> },
