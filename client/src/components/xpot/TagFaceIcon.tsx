@@ -34,7 +34,7 @@ function VenmoGlyph({ className }: { className: string }) {
 }
 
 // The word set as a square: ME over NU.
-function MenuGlyph({ className }: { className: string }) {
+export function MenuGlyph({ className }: { className: string }) {
   const letters = [["M", 6.25, 11], ["E", 17.75, 11], ["N", 6.25, 22.5], ["U", 17.75, 22.5]] as const;
   return (
     <svg viewBox="0 0 24 24" className={className} fill="currentColor" fontFamily="Inter, Arial, sans-serif" fontSize="11.5" fontWeight="800" textAnchor="middle" aria-hidden="true" focusable="false">

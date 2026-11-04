@@ -24,7 +24,7 @@ import { bedSummary, usePrintModels, useProductionAccess } from "./production-sh
 import { assemblyParts, canPrintModel, filamentColours, printableBeds, printQuantity, type ExistingProductionBatch } from "./production-workflow";
 import { TagModelChips } from "@/components/xpot/TagProductThumbnail";
 import { useModelName } from "./production-identity";
-import { ProductionSteps } from "./production-steps";
+import { StepBar, StepRail } from "@/components/xpot/StepRail";
 
 const EMPTY_FORM = {
   name: "", batchCode: "", productType: TAG_PRODUCT_TYPES[0] as string,
@@ -130,14 +130,18 @@ export function ProductionWizard({ onClose, onCreated, onOrdered, onCloseAutoFoc
 
   return (
     <Dialog open onOpenChange={(open) => { if (!open && !busy) onClose(); }}>
-      <DialogContent phoneSheet className="flex max-h-[min(90dvh,850px)] max-w-2xl flex-col gap-0 overflow-hidden p-0" onCloseAutoFocus={onCloseAutoFocus} onEscapeKeyDown={(event) => { if (busy) event.preventDefault(); }}>
+      <DialogContent phoneSheet className="flex max-h-[min(90dvh,850px)] max-w-4xl flex-col gap-0 overflow-hidden p-0" onCloseAutoFocus={onCloseAutoFocus} onEscapeKeyDown={(event) => { if (busy) event.preventDefault(); }}>
         <div className="shrink-0 border-b border-white/[0.08] px-5 py-5 pr-14 sm:px-6 sm:pr-14">
           <DialogTitle className="text-white">{existingBatch ? u("prepareExisting", { code: existingBatch.batchCode }) : fromModel && model ? tp("printTitle", { model: nameOf(model) }) : external ? u("otherWays") : u("newProduction")}</DialogTitle>
           <DialogDescription className={fromModel ? "sr-only" : "mt-2"}>{printing ? u(step === 0 ? "printIntro" : step === 1 ? "quantityIntro" : "reviewPrint") : step === 0 ? tw("createIntro") : step === 1 ? tw("codeIntro") : tw("reviewIntro")}</DialogDescription>
-          <ProductionSteps names={visibleSteps.map((index) => stepNames[index])} current={step - first} canVisit={(index) => index + first <= step} busy={busy} onChange={(index) => setStep(index + first)} progress={tw("stepCount", { current: step + 1 - first, total: visibleSteps.length })} />
+          <StepBar names={visibleSteps.map((index) => stepNames[index])} current={step - first} progress={tw("stepCount", { current: step + 1 - first, total: visibleSteps.length })} />
         </div>
         <form onSubmit={submit} className="flex min-h-0 flex-1 flex-col" data-testid="admin-tags-new-batch-form">
-          <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 py-5 sm:px-6" data-testid="production-wizard-body">
+          <div className="flex min-h-0 flex-1 [color-scheme:dark] [&_*]:[scrollbar-width:thin]">
+          <aside className="hidden w-56 shrink-0 overflow-y-auto border-r border-white/[0.08] bg-white/[0.025] px-5 py-5 md:block">
+            <StepRail names={visibleSteps.map((index) => stepNames[index])} current={step - first} canVisit={(index) => index + first <= step} busy={busy} onChange={(index) => setStep(index + first)} progress={tw("stepCount", { current: step + 1 - first, total: visibleSteps.length })} />
+          </aside>
+          <div className="min-h-0 min-w-0 flex-1 overflow-y-auto overscroll-contain px-5 py-5 sm:px-6" data-testid="production-wizard-body">
           <fieldset disabled={busy} aria-labelledby={stepHeadingId} className="min-w-0 space-y-6">
             <h2 id={stepHeadingId} ref={stepHeading} tabIndex={-1} className="text-sm font-semibold text-white/85 outline-none">{printing ? stepNames[step] : step === 0 ? tw("stepProduct") : step === 1 ? tw("codeSetup") : tw("stepReview")}</h2>
             {step === 0 && !initialModel && !existingBatch && (otherWays || !printing) ? <Field label={u("source")}><Select value={form.codes} onChange={(e) => set({ codes: e.target.value as typeof form.codes })} options={[...(external ? [] : [{ value: "print", label: u("sourcePrint") }]), { value: "issued", label: u("sourceSupplier") }, { value: "scanned", label: u("sourceReceive") }]} data-testid="production-source" /></Field> : null}
@@ -209,9 +213,9 @@ export function ProductionWizard({ onClose, onCreated, onOrdered, onCloseAutoFoc
             </> : null}
           </fieldset>
           </div>
+          </div>
           <footer className="shrink-0 space-y-4 border-t border-white/[0.08] bg-[#111727] px-5 py-4 sm:px-6">
             <div className="flex flex-wrap items-center justify-between gap-3">
-              <span className="text-xs text-white/40">{tw("stepCount", { current: step + 1 - first, total: visibleSteps.length })}</span>
               <div className="ml-auto flex gap-2">
                 <Button type="button" variant="ghost" onClick={step === first ? onClose : () => setStep((s) => s - 1)} disabled={busy}>{step === first ? tc("cancel") : tw("back")}</Button>
                 {step < 2 ? <Button key="next" type="submit" variant="brand" accent="tags" disabled={step === 0 ? !productReady : !quantityOk} data-testid="batch-step-next">{tw("next")}<ChevronRight className="h-4 w-4" aria-hidden="true" /></Button> : <Button key="create" type="submit" variant="brand" accent="tags" disabled={!ready} loading={busy} data-testid={printing ? "production-print-confirm" : "admin-tags-new-batch-submit"}>{printing ? existingBatch ? u("requestFiles") : tp.plural("printCount", printPlan.pieces) : issuing ? t.plural("createIssuedBatch", quantity) : t("createEmptyBatch")}</Button>}
