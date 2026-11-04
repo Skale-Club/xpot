@@ -1,4 +1,3 @@
-import { TagThemeChip } from "@/components/xpot/TagProductThumbnail";
 import { useEffect, useId, useRef, useState, type FormEvent, type ReactNode } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { Check, ChevronRight, Minus, Plus, Search } from "lucide-react";
@@ -7,8 +6,10 @@ import { PRINT_DESIGNS, PRINT_DESIGN_GROUPS, PRINT_PALETTE, printDesignGroup, ty
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import { Field, Input, Select } from "@/components/xpot/Field";
-import { TagFaceIcon } from "@/components/xpot/TagFaceIcon";
-import { TagPieceVisual } from "@/components/xpot/TagProductThumbnail";
+import { MenuGlyph, TagFaceIcon } from "@/components/xpot/TagFaceIcon";
+import { PIECE_STAGE } from "@/components/xpot/PieceCard";
+import { StepBar, StepRail } from "@/components/xpot/StepRail";
+import { TagModelChips, TagPieceVisual } from "@/components/xpot/TagProductThumbnail";
 import { useToast } from "@/hooks/use-toast";
 import { useT } from "@/i18n";
 import { batchWorkspaceMessages } from "@/i18n/messages/batchWorkspace";
@@ -23,7 +24,6 @@ import { ProductionPlatePreview } from "./production-identity";
 import { Piece3D } from "./production-piece-3d";
 import { MaterialsNeeded } from "./production-materials";
 import { NfcMountChoice, useNfcMountName } from "./production-nfc";
-import { ProductionSteps } from "./production-steps";
 import { assemblyParts, filamentColours, printQuantity } from "./production-workflow";
 import { useProductionAccess } from "./production-shared";
 
@@ -92,16 +92,26 @@ export function GenerateDialog({ option, models, onClose, onGenerated }: {
   };
   const chooseFace = (value: string) => { setFaceKey(value); setQuantity(null); };
   const chooseColour = (value: string) => { setTheme(value); setQuantity(null); };
+  const stepNames = STEP_KEYS.map((key) => d(key));
+  const progress = d("progress", { current: step + 1, total: 5 });
+  // What each step settled, kept on the rail once the person has moved on.
+  const stepValues = [
+    faceKey ? labels.face(faceKey) : null,
+    face && colour ? `${themeName(colour.theme)} · ${styleName(face.style)}` : null,
+    face ? (nfcMount ? nfcName(nfcMount) : n("fixed")) : null,
+    plan.valid ? t.plural("pieceCount", plan.count) : null,
+  ];
   const preview = face && colour ? <DesignPreview productType={option.productType} face={face.face} theme={colour.theme} style={face.style} modelSlug={face.slug} /> : null;
   return <Dialog open onOpenChange={(open) => { if (!open && !busy) onClose(); }}>
     <DialogContent phoneSheet className="flex h-[min(90dvh,850px)] max-w-5xl flex-col gap-0 overflow-hidden p-0" onEscapeKeyDown={(event) => { if (busy) event.preventDefault(); }}>
       <header className="shrink-0 border-b border-white/[0.08] px-5 py-5 sm:px-7">
         <div className="pr-9"><DialogTitle className="text-lg text-white">{b("generateDialog", { product })}</DialogTitle>
           <DialogDescription className="mt-1 text-xs">{d("onePlate")}</DialogDescription></div>
-        <ProductionSteps names={STEP_KEYS.map((key) => d(key))} current={step} canVisit={canVisit} busy={busy} onChange={setStep} progress={d("progress", { current: step + 1, total: 5 })} />
+        <StepBar names={stepNames} current={step} progress={progress} />
       </header>
       <form onSubmit={submit} className="flex min-h-0 flex-1 flex-col" data-testid="production-generate-form">
-        <div className="grid min-h-0 flex-1 overflow-y-auto overscroll-contain md:grid-cols-[minmax(0,1fr)_240px]">
+        <div className="flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-contain [color-scheme:dark] md:flex-row md:overflow-hidden [&_*]:[scrollbar-width:thin]">
+          <div className="order-1 min-w-0 flex-1 md:order-2 md:overflow-y-auto">
           <fieldset disabled={busy} aria-labelledby={headingId} className="min-w-0 space-y-5 px-5 py-5 sm:px-7">
             <div><h2 ref={heading} id={headingId} tabIndex={-1} className="text-lg font-semibold tracking-tight text-white outline-none">{d(`${STEP_KEYS[step]}Title`)}</h2>
               <p className="mt-1 text-sm leading-relaxed text-white/55">{d(`${STEP_KEYS[step]}Hint`)}</p></div>
@@ -113,9 +123,9 @@ export function GenerateDialog({ option, models, onClose, onGenerated }: {
               <fieldset className="grid grid-cols-3 gap-2 sm:grid-cols-4" data-testid="production-generate-faces"><legend className="sr-only">{d("design")}</legend>
                 {filtered.map((f) => {
                   const logo = PRINT_DESIGNS.find((entry) => entry.face === f.face)?.logo;
-                  return <RadioCard key={f.face} name={`${radioId}-face`} value={f.face} checked={faceKey === f.face} onChange={() => chooseFace(f.face)} testId={`production-generate-face-${f.face}`}>
+                  return <RadioCard key={f.face} name={`${radioId}-face`} value={f.face} checked={faceKey === f.face} onChange={() => chooseFace(f.face)} onPick={() => setStep(1)} testId={`production-generate-face-${f.face}`}>
                     <span aria-hidden="true" className="flex h-16 w-16 items-center justify-center rounded-xl bg-white p-3 shadow-sm sm:h-20 sm:w-20">
-                      {logo ? <img src={`/production/logos/${logo}.png`} alt="" className="h-full w-full object-contain" width={64} height={64} /> : <TagFaceIcon face={f.face} size="lg" />}
+                      {f.face === "menu" ? <MenuGlyph className="h-full w-full text-black" /> : logo ? <img src={`/production/logos/${logo}.png`} alt="" className="h-full w-full object-contain" width={64} height={64} /> : <TagFaceIcon face={f.face} size="lg" />}
                     </span><span className="text-xs font-medium text-white sm:text-sm">{labels.face(f.face)}</span>
                   </RadioCard>;
                 })}
@@ -162,19 +172,23 @@ export function GenerateDialog({ option, models, onClose, onGenerated }: {
               <p className="text-xs leading-relaxed text-white/55">{b("reviewNext")}</p>
             </div> : null}
           </fieldset>
-          <aside className="border-t border-white/[0.08] bg-white/[0.025] px-5 py-5 md:border-l md:border-t-0" aria-label={d("summary")} data-testid="production-design-summary">
-            <p className="text-xs font-semibold uppercase tracking-widest text-white/40">{d("summary")}</p>
-            <div className="mt-4 flex items-center gap-4 md:flex-col"><div className="relative flex h-40 w-40 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-[radial-gradient(ellipse_at_center,rgba(255,255,255,0.1),transparent_70%)] md:h-52 md:w-full" data-testid="production-design-summary-3d">
+          </div>
+          <aside className="order-2 shrink-0 space-y-6 border-t border-white/[0.08] bg-white/[0.025] px-5 py-5 md:order-1 md:w-72 md:overflow-y-auto md:border-r md:border-t-0" aria-label={d("summary")} data-testid="production-design-summary">
+            <StepRail names={stepNames} values={stepValues} current={step} canVisit={canVisit} busy={busy} onChange={setStep} progress={progress} />
+            <div className="space-y-3 md:border-t md:border-white/[0.08] md:pt-5">
+              <div className={`${PIECE_STAGE} h-32 rounded-xl md:h-36`}>
                 <Piece3D model={model} fallback={preview ?? <TagPieceVisual productType={option.productType} face="google_review" theme={theme} size="lg" still />} />
               </div>
-              <div className="min-w-0 space-y-2 md:w-full"><p className="text-sm font-semibold text-white">{product}</p><p className="text-sm text-white/65">{faceKey ? labels.face(faceKey) : d("chooseDesign")}</p>
-                {face && colour ? <><p className="flex items-center gap-1.5 text-xs text-white/45"><TagThemeChip theme={colour.theme} label={themeName(colour.theme)} />{styleName(face.style)}</p><p className="text-xs text-white/45">{nfcMount ? nfcName(nfcMount) : n("fixed")}</p>{plan.valid ? <p className="text-xs text-white/65">{t.plural("pieceCount", plan.count)}</p> : null}</> : null}
-              </div></div>
+              <div className="min-w-0 space-y-1.5">
+                <p className="text-sm font-semibold text-white">{product}</p>
+                <TagModelChips productType={option.productType} face={faceKey || null} theme={colour?.theme} sizeText="long" />
+                {!faceKey ? <p className="text-xs text-white/50">{d("chooseDesign")}</p> : null}
+              </div>
+            </div>
           </aside>
         </div>
         <footer className="flex shrink-0 items-center justify-between gap-3 border-t border-white/[0.08] bg-[#111727] px-5 py-4 sm:px-7">
           <Button type="button" variant="ghost" onClick={step === 0 ? onClose : () => setStep(step - 1)} disabled={busy}>{step === 0 ? tc("cancel") : tw("back")}</Button>
-          <span className="hidden text-xs text-white/45 sm:block">{d("progress", { current: step + 1, total: 5 })}</span>
           {step < 4 ? <Button key="next" type="submit" variant="brand" accent="tags" disabled={!stepOk || busy} data-testid="production-generate-next">{tw("next")}<ChevronRight className="h-4 w-4" aria-hidden="true" /></Button> : <Button key="go" type="submit" variant="brand" accent="tags" disabled={!stepOk} loading={busy} data-testid="production-generate-confirm">{b.plural("generateCount", plan.pieces)}</Button>}
         </footer>
       </form>
@@ -182,9 +196,10 @@ export function GenerateDialog({ option, models, onClose, onGenerated }: {
   </Dialog>;
 }
 
-function RadioCard({ name, value, checked, onChange, children, testId }: { name: string; value: string; checked: boolean; onChange: () => void; children: ReactNode; testId: string }) {
+/** `onPick`: a click or a tap on it, never the arrow keys, which pass over the choices on the way to one. */
+function RadioCard({ name, value, checked, onChange, onPick, children, testId }: { name: string; value: string; checked: boolean; onChange: () => void; onPick?: () => void; children: ReactNode; testId: string }) {
   return <label className="relative flex min-w-0 cursor-pointer" data-testid={testId}>
-    <input type="radio" name={name} value={value} checked={checked} onChange={onChange} className="peer sr-only" />
+    <input type="radio" name={name} value={value} checked={checked} onChange={onChange} onClick={(event) => { if (event.detail > 0) onPick?.(); }} className="peer sr-only" />
     {checked ? <Check aria-hidden="true" className="pointer-events-none absolute right-2 top-2 h-4 w-4 rounded-full bg-violet-400 p-0.5 text-[#0d1322]" /> : null}
     <span className="flex w-full flex-col items-center justify-center gap-3 rounded-xl border border-white/10 bg-white/[0.02] p-3 text-center transition-colors hover:border-white/30 peer-checked:border-violet-400 peer-checked:bg-violet-400/10 peer-focus-visible:ring-2 peer-focus-visible:ring-violet-400">{children}</span>
   </label>;
