@@ -11,6 +11,7 @@ import { useT } from "@/i18n";
 import { adminTagsFlowMessages } from "@/i18n/messages/adminTagsFlow";
 import { ADMIN_TAGS_KEY, errorMessage, sendJson } from "./api";
 import { reasonKey } from "./distribution-model";
+import { TagModelChips } from "@/components/xpot/TagProductThumbnail";
 import { useTagLabels } from "./labels";
 import { useStockLabel } from "./take-back-destination";
 
@@ -106,20 +107,19 @@ export function CodeCheckList({
           const key = item ? reasonKey(kind, item.reason) : null;
           const where = item?.repName ? [item.repName, item.kitCode].filter(Boolean).join(" · ") : null;
           // Taking a piece back is by who has it and what it is: the batch and kit codes are not what anyone returns it by.
-          const product = item?.productType ? labels.product(item.productType) : null;
-          const takeBackLine = [item?.repName, product].filter(Boolean).join(" · ");
+          const chips = item?.productType ? <TagModelChips productType={item.productType} face={null} className="shrink-0" /> : null;
           return (
             <li key={code} className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1 px-3 py-2" data-testid={`code-row-${code}`}>
               <span className="w-6 shrink-0 text-right text-xs tabular-nums text-white/30">{index + 1}</span>
               <div className="min-w-0 flex-1">
                 <p className="truncate font-mono text-sm text-white">{code}</p>
                 {kind === "takeBack" ? (
-                  <p className="truncate text-xs text-white/40">{takeBackLine}</p>
+                  <p className="flex min-w-0 items-center gap-1.5 text-xs text-white/40"><span className="truncate">{item?.repName}</span>{chips}</p>
                 ) : (
-                  <p className="truncate text-xs text-white/40">
-                    {item?.batchCode ? `${item.batchCode}${item.serialNumber ? ` #${item.serialNumber}` : ""}` : null}
-                    {item?.productType ? ` · ${labels.product(item.productType)}` : null}
-                    {where ? ` · ${where}` : null}
+                  <p className="flex min-w-0 items-center gap-1.5 text-xs text-white/40">
+                    {item?.batchCode ? <span className="shrink-0">{`${item.batchCode}${item.serialNumber ? ` #${item.serialNumber}` : ""}`}</span> : null}
+                    {chips}
+                    {where ? <span className="truncate">{where}</span> : null}
                   </p>
                 )}
               </div>

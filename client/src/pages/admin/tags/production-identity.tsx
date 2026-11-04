@@ -1,6 +1,6 @@
 import { Shapes } from "lucide-react";
 import { TagFaceIcon } from "@/components/xpot/TagFaceIcon";
-import { TagModelChips, TagPieceVisual } from "@/components/xpot/TagProductThumbnail";
+import { TagModelChips, TagPieceVisual, TagThemeChip } from "@/components/xpot/TagProductThumbnail";
 import { useT } from "@/i18n";
 import { productionMessages } from "@/i18n/messages/production";
 import { productionBoardMessages } from "@/i18n/messages/productionBoard";
@@ -36,20 +36,10 @@ export function useModelName() {
   };
 }
 
-/** A model's colour as stored ("black", "white", "mixed") in the words of the language in use; any other value as it is. */
-function useThemeName() {
-  const b = useT(productionBoardMessages);
-  return (value: string) => {
-    const key = value.trim().toLowerCase();
-    return key === "white" || key === "black" || key === "mixed" ? b(`theme_${key}` as "theme_white") : value;
-  };
-}
-
 /** The physical piece and its printed brand stay together throughout production. */
 export function ProductionIdentity({ model, hero = false }: { model: ProductionIdentityData; hero?: boolean }) {
   const u = useT(unifiedProductionMessages);
   const labels = useTagLabels();
-  const themeName = useThemeName();
   const artwork = model.productType
     ? <TagPieceVisual productType={model.productType} face={model.face} theme={model.theme} modelSlug={model.slug} batchCode={model.batchCode} size={hero ? "lg" : "md"} />
     : <Shapes className={hero ? "h-14 w-14 text-white/40" : "h-9 w-9 text-white/40"} aria-hidden="true" />;
@@ -60,8 +50,7 @@ export function ProductionIdentity({ model, hero = false }: { model: ProductionI
       <span className="block text-sm font-semibold leading-snug text-white">{model.title}</span>
       <span className="flex flex-wrap items-center gap-1.5 text-xs text-white/55">
         {model.face ? <><TagFaceIcon face={model.face} size="xs" /><span>{labels.face(model.face)}</span></> : null}
-        {model.theme ? <span className="rounded-md border border-white/10 px-1.5 py-0.5 text-[11px]">{themeName(model.theme)}</span> : null}
-        {model.productType ? <TagModelChips productType={model.productType} face={model.face} /> : null}
+        {model.productType ? <TagModelChips productType={model.productType} face={model.face} theme={model.theme} /> : model.theme ? <TagThemeChip theme={model.theme} /> : null}
       </span>
     </span>
   </span>;
@@ -72,14 +61,13 @@ export function ProductionIdentity({ model, hero = false }: { model: ProductionI
     </div>
     <div className="min-w-0 space-y-3 py-4 pr-4">
       <div className="space-y-2">
-        {model.productType ? <TagModelChips productType={model.productType} face={model.face} /> : null}
+        {model.productType ? <TagModelChips productType={model.productType} face={model.face} theme={model.theme} sizeText="long" /> : model.theme ? <TagThemeChip theme={model.theme} /> : null}
         <p className="break-words text-base font-semibold leading-snug text-white">{model.title}</p>
       </div>
       {model.face ? <div className="flex items-center gap-2.5">
         <TagFaceIcon face={model.face} size="md" />
         <div className="min-w-0"><p className="text-[11px] text-white/45">{u("printedBrand")}</p><p className="text-sm font-medium leading-snug text-white/90">{labels.face(model.face)}</p></div>
       </div> : null}
-      {model.theme ? <span className="inline-flex rounded-lg border border-white/10 bg-white/[0.04] px-2.5 py-1 text-xs text-white/70">{themeName(model.theme)}</span> : null}
     </div>
   </div>;
 }
