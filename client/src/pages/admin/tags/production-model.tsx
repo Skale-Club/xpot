@@ -96,7 +96,6 @@ export function PrintModelPage({ slug, go }: { slug: string; go: Go }) {
             <p className="mt-1 flex flex-wrap items-center gap-1.5 text-xs text-white/45">
               {model.status !== "ready" ? <ModelStatusPill status={model.status} /> : null}
               {bought ? <Pill tone="slate">{t("modelBought")}</Pill> : null}
-              {model.lowStock ? <Pill tone="amber">{t("lowStock", { count: model.partReorderAt ?? 0 })}</Pill> : null}
             </p>
           </div>
         </div>

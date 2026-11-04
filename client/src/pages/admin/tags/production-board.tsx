@@ -1,4 +1,4 @@
-import { Suspense, lazy, useMemo, useRef, useState } from "react";
+import { Suspense, lazy, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { ChevronRight, Clock, Download, Loader2, Shapes } from "lucide-react";
 import {
@@ -17,6 +17,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import { EmptyState } from "@/components/xpot/EmptyState";
+import { PieceCard, PIECE_STAGE } from "@/components/xpot/PieceCard";
 import { useT } from "@/i18n";
 import { productionMessages } from "@/i18n/messages/production";
 import { productionBoardMessages } from "@/i18n/messages/productionBoard";
@@ -74,7 +75,7 @@ export function ProductionBoard({ go, onOtherWays }: { go: Go; onOtherWays?: () 
       <section className="space-y-3" aria-labelledby="production-generate-title" data-testid="production-generate-area">
         <SectionHeading id="production-generate-title" title={b("generateTitle")} intro={b("generateIntro")} />
         {options.length ? (
-          <ul className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+          <ul className="grid grid-cols-2 gap-3">
             {options.map((option) => (
               <ProductCard key={option.productType} option={option} model={bySlug.get(option.colours[0].faces[0].slug)} onOpen={() => setGenerating(option)} />
             ))}
@@ -87,7 +88,7 @@ export function ProductionBoard({ go, onOtherWays }: { go: Go; onOtherWays?: () 
       {isAdmin ? <section className="space-y-3" aria-labelledby="production-ready-title" data-testid="production-ready-area">
         <SectionHeading id="production-ready-title" title={b("readyTitle")} intro={b("readyIntro")} />
         {families.length ? (
-          <ul className="grid grid-cols-1 gap-2 sm:grid-cols-2 2xl:grid-cols-3">
+          <ul className="grid grid-cols-2 gap-3">
             {families.map((family) => (
               family.models.length === 1
                 ? <PartCard key={family.name} model={family.models[0]} onOpen={openModel} />
@@ -236,44 +237,20 @@ function ProductCard({ option, model, onOpen }: { option: PrintGenerateOption; m
   const labels = useTagLabels();
   const faces = new Set(option.colours.flatMap((colour) => colour.faces.map((face) => face.face)));
   const sample = option.colours[0].faces[0];
-  // Turning the piece with a mouse or a finger must not open the card when the pointer is let go.
-  const down = useRef<{ x: number; y: number } | null>(null);
-  const dragged = useRef(false);
-  const open = () => {
-    if (dragged.current) { dragged.current = false; return; }
-    onOpen();
-  };
   return (
-    <li>
-      <div
-        role="button"
-        tabIndex={0}
-        onClick={open}
-        onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); onOpen(); } }}
-        onPointerDown={(event) => { down.current = { x: event.clientX, y: event.clientY }; dragged.current = false; }}
-        onPointerMove={(event) => {
-          if (down.current && Math.hypot(event.clientX - down.current.x, event.clientY - down.current.y) > 6) dragged.current = true;
-        }}
-        onPointerUp={() => { down.current = null; }}
-        className="flex h-full w-full cursor-pointer items-center gap-3 rounded-2xl border border-white/[0.08] bg-white/[0.03] p-2.5 text-left transition-colors hover:border-violet-400/40 hover:bg-violet-500/[0.06] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-400/60"
-        data-testid="production-generate-product"
-      >
-        <span className="relative flex h-28 w-28 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-[radial-gradient(ellipse_at_center,rgba(255,255,255,0.1),transparent_70%)] sm:h-32 sm:w-32">
-          <Piece3D
-            model={model}
-            frameMetres={PRODUCT_FRAME_METRES}
-            fallback={<DesignPreview productType={option.productType} face={sample.face} theme={model?.theme ?? option.colours[0].theme} style={printStyle(model?.currentVersion?.params)} modelSlug={sample.slug} />}
-          />
-        </span>
-        <span className="min-w-0 flex-1 space-y-0.5">
-          <span className="block text-sm font-semibold leading-snug text-white">{labels.product(option.productType)}</span>
-          <span className="block text-xs text-white/50">
-            {b.plural("colourCount", option.colours.length)} · {b.plural("faceCount", faces.size)}
-          </span>
-        </span>
-        <ChevronRight className="h-4 w-4 shrink-0 text-white/40" aria-hidden="true" />
-      </div>
-    </li>
+    <PieceCard
+      art={(
+        <Piece3D
+          model={model}
+          frameMetres={PRODUCT_FRAME_METRES}
+          fallback={<DesignPreview productType={option.productType} face={sample.face} theme={model?.theme ?? option.colours[0].theme} style={printStyle(model?.currentVersion?.params)} modelSlug={sample.slug} />}
+        />
+      )}
+      title={labels.product(option.productType)}
+      meta={`${b.plural("colourCount", option.colours.length)} · ${b.plural("faceCount", faces.size)}`}
+      onOpen={onOpen}
+      testId="production-generate-product"
+    />
   );
 }
 
@@ -299,31 +276,18 @@ function PartPreview({ url }: { url: string | null }) {
   );
 }
 
-/** One always-ready piece that comes in several versions: the card only names it, the next step asks which one. */
+/** One part that comes in several versions: the card only names it, the next step asks which one. */
 function PartFamilyCard({ family, onOpen }: { family: PrintPartFamily<PrintModelItem>; onOpen: () => void }) {
   const b = useT(productionBoardMessages);
   const preview = family.models.map(partPreviewUrl).find(Boolean) ?? null;
   return (
-    <li>
-      <button
-        type="button"
-        onClick={onOpen}
-        className="flex h-full w-full items-center gap-3 rounded-2xl border border-white/[0.08] bg-white/[0.03] p-2.5 text-left transition-colors hover:border-violet-400/40 hover:bg-violet-500/[0.06] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-400/60"
-        data-testid="production-ready-family"
-      >
-        <span className="pointer-events-none relative flex h-24 w-24 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-[radial-gradient(ellipse_at_center,rgba(255,255,255,0.1),transparent_70%)] sm:h-28 sm:w-28">
-          <PartPreview url={preview} />
-        </span>
-        <span className="min-w-0 flex-1">
-          <span className="block text-sm font-semibold leading-snug text-white">{family.name}</span>
-          <span className="mt-0.5 block text-xs text-white/50">{b.plural("partOptionCount", family.models.length)}</span>
-          <span className={`mt-0.5 block text-xs ${family.models.some((m) => m.lowStock) ? "text-amber-200" : "text-white/50"}`} data-testid="production-ready-stock">
-            {b("partInStock", { count: family.models.reduce((sum, m) => sum + m.onHand, 0) })}{family.models.some((m) => m.lowStock) ? ` · ${b("partLowAny")}` : ""}
-          </span>
-        </span>
-        <ChevronRight className="h-4 w-4 shrink-0 text-white/40" aria-hidden="true" />
-      </button>
-    </li>
+    <PieceCard
+      art={<PartPreview url={preview} />}
+      title={family.name}
+      meta={b.plural("partOptionCount", family.models.length)}
+      onOpen={onOpen}
+      testId="production-ready-family"
+    />
   );
 }
 
@@ -347,7 +311,7 @@ function PartFamilyDialog({ family, onOpenModel, onClose }: { family: PrintPartF
   );
 }
 
-/** An always-ready piece: its 3D view (when the version has one) beside one download per bed that has its file. */
+/** A part: its 3D view (when the version has one) beside one download per bed that has its file. */
 function PartCard({ model, title, onOpen: open }: { model: PrintModelItem; title?: string; onOpen: (model: PrintModelItem) => void }) {
   const t = useT(productionMessages);
   const b = useT(productionBoardMessages);
@@ -356,16 +320,13 @@ function PartCard({ model, title, onOpen: open }: { model: PrintModelItem; title
   const preview = partPreviewUrl(model);
   return (
     <li className="flex gap-3 rounded-2xl border border-white/[0.08] bg-white/[0.03] p-2.5" data-testid="production-ready-part">
-      <div className="relative flex h-24 w-24 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-[radial-gradient(ellipse_at_center,rgba(255,255,255,0.1),transparent_70%)] sm:h-28 sm:w-28">
+      <div className={`${PIECE_STAGE} h-24 w-24 shrink-0 rounded-xl sm:h-28 sm:w-28`}>
         <PartPreview url={preview} />
       </div>
       <div className="flex min-w-0 flex-1 flex-col gap-2">
         <button type="button" onClick={onOpen} className="min-w-0 text-left hover:underline">
           <span className="block text-sm font-semibold leading-snug text-white">{title ?? model.title}</span>
           {model.description ? <span className="mt-0.5 line-clamp-2 block text-xs text-white/45">{model.description}</span> : null}
-          <span className={`mt-0.5 block text-xs ${model.lowStock ? "text-amber-200" : "text-white/50"}`} data-testid="production-ready-stock">
-            {model.lowStock ? b("partLowStock", { count: model.onHand, reorder: model.partReorderAt ?? 0 }) : b("partInStock", { count: model.onHand })}
-          </span>
         </button>
         {ready.length ? (
           <ul className="mt-auto space-y-1">

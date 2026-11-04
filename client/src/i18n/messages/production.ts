@@ -230,7 +230,6 @@ const en = {
   confirmAssembledBody: "The batch's log records it.",
   confirmAssembledConsumes: "These come off the parts' counts: {list}.",
   assembledDone: "Batch assembled",
-  lowStock: "Low: reorder below {count}",
   fieldReorderAt: "Reorder point",
   fieldReorderAtHint: "Below this count the catalog warns. Empty: no warning.",
   // 3D preview (production-preview.tsx)
@@ -566,7 +565,6 @@ export const productionMessages: Dictionary<typeof en> = {
     confirmAssembledBody: "O diário do lote registra.",
     confirmAssembledConsumes: "Sai da contagem das peças: {list}.",
     assembledDone: "Lote montado",
-    lowStock: "Baixo: repor abaixo de {count}",
     fieldReorderAt: "Ponto de reposição",
     fieldReorderAtHint: "Abaixo desta contagem o catálogo avisa. Vazio: sem aviso.",
     previewTitle: "Vista 3D",
@@ -897,7 +895,6 @@ export const productionMessages: Dictionary<typeof en> = {
     confirmAssembledBody: "El diario del lote lo registra.",
     confirmAssembledConsumes: "Salen del conteo de las piezas: {list}.",
     assembledDone: "Lote montado",
-    lowStock: "Bajo: reponer por debajo de {count}",
     fieldReorderAt: "Punto de reposición",
     fieldReorderAtHint: "Bajo este conteo el catálogo avisa. Vacío: sin aviso.",
     previewTitle: "Vista 3D",
