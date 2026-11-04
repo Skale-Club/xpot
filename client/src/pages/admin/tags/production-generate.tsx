@@ -1,3 +1,4 @@
+import { TagThemeChip } from "@/components/xpot/TagProductThumbnail";
 import { useEffect, useId, useRef, useState, type FormEvent, type ReactNode } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { Check, ChevronRight, Minus, Plus, Search } from "lucide-react";
@@ -167,7 +168,7 @@ export function GenerateDialog({ option, models, onClose, onGenerated }: {
                 <Piece3D model={model} fallback={preview ?? <TagPieceVisual productType={option.productType} face="google_review" theme={theme} size="lg" still />} />
               </div>
               <div className="min-w-0 space-y-2 md:w-full"><p className="text-sm font-semibold text-white">{product}</p><p className="text-sm text-white/65">{faceKey ? labels.face(faceKey) : d("chooseDesign")}</p>
-                {face && colour ? <><p className="text-xs text-white/45">{themeName(colour.theme)} · {styleName(face.style)}</p><p className="text-xs text-white/45">{nfcMount ? nfcName(nfcMount) : n("fixed")}</p>{plan.valid ? <p className="text-xs text-white/65">{t.plural("pieceCount", plan.count)}</p> : null}</> : null}
+                {face && colour ? <><p className="flex items-center gap-1.5 text-xs text-white/45"><TagThemeChip theme={colour.theme} label={themeName(colour.theme)} />{styleName(face.style)}</p><p className="text-xs text-white/45">{nfcMount ? nfcName(nfcMount) : n("fixed")}</p>{plan.valid ? <p className="text-xs text-white/65">{t.plural("pieceCount", plan.count)}</p> : null}</> : null}
               </div></div>
           </aside>
         </div>

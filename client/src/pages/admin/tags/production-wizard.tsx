@@ -22,6 +22,7 @@ import { catalogOptions, useTagCatalog } from "./batches-shared";
 import { useTagLabels } from "./labels";
 import { bedSummary, usePrintModels, useProductionAccess } from "./production-shared";
 import { assemblyParts, canPrintModel, filamentColours, printableBeds, printQuantity, type ExistingProductionBatch } from "./production-workflow";
+import { TagModelChips } from "@/components/xpot/TagProductThumbnail";
 import { useModelName } from "./production-identity";
 import { ProductionSteps } from "./production-steps";
 
@@ -191,11 +192,11 @@ export function ProductionWizard({ onClose, onCreated, onOrdered, onCloseAutoFoc
                   ...(existingBatch ? [[u("existingCodes"), existingBatch.batchCode]] : []),
                 ] : [
                   [t("fieldName"), form.name],
-                  [tw("physicalModel"), labels.product(form.productType)],
+                  [tw("physicalModel"), <TagModelChips productType={form.productType} face={form.face || null} sizeText="long" />],
                   [t("fieldPrintedOnPieces"), form.face ? labels.face(form.face) : form.productType === "google_review_sign" ? t("faceFromProduct") : t("faceNotSet")],
                   [t("fieldCatalogProduct"), catalog.find((p) => p.id === Number(form.salesProductId))?.name],
                   [tw("stepCodes"), issuing ? t.plural("createIssuedBatch", quantity) : t("codesScanned")],
-                ]).map(([label, value]) => <div key={label}><dt className="text-xs text-white/45">{label}</dt><dd className="mt-1 break-words font-medium text-white/90">{value}</dd></div>)}
+                ]).map(([label, value]) => <div key={label as string}><dt className="text-xs text-white/45">{label}</dt><dd className="mt-1 break-words font-medium text-white/90">{value}</dd></div>)}
               </dl>
               <details className="group border-t border-white/[0.08] pt-4">
               <summary className="flex min-h-10 cursor-pointer list-none items-center justify-between gap-3 text-sm text-white/65 [&::-webkit-details-marker]:hidden">{printing ? tp("fieldNotes") : tw("optionalDetails")}<ChevronDown className="h-4 w-4 transition-transform group-open:rotate-180" aria-hidden="true" /></summary>
