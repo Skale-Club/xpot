@@ -1,13 +1,13 @@
 import type { Dictionary } from "../index";
 
-// Tags › Production's first screen (client/src/pages/admin/tags/production-board.tsx): the always-ready pieces, the
+// Tags › Production's first screen (client/src/pages/admin/tags/production-board.tsx): the bases and tokens, the
 // pieces to generate and the plates waiting to be printed, and the step-by-step that generates new pieces.
 
 const en = {
   produce: "Produce",
-  readyTitle: "Always ready",
-  readyIntro: "Parts without a code (bases, tokens). Download the file, print, then add them to the count on the part's page.",
-  readyEmpty: "No always-ready pieces in the catalog yet.",
+  readyTitle: "Bases and tokens",
+  readyIntro: "Parts without a serial. Download the file, print, then add them to the count on the part's page.",
+  readyEmpty: "No bases or tokens in the catalog yet.",
   noFile: "No print file yet",
   addFile: "Add it on the model page",
   partOptionCount_one: "{count} option",
@@ -66,9 +66,9 @@ export const productionBoardMessages: Dictionary<typeof en> = {
   en,
   pt: {
     produce: "Produzir",
-    readyTitle: "Sempre prontas",
-    readyIntro: "Peças sem código (bases e tokens). Baixe o arquivo, imprima e depois some na contagem na página da peça.",
-    readyEmpty: "Ainda não há peças sempre prontas no catálogo.",
+    readyTitle: "Bases e tokens",
+    readyIntro: "Peças sem serial. Baixe o arquivo, imprima e depois some na contagem na página da peça.",
+    readyEmpty: "Ainda não há bases nem tokens no catálogo.",
     noFile: "Ainda sem arquivo de impressão",
     addFile: "Adicione na página do modelo",
     partOptionCount_one: "{count} opção",
@@ -124,9 +124,9 @@ export const productionBoardMessages: Dictionary<typeof en> = {
   },
   es: {
     produce: "Producir",
-    readyTitle: "Siempre listas",
-    readyIntro: "Piezas sin código (bases y tokens). Descarga el archivo, imprime y luego súmalas al conteo en la página de la pieza.",
-    readyEmpty: "Todavía no hay piezas siempre listas en el catálogo.",
+    readyTitle: "Bases y tokens",
+    readyIntro: "Piezas sin serial. Descarga el archivo, imprime y luego súmalas al conteo en la página de la pieza.",
+    readyEmpty: "Todavía no hay bases ni tokens en el catálogo.",
     noFile: "Todavía sin archivo de impresión",
     addFile: "Añádelo en la página del modelo",
     partOptionCount_one: "{count} opción",
