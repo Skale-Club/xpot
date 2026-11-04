@@ -40,7 +40,9 @@ export async function setupVite(app: Express, httpServer: Server): Promise<void>
     try {
       const templatePath = path.resolve(process.cwd(), "client", "index.html");
       const template = await fs.readFile(templatePath, "utf-8");
-      const transformed = await vite.transformIndexHtml(req.originalUrl, template);
+      // The path, never the URL with its query: on "/?signin=1" Vite takes the module to be "/" and, from an inline
+      // <style>, starts watching the root of the disk, until the server stops answering.
+      const transformed = await vite.transformIndexHtml(req.path, template);
       const html = injectSeoHead(transformed, req.path);
       res.status(200).set({ "Content-Type": "text/html" }).end(html);
     } catch (err) {
