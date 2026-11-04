@@ -16,6 +16,14 @@ export function distributionView(value: string | null | undefined): Distribution
   return (DISTRIBUTION_VIEWS as readonly string[]).includes(value ?? "") ? (value as DistributionView) : "handout";
 }
 
+/**
+ * The view with no `?view=`: the platform starts on the orders waiting to be sent, the normal work. A link that points at
+ * a hand-out (a batch, a kit filter) still starts on the hand-out.
+ */
+export function distributionStartView(view: string | null | undefined, seesOrders: boolean, pointsAtHandOut: boolean): DistributionView {
+  return !view && seesOrders && !pointsAtHandOut ? "orders" : distributionView(view);
+}
+
 /** Past hand-outs open by default for an old `?view=kits` link or when a kit filter (?kitRep=, ?org=) is in the URL. */
 export function pastHandOutsOpen(view: string | null | undefined, kitRep?: string | null, org?: string | null): boolean {
   return view === "kits" || !!kitRep || !!org;

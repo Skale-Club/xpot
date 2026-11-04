@@ -21,7 +21,7 @@ const SEPARATOR = " › ";
 
 // Menus the app used to have. "Manage" is still a label in the dictionary (the module view's group), but no screen
 // shows it any more, so a message that sends someone there is wrong even though the word exists.
-const GONE = new Set(["Manage", "Gestão", "Gestión", "Distribution", "Distribuição", "Distribución", "NFC writers", "Gravadores NFC", "Grabadores NFC", "Admin", "Reps"]);
+const GONE = new Set(["Manage", "Gestão", "Gestión", "NFC writers", "Gravadores NFC", "Grabadores NFC", "Admin", "Reps"]);
 
 describe("menu paths in messages", () => {
   for (const lang of ["en", "pt", "es"] as const) {

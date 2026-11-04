@@ -18,6 +18,7 @@ import {
 } from "../client/src/pages/admin/tags/batches-model";
 import {
   addCodes,
+  distributionStartView,
   distributionView,
   handOutHref,
   HAND_OUT_REASON_KEYS,
@@ -148,6 +149,11 @@ describe("Distribution", () => {
   it("keeps old ?view=kits links working: Hand out, with Past hand-outs open", () => {
     expect(distributionView("kits")).toBe("handout");
     expect(pastHandOutsOpen("kits")).toBe(true);
+    expect(distributionStartView("", true, false)).toBe("orders");
+    expect(distributionStartView("", false, false)).toBe("handout");
+    expect(distributionStartView("", true, true)).toBe("handout");
+    expect(distributionStartView("returns", true, false)).toBe("returns");
+    expect(distributionStartView("kits", true, true)).toBe("handout");
     expect(pastHandOutsOpen("handout", "12", "")).toBe(true);
     expect(pastHandOutsOpen("handout", "", "3")).toBe(true);
     expect(pastHandOutsOpen("handout", "", "")).toBe(false);

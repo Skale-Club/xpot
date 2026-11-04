@@ -17,7 +17,7 @@ import { HandOutFlow } from "./kits-give-form";
 import { KitList } from "./kits-list";
 import { AcquisitionInbox, pendingOf, useAcquisitions } from "./kits-orders";
 import { ReturnsStation } from "./returns-station";
-import { PAST_HAND_OUTS_PREVIEW, distributionView, pastHandOutsOpen, type DistributionView } from "./distribution-model";
+import { PAST_HAND_OUTS_PREVIEW, distributionStartView, pastHandOutsOpen, type DistributionView } from "./distribution-model";
 import { useT } from "@/i18n";
 import { manageTagsMessages } from "@/i18n/messages/manageTags";
 import { manageTagsBatchesMessages } from "@/i18n/messages/manageTagsBatches";
@@ -93,7 +93,9 @@ function KitsView({ go, showAllFirst }: { go: (path: string) => void; showAllFir
   );
 }
 
+// What each view is called: the platform sends what was ordered; everyone else passes pieces to their own team.
 const VIEW_LABELS = { handout: "viewHandOut", orders: "viewOrders", returns: "viewReturns" } as const satisfies Record<DistributionView, string>;
+const TEAM_VIEW_LABELS = { handout: "viewHandOutTeam", returns: "viewReturnsTeam" } as const;
 
 /** Hand out's second half: what earlier hand-overs gave, collapsed until asked for (or until a link or filter points at it). */
 function PastHandOuts({ go, wantOpen }: { go: (path: string) => void; wantOpen: boolean }) {
@@ -114,30 +116,32 @@ function PastHandOuts({ go, wantOpen }: { go: (path: string) => void; wantOpen: 
 }
 
 /**
- * Distribution (/admin/tags/kits): pieces from house stock to resellers and back. Views, kept in `?view=`: Hand out
- * (step by step, with the past hand-outs below), Stuscle orders (wholesale orders waiting for their pieces) and
- * Take back (a scan station). `?view=kits` is the old history view: it opens Hand out with the history expanded.
+ * Distribution (/admin/tags/kits): pieces from house stock to whoever gets them, and back. Views, kept in `?view=`: Stuscle
+ * orders (what is waiting to be sent, where the platform starts), Hand out (without an order, with the past deliveries
+ * below) and Returns (a scan station). `?view=kits` is the old history view: it opens Hand out with the history expanded.
  */
 export function KitsTab({ go }: { go: (path: string) => void }) {
   const t = useT(adminTagsFlowMessages);
-  const url = useUrlFilters({ view: "handout", kitRep: "", org: "" });
+  const url = useUrlFilters({ view: "", batch: "", kitRep: "", org: "" });
   // Separating Stuscle orders is the platform's: an owner follows their team's in Team purchases.
   const isAdmin = useIsSuperAdmin();
-  const requestedView = distributionView(url.values.view);
-  const view = requestedView === "orders" && !isAdmin ? "handout" : requestedView;
   const historyWanted = pastHandOutsOpen(url.values.view, url.values.kitRep, url.values.org);
+  const requestedView = distributionStartView(url.values.view, isAdmin, historyWanted || !!url.values.batch);
+  const view = requestedView === "orders" && !isAdmin ? "handout" : requestedView;
   const orders = useAcquisitions();
   const pendingOrders = pendingOf(orders.data).length;
 
   return (
     <div className="min-w-0 space-y-4" data-testid="admin-tags-distribution">
       {/* The screen's title is the frame's (top bar, phone title): not said a second time here. */}
-      {view === "handout" ? <p className="min-w-0 text-sm text-white/50">{t("distributionIntro")}</p> : null}
+      <p className="min-w-0 text-sm text-white/50">{t(isAdmin ? "distributionIntro" : "distributionIntroTeam")}</p>
       {requestedView === "orders" && !isAdmin ? <InlineAlert tone="info">{t("ordersNotYours")}</InlineAlert> : null}
       <Segmented<DistributionView>
-        items={(Object.keys(VIEW_LABELS) as DistributionView[]).filter((id) => id !== "orders" || isAdmin).map((id) => ({ id, label: t(VIEW_LABELS[id]), count: id === "orders" ? pendingOrders : undefined }))}
+        items={isAdmin
+          ? (["orders", "handout", "returns"] as const).map((id) => ({ id, label: t(VIEW_LABELS[id]), count: id === "orders" ? pendingOrders : undefined }))
+          : (["handout", "returns"] as const).map((id) => ({ id, label: t(TEAM_VIEW_LABELS[id]) }))}
         value={view}
-        onChange={(next) => url.set({ view: next, ...(next !== "handout" ? { batch: null } : {}) } as never)}
+        onChange={(next) => url.set({ view: next, ...(next !== "handout" ? { batch: null } : {}) })}
         accent="tags"
         ariaLabel={t("distributionTitle")}
         className="max-w-2xl"

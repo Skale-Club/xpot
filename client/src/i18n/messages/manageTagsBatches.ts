@@ -91,7 +91,7 @@ const en = {
   // Kits
   withResellersKitHint: "Unsold, in someone's kit",
   noKitsForReseller: "No kits for this reseller yet.",
-  noKitsYet: "No kits yet. Hand out the first one above.",
+  noKitsYet: "No deliveries yet. Make the first one above.",
   noKitsMatch: "No kits match these filters.",
   acquisitionsLoadFailed: "Could not load wholesale acquisitions.",
   noPendingAcquisitions: "No wholesale order is waiting for pieces.",
