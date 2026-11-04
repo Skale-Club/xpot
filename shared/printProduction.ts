@@ -447,18 +447,56 @@ export const printProblemSchema = z.object({
 // Public codes of the pieces that came out bad on the plate (damaged, not stock). Printed only.
 const badPiecesField = z.array(z.string().trim().min(1).max(40)).max(1000).optional();
 
+/** What went wrong with a piece on the printer, so the problem rate can say why (Production's screen). */
+export const PRINT_PIECE_PROBLEMS = ["warped", "came_off_bed", "layer_shift", "qr_unreadable", "surface", "nfc_chip", "broke", "other"] as const;
+export type PrintPieceProblem = (typeof PRINT_PIECE_PROBLEMS)[number];
+
+// What the piece's history says (tag_stock_movements.reason); the summary reads the problem back from it.
+const PROBLEM_REASON: Record<PrintPieceProblem, string> = {
+  warped: "Printer problem: warped",
+  came_off_bed: "Printer problem: came off the bed",
+  layer_shift: "Printer problem: layers shifted",
+  qr_unreadable: "Printer problem: QR does not read",
+  surface: "Printer problem: bad surface or colour",
+  nfc_chip: "Printer problem: NFC chip",
+  broke: "Printer problem: broke",
+  other: "Printer problem: other",
+};
+/** A bad piece with no problem named: every one before problems existed, and callers that do not name one. */
+export const UNSPECIFIED_PRINT_PROBLEM_REASON = "Came out bad on the printer plate";
+
+export function printProblemReason(problem: PrintPieceProblem | null | undefined): string {
+  return problem ? PROBLEM_REASON[problem] : UNSPECIFIED_PRINT_PROBLEM_REASON;
+}
+
+export function printProblemOfReason(reason: string | null | undefined): PrintPieceProblem | "unspecified" {
+  return PRINT_PIECE_PROBLEMS.find((problem) => PROBLEM_REASON[problem] === reason) ?? "unspecified";
+}
+
+/** `badPieces`' problems by public code, written as typed like the codes themselves. */
+export function problemsByCode(problems: Readonly<Record<string, PrintPieceProblem>> = {}): Map<string, PrintPieceProblem> {
+  return new Map(Object.entries(problems).flatMap(([raw, problem]) => {
+    const code = normalizeTagCode(raw);
+    return code ? [[code, problem] as const] : [];
+  }));
+}
+
+const pieceProblemsField = z.record(z.string().trim().min(1).max(40), z.enum(PRINT_PIECE_PROBLEMS)).optional();
+
 export const printJobUpdateSchema = z.object({
   action: z.enum(["start", "printed", "fail", "cancel", "release", "complete"]),
   reason: optionalText(500),
   /** `printed`: pieces that came out bad (public codes of the plate's batch); the rest of the batch goes into stock. */
   badPieces: badPiecesField,
-}).strict().refine((v) => !v.badPieces?.length || v.action === "printed", {
+  /** What went wrong with each of `badPieces`, by public code. */
+  pieceProblems: pieceProblemsField,
+}).strict().refine((v) => (!v.badPieces?.length && !Object.keys(v.pieceProblems ?? {}).length) || v.action === "printed", {
   message: "Only a printed plate can list bad pieces",
   path: ["badPieces"],
 });
 
 /** Put the pending pieces of an already printed plate into stock (`POST /print-jobs/:id/stock`). */
-export const printJobStockSchema = z.object({ badPieces: badPiecesField }).strict();
+export const printJobStockSchema = z.object({ badPieces: badPiecesField, pieceProblems: pieceProblemsField }).strict();
 
 export interface PrintedPieceSplit {
   /** Pending pieces that go into house stock. */
@@ -600,6 +638,9 @@ export interface PrintJobItem {
   stale: boolean;
   /** A failed or cancelled plate already printed again: the attempt that took its place (it cannot be redone twice). */
   redoneBy: string | null;
+  /** The serial numbers of the plate's pieces, lowest and highest; null for a part, which has none. */
+  serialFrom: number | null;
+  serialTo: number | null;
   /** A printed plate whose damaged pieces were asked for again: the first live plate of that request (null again if it was cancelled). */
   reprintedBy: { id: string; batchCode: string | null } | null;
   /** This plate belongs to a request that replaces the damaged pieces of another printed plate. */
@@ -637,6 +678,23 @@ export interface PrintRequestItem {
   /** Whose production the request is. */
   organizationId: number;
   organizationName: string;
+}
+
+/** How the pieces marked printed came out over a period: the rate of problems and why. */
+export interface PrintQualitySummary {
+  days: number;
+  /** Pieces with a serial marked printed, the bad ones included. */
+  pieces: number;
+  withProblem: number;
+  byProblem: Array<{ problem: PrintPieceProblem | "unspecified"; count: number }>;
+  /** Whole prints marked failed. Their pieces never came out, so they are apart from `pieces`. */
+  failedPrints: number;
+}
+
+/** The share of pieces with a problem, as a percentage to one decimal; null with nothing printed. */
+export function printProblemRate(summary: Pick<PrintQualitySummary, "pieces" | "withProblem">): number | null {
+  if (summary.pieces <= 0) return null;
+  return Math.round((summary.withProblem / summary.pieces) * 1000) / 10;
 }
 
 export interface PrintJobPiece {

@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
 import {
+  PRINT_PIECE_PROBLEMS,
+  UNSPECIFIED_PRINT_PROBLEM_REASON,
+  printProblemOfReason,
+  printProblemRate,
+  printProblemReason,
+  problemsByCode,
   materialsForNfc,
   nfcMountsOf,
   preferredNfcMount,
@@ -135,6 +141,33 @@ describe("marking a plate printed", () => {
     expect(printJobUpdateSchema.safeParse({ action: "fail", reason: "Lifted", badPieces: [] }).success).toBe(true);
     expect(printJobStockSchema.parse({})).toEqual({});
     expect(printJobStockSchema.safeParse({ badPieces: [""] }).success).toBe(false);
+  });
+
+  it("takes what went wrong with a piece only from the known problems, and only with printed", () => {
+    expect(printJobUpdateSchema.parse({ action: "printed", badPieces: ["AAAA0002"], pieceProblems: { AAAA0002: "warped" } }).pieceProblems).toEqual({ AAAA0002: "warped" });
+    expect(printJobUpdateSchema.safeParse({ action: "printed", pieceProblems: { AAAA0002: "cursed" } }).success).toBe(false);
+    expect(printJobUpdateSchema.safeParse({ action: "fail", reason: "Lifted", pieceProblems: { AAAA0002: "warped" } }).success).toBe(false);
+    expect(printJobStockSchema.parse({ pieceProblems: { AAAA0002: "broke" } }).pieceProblems).toEqual({ AAAA0002: "broke" });
+  });
+
+  it("reads every problem back from what the piece's history says, and an old reason as not specified", () => {
+    for (const problem of PRINT_PIECE_PROBLEMS) expect(printProblemOfReason(printProblemReason(problem))).toBe(problem);
+    expect(new Set(PRINT_PIECE_PROBLEMS.map(printProblemReason)).size).toBe(PRINT_PIECE_PROBLEMS.length);
+    expect(printProblemReason(undefined)).toBe(UNSPECIFIED_PRINT_PROBLEM_REASON);
+    expect(printProblemOfReason(UNSPECIFIED_PRINT_PROBLEM_REASON)).toBe("unspecified");
+    expect(printProblemOfReason(null)).toBe("unspecified");
+  });
+
+  it("matches a problem to its piece however the code was typed", () => {
+    expect(problemsByCode({ " aaaa0002 ": "warped" }).get("AAAA0002")).toBe("warped");
+    expect(problemsByCode().size).toBe(0);
+  });
+
+  it("gives the problem rate to one decimal, and none with nothing printed", () => {
+    expect(printProblemRate({ pieces: 120, withProblem: 3 })).toBe(2.5);
+    expect(printProblemRate({ pieces: 3, withProblem: 1 })).toBe(33.3);
+    expect(printProblemRate({ pieces: 4, withProblem: 0 })).toBe(0);
+    expect(printProblemRate({ pieces: 0, withProblem: 0 })).toBeNull();
   });
 
   it("puts every pending piece in stock unless it is listed as bad", () => {

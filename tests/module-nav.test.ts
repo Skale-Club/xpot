@@ -30,7 +30,7 @@ const admin = { canManage: true, isAdmin: true };
 const hrefs = (groups: ReturnType<typeof moduleGroups>) => groups.flatMap((g) => g.items.map((i) => i.href));
 const panelNames: PanelNames = {
   today: "Today", companiesGroup: "Companies", platformGroup: "Platform", pieces: "Pieces", operation: "Operation",
-  make: "Make", printing: "Printing", models: "Models", customers: "Customers",
+  make: "Make", models: "Models", customers: "Customers",
   team: "Team", companies: "My companies", stock: "Stock", kits: "Distribution", tagsOverview: "Pieces results",
   company: "Company", companyOverview: "Overview", companyPieces: "Pieces", companyKits: "Give and take back", companyPurchases: "Purchases",
   companyResults: "Results", companyTeamResults: "Team results", companyCustomers: "Team customers", companyTasks: "Team tasks", companySales: "Team sales",
@@ -117,7 +117,7 @@ describe("the menu of each panel", () => {
   it("gives the platform's Production the pieces and the operation, with its own Models", () => {
     const groups = groupsOf("platform", "production");
     expect(labelsOf(groups)).toEqual(["Pieces", "Operation"]);
-    expect(itemHrefs(groups, "Pieces")).toEqual(["/admin/tags/production", "/admin/tags/production/printing", "/admin/tags/pieces", "/admin/tags/kits", "/admin/tags/overview"]);
+    expect(itemHrefs(groups, "Pieces")).toEqual(["/admin/tags/production", "/admin/tags/pieces", "/admin/tags/kits", "/admin/tags/overview"]);
     // No Team for the platform yet: its own operation is the Organizations screen in Admin.
     expect(itemHrefs(groups, "Operation")).toEqual(["/admin/tags/provisioners", "/admin/tags/production/models"]);
     expect(groups.flatMap((g) => g.items).some((i) => i.adminOnly)).toBe(false);
@@ -186,7 +186,7 @@ describe("the menu of each panel", () => {
     const production = groupsOf("platform", "production");
     expect(lit(production, "/admin/tags/production")).toEqual(["/admin/tags/production"]);
     for (const path of ["/admin/tags/production/queue", "/admin/tags/production/jobs/9", "/admin/tags/production/batches/12", "/admin/tags/batches/12"]) expect(lit(production, path), path).toEqual(["/admin/tags/production"]);
-    expect(lit(production, "/admin/tags/production/printing")).toEqual(["/admin/tags/production/printing"]);
+    expect(lit(production, "/admin/tags/production/printing")).toEqual(["/admin/tags/production"]);
     expect(lit(production, "/admin/tags/production/models")).toEqual(["/admin/tags/production/models"]);
     expect(lit(production, "/admin/tags/production/models/plate")).toEqual(["/admin/tags/production/models"]);
     expect(lit(production, "/admin/tags/pieces/abc")).toEqual(["/admin/tags/pieces"]);
@@ -259,9 +259,9 @@ describe("the phone's bottom bar in a panel", () => {
   it("is Admin's Today, Organizations and People, and More holds the rest", () => {
     expect(bar("platform", "admin").tabs).toEqual(["Today", "navOrganizations", "orgPeople"]);
   });
-  it("is Production's Make, Printing, Stock and Distribution", () => {
-    expect(bar("platform", "production").tabs).toEqual(["Make", "Printing", "Stock", "Distribution"]);
-    expect(bar("partner", "production").tabs).toEqual(["Make", "Printing", "Stock", "Distribution"]);
+  it("is Production's Make, Stock, Distribution and the next screen", () => {
+    expect(bar("platform", "production").tabs).toEqual(["Make", "Stock", "Distribution", "Pieces results"]);
+    expect(bar("partner", "production").tabs).toEqual(["Make", "Stock", "Distribution", "Pieces results"]);
   });
   it("holds every screen of the panel exactly once between the bar and More", () => {
     for (const [profile, panel] of [["platform", "admin"], ["platform", "production"], ["partner", "production"]] as const) {
@@ -272,7 +272,7 @@ describe("the phone's bottom bar in a panel", () => {
   });
   it("fills the bar from the next screens when the usual ones are missing", () => {
     const partner = panelPhoneTabs(groupsOf("partner", "production", ["tags"]), "production").tabs.map((i) => i.href);
-    expect(partner).toEqual(["/admin/tags/production", "/admin/tags/production/printing", "/admin/tags/pieces", "/admin/tags/kits"]);
+    expect(partner).toEqual(["/admin/tags/production", "/admin/tags/pieces", "/admin/tags/kits", "/admin/tags/overview"]);
     const noTags = panelPhoneTabs(groupsOf("platform", "admin", ["visits"]), "admin").tabs.map((i) => i.href);
     expect(noTags).toEqual(["/admin", "/organizations", "/admin/reps"]);
   });
@@ -298,7 +298,7 @@ describe("one name per screen", () => {
     } as never;
     const names: PanelNames = {
       today: ws.todayTitle, companiesGroup: ws.groupCompanies, platformGroup: ws.groupPlatform, pieces: ws.groupPieces, operation: ws.groupOperation,
-      make: ws.groupMake, printing: ws.panelPrinting, models: ws.panelModels, customers: ws.panelCustomers,
+      make: ws.groupMake, models: ws.panelModels, customers: ws.panelCustomers,
       team: ws.panelTeam, companies: ws.panelCompanies, stock: ws.panelStock, kits: ws.panelKits, tagsOverview: ws.panelTagsOverview,
       company: ws.groupCompany, companyOverview: ws.companyOverview, companyPieces: ws.companyPieces, companyKits: ws.companyKits, companyPurchases: ws.companyPurchases,
       companyResults: ws.companyResults, companyTeamResults: ws.companyTeamResults, companyCustomers: ws.companyCustomers, companyTasks: ws.companyTasks, companySales: ws.companySales,

@@ -244,7 +244,8 @@ function PlateRow({ plate, go, showStatus, rows }: { plate: PrintJobItem; go: Go
           {showStatus ? <JobStatusPill status={plate.status} /> : null}
           <span className="text-xs text-white/45">{t.plural("pieceCount", plate.quantity)}</span>
           {plate.menuFont ? <span className="text-xs text-white/45">{plate.menuFont}</span> : null}
-          {showStatus && plate.batchCode ? <span className="whitespace-nowrap font-mono text-xs text-white/45">{plate.batchCode}</span> : null}
+          {plate.batchCode ? <span className="whitespace-nowrap font-mono text-xs text-white/45">{plate.batchCode}</span> : null}
+          {plate.serialFrom !== null ? <span className="whitespace-nowrap font-mono text-xs text-white/60" data-testid="production-plate-serials">{plate.serialFrom === plate.serialTo ? t("serialOne", { serial: plate.serialFrom }) : t("serialRange", { from: plate.serialFrom, to: plate.serialTo ?? plate.serialFrom })}</span> : null}
           {plate.pieceCount !== null && plate.status === "printed" ? <span className="text-xs text-white/45">{t("received", { received: plate.receivedCount ?? 0, total: plate.pieceCount })}</span> : null}
         </span>
         {building ? (

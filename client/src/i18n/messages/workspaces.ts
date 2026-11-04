@@ -36,7 +36,6 @@ const en = {
   // Group headings and screens that only the panels have (components/xpot/moduleNav.ts panelGroups)
   panelTeam: "Team",
   panelCustomers: "Customers",
-  panelPrinting: "Printing",
   panelModels: "Models",
   panelStock: "Stock",
   panelKits: "Distribution",
@@ -89,7 +88,6 @@ export const workspacesMessages: Dictionary<typeof en> = {
     signOutHint: "Para voltar, você vai precisar de um código por SMS.",
     panelTeam: "Equipe",
     panelCustomers: "Clientes",
-    panelPrinting: "Impressão",
     panelModels: "Modelos",
     panelStock: "Estoque",
     panelKits: "Distribuição",
@@ -139,7 +137,6 @@ export const workspacesMessages: Dictionary<typeof en> = {
     signOutHint: "Para volver necesitarás un código por SMS.",
     panelTeam: "Equipo",
     panelCustomers: "Clientes",
-    panelPrinting: "Impresión",
     panelModels: "Modelos",
     panelStock: "Stock",
     panelKits: "Distribución",

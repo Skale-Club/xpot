@@ -307,12 +307,23 @@ export function registerProductionRoutes(app: Express, deps: { device: readonly 
     }
   });
 
+  // The problem rate on Production's screen: the last 90 days unless told otherwise.
+  app.get("/api/xpot/admin/print-quality", requireProductionUser, async (req, res) => {
+    try {
+      const asked = Number(req.query.days);
+      const days = Number.isInteger(asked) && asked >= 1 && asked <= 3650 ? asked : 90;
+      res.json(await production.printQuality(days, productionScopeOf(req)));
+    } catch (err) {
+      fail(res, err, "Failed to load the print quality");
+    }
+  });
+
   app.post(`${jobs}/:id/transition`, requireProductionUser, async (req, res) => {
     const id = uuidParam(req.params.id, res);
     if (!id) return;
     try {
-      const { action, reason, badPieces } = printJobUpdateSchema.parse(req.body);
-      res.json(await production.transitionJob(id, { action, reason: reason ?? null, badPieces, userId: userIdOf(req), source: "admin" }, productionScopeOf(req)));
+      const { action, reason, badPieces, pieceProblems } = printJobUpdateSchema.parse(req.body);
+      res.json(await production.transitionJob(id, { action, reason: reason ?? null, badPieces, pieceProblems, userId: userIdOf(req), source: "admin" }, productionScopeOf(req)));
     } catch (err) {
       fail(res, err, "Failed to update the print order");
     }
@@ -324,8 +335,8 @@ export function registerProductionRoutes(app: Express, deps: { device: readonly 
     const id = uuidParam(req.params.id, res);
     if (!id) return;
     try {
-      const { badPieces } = printJobStockSchema.parse(req.body ?? {});
-      res.json(await production.stockJob(id, { badPieces, userId: userIdOf(req), source: "admin" }, productionScopeOf(req)));
+      const { badPieces, pieceProblems } = printJobStockSchema.parse(req.body ?? {});
+      res.json(await production.stockJob(id, { badPieces, pieceProblems, userId: userIdOf(req), source: "admin" }, productionScopeOf(req)));
     } catch (err) {
       fail(res, err, "Failed to put the pieces in stock");
     }

@@ -23,6 +23,10 @@ topo da barra lateral. A plataforma inteira já é a plataforma de visitas; entr
 página, então fica no pé da barra lateral, em linhas (`SidebarPanelRows`), acima de Settings. No topo fica só Visits | Tags.
 Toda menção abaixo a um "seletor no topo" está superada.
 
+**Correção do dono (2026-11-04), Produção:** Make e Printing viram uma tela só, em `/admin/tags/production`: de um lado o que
+imprimir, do outro a fila do que foi mandado imprimir, com serial, para marcar como impressa. Ao marcar, dá para dizer quais
+peças deram problema e qual problema em cada uma, e a tela mostra a taxa de problemas. O item Printing some do menu.
+
 ---
 
 ## 1. O que o dono descreveu

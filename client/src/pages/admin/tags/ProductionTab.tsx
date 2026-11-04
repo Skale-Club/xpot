@@ -26,17 +26,17 @@ import { PrintDialog, RequestList } from "./production-orders";
 import { ModelStatusPill, PRODUCTION_BASE, bedSummary, usePrintModels, useProductionAccess, useThemeOptions, type JobFilter } from "./production-shared";
 import { BatchDetail } from "./BatchDetail";
 import { ProductionWizard } from "./production-wizard";
-import { PrintingView, ProductionBoard } from "./production-board";
+import { ProductionBoard } from "./production-board";
 import { PendingBatches } from "./production-pending-batches";
 import { batchPrefixFromTitle, canPrintModel, orderedPath, productionPath, productionTabFor, slugFromTitle } from "./production-workflow";
 import { ProductionIdentity, useModelName } from "./production-identity";
 
 // The Production panel's views (docs/PANELS_EXECUTION_PLAN.md). Each has its own URL and its own item of the menu
-// (components/xpot/moduleNav.ts): Make is the board (production-board.tsx: always-ready pieces to download, pieces to
-// generate and the plates waiting to print), Printing and Models are views of their own. Paths:
-// /admin/tags/production[/printing | /queue | /models[/<slug>] | /jobs/<id> | /batches/<id>] (/queue is the full orders
-// list, history included, reached from the board's "All orders"; it lights Make) (marking a plate printed puts its pieces
-// in stock, so there is no receiving list).
+// (components/xpot/moduleNav.ts): Make is one screen (production-board.tsx): what to print on one side, and on the other
+// the queue of what was sent to print, to mark printed. Models is a view of its own. Paths:
+// /admin/tags/production[/queue | /models[/<slug>] | /jobs/<id> | /batches/<id>] (/queue is the full orders list, history
+// included, reached from the queue's "All orders"; it lights Make. The old /printing link opens the one screen) (marking
+// a plate printed puts its pieces in stock, so there is no receiving list).
 // A printing branch's Rep Admin sees the same page for that branch: generating and printing its pieces, without
 // always-ready parts, supplier batches or editing models (useProductionAccess; the server scopes every call).
 
@@ -58,7 +58,7 @@ export function ProductionTab({ rest, go }: { rest: string[]; go: Go }) {
   if (view === "queue") return <div className="space-y-4" data-testid="admin-production"><QueueView go={navigate} /></div>;
   return (
     <div className="space-y-4" data-testid="admin-production">
-      {tab === "catalog" ? <CatalogView go={navigate} /> : tab === "printing" ? <PrintingView go={navigate} /> : <ProductionBoard go={navigate} onOtherWays={isAdmin ? () => setExternal(true) : undefined} />}
+      {tab === "catalog" ? <CatalogView go={navigate} /> : <ProductionBoard go={navigate} onOtherWays={isAdmin ? () => setExternal(true) : undefined} />}
       {external ? <ProductionWizard external onClose={() => setExternal(false)} onCreated={(batchId) => navigate(`/batches/${batchId}?tab=receive`)} /> : null}
     </div>
   );

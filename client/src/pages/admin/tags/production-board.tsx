@@ -1,8 +1,10 @@
 import { Suspense, lazy, useMemo, useRef, useState } from "react";
-import { ChevronRight, Download, Loader2, Shapes } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
+import { ChevronRight, Clock, Download, Loader2, Shapes } from "lucide-react";
 import {
   isAlwaysReadyPart,
   printGenerateOptions,
+  printProblemRate,
   printPreviewPath,
   printPartFamilies,
   printPartVariant,
@@ -10,6 +12,7 @@ import {
   type PrintGenerateOption,
   type PrintModelItem,
   type PrintPartFamily,
+  type PrintQualitySummary,
 } from "@shared/printProduction";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
@@ -19,6 +22,7 @@ import { productionMessages } from "@/i18n/messages/production";
 import { productionBoardMessages } from "@/i18n/messages/productionBoard";
 import { productionMissingMessages } from "@/i18n/messages/productionMissing";
 import { unifiedProductionMessages } from "@/i18n/messages/unifiedProduction";
+import { ADMIN_TAGS_KEY, getJson } from "./api";
 import { useTagLabels } from "./labels";
 import { Loading, LoadError } from "./pieces-shared";
 import { DesignPreview, GenerateDialog } from "./production-generate";
@@ -28,10 +32,11 @@ import { ToPrintList } from "./production-orders";
 import { ThisComputer } from "./production-this-computer";
 import type { PreviewState } from "./production-preview-3d";
 import { PRODUCTION_BASE, minutesText, usePrintComputers, usePrintModels, usePrintRequests, useProductionAccess } from "./production-shared";
-import { missingParts, needsPrintComputer, orderedPath, serializedRequests } from "./production-workflow";
+import { missingParts, needsPrintComputer, orderedPath, piecesAwaitingPrinted, serializedRequests } from "./production-workflow";
 import { relativeTime } from "@/pages/my/format";
 
-// Tags › Production's first screen: what can be made. The print jobs that come out of it live on the Printing tab.
+// Tags › Production's one screen. On one side, what can be made; on the other, the queue of what was sent to print, to
+// mark printed (or say which pieces had a problem), with the problem rate under it. Below `xl` the queue goes under.
 //   To generate     serialized pieces (Stands, Plates): a short step-by-step (colour → face → quantity) asks for new
 //                   pieces; each print job gets its own batch of fresh serials, pending in stock until it is printed.
 //   Always ready    parts with no serial (Stand bases, G tokens), one card per piece: the next step asks which version,
@@ -58,15 +63,20 @@ export function ProductionBoard({ go, onOtherWays }: { go: Go; onOtherWays?: () 
   const options = useMemo(() => printGenerateOptions(data ?? []), [data]);
   const bySlug = new Map(models.map((model) => [model.slug, model]));
   const openModel = (model: PrintModelItem) => go(`${PRODUCTION_BASE}/models/${model.slug}`);
+  const { data: requests } = usePrintRequests("all");
+  const awaiting = piecesAwaitingPrinted(requests ?? []);
 
   if (error && !data) return <LoadError what={t("catalogWhat")} error={error} onRetry={() => void refetch()} />;
   if (isLoading) return <Loading rows={4} />;
 
   return (
-    <div className="space-y-8" data-testid="production-board">
+    <div className="space-y-4" data-testid="production-board">
+      {awaiting > 0 ? <AwaitingBar count={awaiting} /> : null}
+      <div className="grid gap-8 xl:grid-cols-[minmax(0,1fr)_minmax(340px,420px)] xl:items-start">
+      <div className="min-w-0 space-y-8">
       {isAdmin && missing.length ? <section className="space-y-3" aria-labelledby="production-missing-title" data-testid="production-missing-area">
         <SectionHeading id="production-missing-title" title={m("title")} intro={m("intro")} />
-        <ul className="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-3">
+        <ul className="grid grid-cols-1 gap-2 sm:grid-cols-2 2xl:grid-cols-3">
           {missing.map((part) => (
             <li key={part.id}>
               <button
@@ -91,7 +101,7 @@ export function ProductionBoard({ go, onOtherWays }: { go: Go; onOtherWays?: () 
       <section className="space-y-3" aria-labelledby="production-generate-title" data-testid="production-generate-area">
         <SectionHeading id="production-generate-title" title={b("generateTitle")} intro={b("generateIntro")} />
         {options.length ? (
-          <ul className="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-4">
+          <ul className="grid grid-cols-1 gap-2 sm:grid-cols-2">
             {options.map((option) => (
               <ProductCard key={option.productType} option={option} model={bySlug.get(option.colours[0].faces[0].slug)} onOpen={() => setGenerating(option)} />
             ))}
@@ -104,7 +114,7 @@ export function ProductionBoard({ go, onOtherWays }: { go: Go; onOtherWays?: () 
       {isAdmin ? <section className="space-y-3" aria-labelledby="production-ready-title" data-testid="production-ready-area">
         <SectionHeading id="production-ready-title" title={b("readyTitle")} intro={b("readyIntro")} />
         {families.length ? (
-          <ul className="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-3">
+          <ul className="grid grid-cols-1 gap-2 sm:grid-cols-2 2xl:grid-cols-3">
             {families.map((family) => (
               family.models.length === 1
                 ? <PartCard key={family.name} model={family.models[0]} onOpen={openModel} />
@@ -121,6 +131,9 @@ export function ProductionBoard({ go, onOtherWays }: { go: Go; onOtherWays?: () 
           <Button type="button" variant="secondary" size="sm" onClick={onOtherWays} data-testid="production-other-ways">{u("otherWays")}</Button>
         </div>
       ) : null}
+      </div>
+      <PrintQueue go={go} />
+      </div>
 
       {generating ? <GenerateDialog option={generating} models={bySlug} onClose={() => setGenerating(null)} onGenerated={(request) => go(orderedPath(request))} /> : null}
       {picking ? <PartFamilyDialog family={picking} onOpenModel={openModel} onClose={() => setPicking(null)} /> : null}
@@ -128,13 +141,32 @@ export function ProductionBoard({ go, onOtherWays }: { go: Go; onOtherWays?: () 
   );
 }
 
-/** The Printing tab: what was sent to print with a serial and still waits for "did it print?". Everything else is in All orders. */
-export function PrintingView({ go }: { go: Go }) {
+/** Something was sent to print and still waits for an answer: said once, at the top, whichever side the person is on. */
+function AwaitingBar({ count }: { count: number }) {
+  const b = useT(productionBoardMessages);
+  return (
+    <button
+      type="button"
+      onClick={() => document.getElementById(QUEUE_ID)?.scrollIntoView({ behavior: "smooth", block: "start" })}
+      className="flex w-full items-center gap-2 rounded-xl border border-amber-400/25 bg-amber-400/[0.08] px-3 py-2 text-left text-sm font-medium text-amber-100 transition-colors hover:bg-amber-400/[0.14]"
+      data-testid="production-awaiting-bar"
+    >
+      <Clock className="h-4 w-4 shrink-0 text-amber-300" aria-hidden="true" />
+      <span className="min-w-0 flex-1">{b.plural("awaitingBar", count)}</span>
+      <ChevronRight className="h-4 w-4 shrink-0 text-amber-200/70 xl:hidden" aria-hidden="true" />
+    </button>
+  );
+}
+
+const QUEUE_ID = "production-queue";
+
+/** The queue: what was sent to print with a serial and still waits for "did it print?". Everything else is in All orders. */
+function PrintQueue({ go }: { go: Go }) {
   const b = useT(productionBoardMessages);
   const { data: requests } = usePrintRequests("all");
   const waiting = needsPrintComputer(serializedRequests(requests ?? []));
   return (
-    <section className="space-y-3" aria-labelledby="production-pending-title" data-testid="production-pending-area">
+    <aside id={QUEUE_ID} className="min-w-0 scroll-mt-20 space-y-3" aria-labelledby="production-pending-title" data-testid="production-pending-area">
       <div className="flex flex-wrap items-end justify-between gap-2">
         <SectionHeading id="production-pending-title" title={b("pendingTitle")} intro={b("pendingIntro")} />
         <Button type="button" variant="ghost" size="sm" onClick={() => go(`${PRODUCTION_BASE}/queue`)}>
@@ -142,9 +174,46 @@ export function PrintingView({ go }: { go: Go }) {
           <ChevronRight />
         </Button>
       </div>
-      <ThisComputer />
-      <PrintComputerLine go={go} waiting={waiting} />
       <ToPrintList go={go} emptyHint={b("pendingEmptyHint")} />
+      <PrintQuality />
+      <PrintComputerLine go={go} waiting={waiting} />
+      <ThisComputer />
+    </aside>
+  );
+}
+
+/** How the pieces marked printed came out lately: what the problems reported on the queue add up to. */
+function PrintQuality() {
+  const b = useT(productionBoardMessages);
+  const t = useT(productionMessages);
+  const { data } = useQuery({
+    queryKey: [ADMIN_TAGS_KEY, "production", "quality"],
+    queryFn: () => getJson<PrintQualitySummary>("/api/xpot/admin/print-quality"),
+  });
+  if (!data) return null;
+  const rate = printProblemRate(data);
+  return (
+    <section className="rounded-2xl border border-white/[0.08] bg-white/[0.03] p-3" aria-labelledby="production-quality-title" data-testid="production-quality">
+      <div className="flex items-baseline justify-between gap-2">
+        <h3 id="production-quality-title" className="text-sm font-semibold text-white">{b("qualityTitle")}</h3>
+        <span className="text-xs text-white/45">{b("qualityWindow", { days: data.days })}</span>
+      </div>
+      {rate === null ? (
+        <p className="mt-1 text-xs text-white/55">{b("qualityEmpty")}</p>
+      ) : (
+        <>
+          <p className="mt-1 text-2xl font-semibold tracking-tight text-white" data-testid="production-quality-rate">{rate}%</p>
+          <p className="text-xs text-white/55">{b("qualityLine", { problems: data.withProblem, pieces: data.pieces })}</p>
+          {data.byProblem.length ? (
+            <ul className="mt-2 space-y-1 border-t border-white/[0.06] pt-2 text-xs text-white/70">
+              {data.byProblem.map(({ problem, count }) => (
+                <li key={problem} className="flex justify-between gap-2"><span className="min-w-0 truncate">{t(`pieceProblem_${problem}` as never)}</span><span className="font-medium text-white">{count}</span></li>
+              ))}
+            </ul>
+          ) : null}
+        </>
+      )}
+      {data.failedPrints > 0 ? <p className="mt-2 text-xs text-white/55">{b.plural("qualityFailed", data.failedPrints)}</p> : null}
     </section>
   );
 }
