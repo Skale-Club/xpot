@@ -163,7 +163,6 @@ function ModelCard({ model, onOpen, onPrint }: { model: PrintModelItem; onOpen: 
           <ProductionIdentity model={model} />
           <span className="flex flex-wrap items-center gap-1.5 text-xs text-white/45">
             {badge}
-            {model.lowStock ? <Pill tone="amber">{t("lowStock", { count: model.partReorderAt ?? 0 })}</Pill> : null}
             {model.onHand > 0 ? <span>{t("onHand", { count: model.onHand })}</span> : null}
             {model.openJobs ? <span>{t.plural("openOrders", model.openJobs)}</span> : null}
           </span>
