@@ -290,7 +290,10 @@ test.skipIf(!enabled)("tags: kits, reseller isolation, sales, scans, report, pro
       assert.equal(counted?.held ?? 0, held, name);
       assert.equal(counted?.sold ?? 0, sold, name);
     }
-    assert.equal((await api("GET", "/api/xpot/admin/tags/by-person", "it-ana")).status, 403);
+    // Someone owning only their own workspace is told about that workspace, never about another person.
+    const anaView = await api("GET", "/api/xpot/admin/tags/by-person", "it-ana");
+    assert.equal(anaView.status, 200, anaView.text);
+    assert.ok(!anaView.json.some((p: any) => p.repId === repId["it-bruno"]), anaView.text);
     assert.equal(overview.json.recentEvents[0].productType, "keychain");
     assert.equal(overview.json.recentEvents[0].face, "instagram");
     assert.equal(overview.json.recentEvents[0].batchCode, batch.json.batchCode);
