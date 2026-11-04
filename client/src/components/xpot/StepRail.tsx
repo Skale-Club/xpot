@@ -24,7 +24,7 @@ export function StepRail({ names, values, current, canVisit, busy, onChange, pro
           const active = index === current;
           const value = done ? values?.[index] : null;
           return (
-            <li key={name} className="relative pb-5 last:pb-0">
+            <li key={name} className="relative pb-2.5 last:pb-0">
               {index < names.length - 1 ? <span aria-hidden="true" className={`absolute bottom-0 left-[13px] top-7 w-0.5 ${done ? "bg-violet-400/70" : "bg-white/10"}`} /> : null}
               <button
                 type="button"
