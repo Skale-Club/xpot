@@ -15,11 +15,12 @@ export function productionPath(path: string): string {
 }
 
 /**
- * The lit tab of Production for a path: Models owns /models; everything else (the board, the full orders list at
- * /queue, a pending-batches list) belongs to Produce, since the board's "Waiting to print" is the day's queue.
+ * The lit tab of Production for a path: Models owns /models, Printing owns /printing; everything else (the board, the
+ * full orders list at /queue, a pending-batches list) belongs to Produce.
  */
-export function productionTabFor(view: string | undefined): "board" | "catalog" {
-  return view === "models" ? "catalog" : "board";
+export function productionTabFor(view: string | undefined): "board" | "printing" | "catalog" {
+  if (view === "models") return "catalog";
+  return view === "printing" ? "printing" : "board";
 }
 
 export function printableBeds(model: PrintModelItem, batch?: ExistingProductionBatch) {
@@ -134,6 +135,11 @@ export function latestPlates<P extends Pick<PrintJobItem, "plateNumber" | "creat
 export interface BoardRequest {
   request: PrintRequestItem;
   plates: PrintJobItem[];
+}
+
+/** The requests the Printing screen follows: pieces with a serial. A part has no code to confirm, only a count on its page. */
+export function serializedRequests(requests: readonly PrintRequestItem[]): PrintRequestItem[] {
+  return requests.filter((request) => request.modelKind === "serialized");
 }
 
 /** Open and failed plates by group; a request with plates in two groups shows in both, each with its own plates. Empty groups are left out. */
@@ -283,9 +289,9 @@ export function plainTitle(title: string): string {
   return title.replace(/\s*\([^)]*\)\s*$/, "").trim() || title;
 }
 
-/** Where to go once pieces were ordered: the one print job that came out of it, or the board when there are several. */
+/** Where to go once pieces were ordered: the one print job that came out of it, or the Printing screen when there are several. */
 export function orderedPath(request: Pick<PrintRequestItem, "plates">): string {
-  return request.plates.length === 1 ? `/production/jobs/${request.plates[0].id}` : "/production";
+  return request.plates.length === 1 ? `/production/jobs/${request.plates[0].id}` : "/production/printing";
 }
 
 /** The filament colours of the model's first bed ("White PLA"). */

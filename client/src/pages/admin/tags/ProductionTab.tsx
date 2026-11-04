@@ -27,7 +27,7 @@ import { PrintDialog, RequestList } from "./production-orders";
 import { ModelStatusPill, PRODUCTION_BASE, bedSummary, usePrintModels, useProductionAccess, useThemeOptions, type JobFilter } from "./production-shared";
 import { BatchDetail } from "./BatchDetail";
 import { ProductionWizard } from "./production-wizard";
-import { ProductionBoard } from "./production-board";
+import { PrintingView, ProductionBoard } from "./production-board";
 import { PendingBatches } from "./production-pending-batches";
 import { batchPrefixFromTitle, canPrintModel, orderedPath, productionPath, productionTabFor, slugFromTitle } from "./production-workflow";
 import { ProductionIdentity, useModelName } from "./production-identity";
@@ -63,16 +63,17 @@ export function ProductionTab({ rest, go }: { rest: string[]; go: Go }) {
       <Tabs
         tabs={[
           { id: "board", label: b("produce"), testId: "production-tab-board" },
+          { id: "printing", label: b("printingTab"), testId: "production-tab-printing" },
           { id: "catalog", label: u("models"), testId: "production-tab-catalog" },
         ]}
         value={tab}
-        onChange={(next) => navigate(next === "catalog" ? `${PRODUCTION_BASE}/models` : PRODUCTION_BASE)}
+        onChange={(next) => navigate(next === "catalog" ? `${PRODUCTION_BASE}/models` : next === "printing" ? `${PRODUCTION_BASE}/printing` : PRODUCTION_BASE)}
         ariaLabel={t("productionNav")}
         idPrefix="production"
         fill={false}
         accent="tags"
       />
-      {tab === "catalog" ? <CatalogView go={navigate} /> : <ProductionBoard go={navigate} onOtherWays={isAdmin ? () => setExternal(true) : undefined} />}
+      {tab === "catalog" ? <CatalogView go={navigate} /> : tab === "printing" ? <PrintingView go={navigate} /> : <ProductionBoard go={navigate} onOtherWays={isAdmin ? () => setExternal(true) : undefined} />}
       {external ? <ProductionWizard external onClose={() => setExternal(false)} onCreated={(batchId) => navigate(`/batches/${batchId}?tab=receive`)} /> : null}
     </div>
   );

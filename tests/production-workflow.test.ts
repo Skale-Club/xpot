@@ -16,6 +16,7 @@ describe("production tabs", () => {
     expect(productionTabFor("batches")).toBe("board");
     expect(productionTabFor("jobs")).toBe("board");
     expect(productionTabFor("models")).toBe("catalog");
+    expect(productionTabFor("printing")).toBe("printing");
   });
 });
 

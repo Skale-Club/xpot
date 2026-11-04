@@ -26,15 +26,12 @@ import { Piece3D } from "./production-piece-3d";
 import { ToPrintList } from "./production-orders";
 import type { PreviewState } from "./production-preview-3d";
 import { PRODUCTION_BASE, minutesText, usePrintComputers, usePrintModels, usePrintRequests, useProductionAccess } from "./production-shared";
-import { needsPrintComputer, orderedPath } from "./production-workflow";
+import { needsPrintComputer, orderedPath, serializedRequests } from "./production-workflow";
 import { relativeTime } from "@/pages/my/format";
 
-// Tags › Production's first screen: how print production actually runs. The pieces to make come first (the
-// plates and stands are what the owner reaches for), then what is waiting to print.
+// Tags › Production's first screen: what can be made. The print jobs that come out of it live on the Printing tab.
 //   To generate     serialized pieces (Stands, Plates): a short step-by-step (colour → face → quantity) asks for new
 //                   pieces; each print job gets its own batch of fresh serials, pending in stock until it is printed.
-//   To print        the print jobs not printed yet (and the failed ones), by what each needs: its file, the printer,
-//                   "mark printed". Failed first; a print computer line says whether the files are being made.
 //   Always ready    parts with no serial (Stand bases, G tokens), one card per piece: the next step asks which version,
 //                   with a 3D view and the fixed file to download, any time.
 
@@ -56,8 +53,6 @@ export function ProductionBoard({ go, onOtherWays }: { go: Go; onOtherWays?: () 
   const families = printPartFamilies(parts);
   const options = useMemo(() => printGenerateOptions(data ?? []), [data]);
   const bySlug = new Map(models.map((model) => [model.slug, model]));
-  const { data: requests } = usePrintRequests("all");
-  const waiting = needsPrintComputer(requests ?? []);
   const openModel = (model: PrintModelItem) => go(`${PRODUCTION_BASE}/models/${model.slug}`);
 
   if (error && !data) return <LoadError what={t("catalogWhat")} error={error} onRetry={() => void refetch()} />;
@@ -68,7 +63,7 @@ export function ProductionBoard({ go, onOtherWays }: { go: Go; onOtherWays?: () 
       <section className="space-y-3" aria-labelledby="production-generate-title" data-testid="production-generate-area">
         <SectionHeading id="production-generate-title" title={b("generateTitle")} intro={b("generateIntro")} />
         {options.length ? (
-          <ul className="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-3">
+          <ul className="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-4">
             {options.map((option) => (
               <ProductCard key={option.productType} option={option} model={bySlug.get(option.colours[0].faces[0].slug)} onOpen={() => setGenerating(option)} />
             ))}
@@ -76,18 +71,6 @@ export function ProductionBoard({ go, onOtherWays }: { go: Go; onOtherWays?: () 
         ) : (
           <EmptyState tone="tags" icon={Shapes} title={b("generateEmpty")} hint={t("catalogEmptyHint")} />
         )}
-      </section>
-
-      <section className="space-y-3" aria-labelledby="production-pending-title" data-testid="production-pending-area">
-        <div className="flex flex-wrap items-end justify-between gap-2">
-          <SectionHeading id="production-pending-title" title={b("pendingTitle")} />
-          <Button type="button" variant="ghost" size="sm" onClick={() => go(`${PRODUCTION_BASE}/queue`)}>
-            {b("allOrders")}
-            <ChevronRight />
-          </Button>
-        </div>
-        <PrintComputerLine go={go} waiting={waiting} />
-        <ToPrintList go={go} emptyHint={b("pendingEmptyHint")} />
       </section>
 
       {isAdmin ? <section className="space-y-3" aria-labelledby="production-ready-title" data-testid="production-ready-area">
@@ -114,6 +97,26 @@ export function ProductionBoard({ go, onOtherWays }: { go: Go; onOtherWays?: () 
       {generating ? <GenerateDialog option={generating} models={bySlug} onClose={() => setGenerating(null)} onGenerated={(request) => go(orderedPath(request))} /> : null}
       {picking ? <PartFamilyDialog family={picking} onOpenModel={openModel} onClose={() => setPicking(null)} /> : null}
     </div>
+  );
+}
+
+/** The Printing tab: what was sent to print with a serial and still waits for "did it print?". Everything else is in All orders. */
+export function PrintingView({ go }: { go: Go }) {
+  const b = useT(productionBoardMessages);
+  const { data: requests } = usePrintRequests("all");
+  const waiting = needsPrintComputer(serializedRequests(requests ?? []));
+  return (
+    <section className="space-y-3" aria-labelledby="production-pending-title" data-testid="production-pending-area">
+      <div className="flex flex-wrap items-end justify-between gap-2">
+        <SectionHeading id="production-pending-title" title={b("pendingTitle")} intro={b("pendingIntro")} />
+        <Button type="button" variant="ghost" size="sm" onClick={() => go(`${PRODUCTION_BASE}/queue`)}>
+          {b("allOrders")}
+          <ChevronRight />
+        </Button>
+      </div>
+      <PrintComputerLine go={go} waiting={waiting} />
+      <ToPrintList go={go} emptyHint={b("pendingEmptyHint")} />
+    </section>
   );
 }
 
@@ -153,6 +156,9 @@ function PrintComputerLine({ go, waiting }: { go: Go; waiting: boolean }) {
   );
 }
 
+/** The cards frame the same stretch of the world, a little over the tallest piece (Large Stand, 137 mm): Large reads large, Small small. */
+const PRODUCT_FRAME_METRES = 0.145;
+
 /** One product to generate (Large Stand, Small Plate…): its picture and how many colours and faces it comes in. */
 function ProductCard({ option, model, onOpen }: { option: PrintGenerateOption; model: PrintModelItem | undefined; onOpen: () => void }) {
   const b = useT(productionBoardMessages);
@@ -184,6 +190,7 @@ function ProductCard({ option, model, onOpen }: { option: PrintGenerateOption; m
         <span className="relative flex h-28 w-28 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-[radial-gradient(ellipse_at_center,rgba(255,255,255,0.1),transparent_70%)] sm:h-32 sm:w-32">
           <Piece3D
             model={model}
+            frameMetres={PRODUCT_FRAME_METRES}
             fallback={<DesignPreview productType={option.productType} face={sample.face} theme={model?.theme ?? option.colours[0].theme} style={printStyle(model?.currentVersion?.params)} modelSlug={sample.slug} />}
           />
         </span>

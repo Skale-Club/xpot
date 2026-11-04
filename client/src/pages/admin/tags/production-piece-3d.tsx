@@ -15,7 +15,7 @@ export function modelPreviewUrl(model: PrintModelItem | undefined): string | nul
  * A piece you can turn with the mouse or a finger: a loader until the 3D is ready, `fallback` (the flat picture)
  * when the model has no preview or it cannot be drawn. Fills its parent, which must have a size.
  */
-export function Piece3D({ model, fallback }: { model: PrintModelItem | undefined; fallback: ReactNode }) {
+export function Piece3D({ model, fallback, frameMetres }: { model: PrintModelItem | undefined; fallback: ReactNode; frameMetres?: number }) {
   const url = modelPreviewUrl(model);
   // The state belongs to one file: a different piece starts loading again.
   const [seen, setSeen] = useState<{ url: string | null; state: PreviewState }>({ url, state: "loading" });
@@ -24,7 +24,7 @@ export function Piece3D({ model, fallback }: { model: PrintModelItem | undefined
   return (
     <>
       {flat ? fallback : null}
-      {url && !flat ? <Suspense fallback={null}><Preview3D key={url} url={url} onState={(next) => setSeen({ url, state: next })} /></Suspense> : null}
+      {url && !flat ? <Suspense fallback={null}><Preview3D key={url} url={url} frameMetres={frameMetres} onState={(next) => setSeen({ url, state: next })} /></Suspense> : null}
       {url && state === "loading" ? (
         <span className="pointer-events-none absolute inset-0 flex items-center justify-center">
           <Loader2 className="h-5 w-5 animate-spin text-white/35" aria-hidden="true" />

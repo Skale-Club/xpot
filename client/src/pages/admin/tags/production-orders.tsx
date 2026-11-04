@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/xpot/ConfirmDialog";
 import { ProductionWizard } from "./production-wizard";
 import { EmptyState } from "@/components/xpot/EmptyState";
-import { BOARD_GROUPS, boardGroups, buildState, collapsedPlates, plateActions, productionNeedsAction, qrFailedCodes, redoEffect, showPlateNumber, type BoardGroup, type PlateAction } from "./production-workflow";
+import { BOARD_GROUPS, boardGroups, buildState, collapsedPlates, plateActions, productionNeedsAction, qrFailedCodes, redoEffect, serializedRequests, showPlateNumber, type BoardGroup, type PlateAction } from "./production-workflow";
 import { useToast } from "@/hooks/use-toast";
 import { useT } from "@/i18n";
 import { productionMessages } from "@/i18n/messages/production";
@@ -144,8 +144,8 @@ function CollapsedPrints({ plates, waiting, children }: { plates: PrintJobItem[]
 }
 
 /**
- * What the operator prints now: the open and failed print jobs by what each needs, failed first. A group with nothing
- * in it is not shown.
+ * What was sent to print and still waits for an answer: the open and failed print jobs of pieces with a serial, by what
+ * each needs, failed first. A group with nothing in it is not shown.
  */
 export function ToPrintList({ go, emptyHint }: { go: Go; emptyHint: string }) {
   const t = useT(productionMessages);
@@ -156,7 +156,7 @@ export function ToPrintList({ go, emptyHint }: { go: Go; emptyHint: string }) {
   const rows = useRowActions();
   if (error && !data) return <LoadError what={t("queueWhat")} error={error} onRetry={() => void refetch()} />;
   if (isLoading) return <Loading rows={4} />;
-  const groups = boardGroups(data ?? []);
+  const groups = boardGroups(serializedRequests(data ?? []));
   if (!groups.length) return <EmptyState tone="tags" icon={Printer} title={t("nothingToPrint")} hint={emptyHint} />;
   return (
     <div className="space-y-5" data-testid="production-to-print">

@@ -11,8 +11,10 @@ import { Button } from "@/components/ui/button";
 
 export type PreviewState = "loading" | "ready" | "failed" | "no-webgl";
 
-export default function Preview3D({ url, resetLabel, onState }: {
+export default function Preview3D({ url, frameMetres, resetLabel, onState }: {
   url: string;
+  /** Frame this much of the world instead of fitting the piece, so pieces side by side show their real sizes. */
+  frameMetres?: number;
   /** The "back to the start" button; without a label (a small card's thumbnail) there is none. */
   resetLabel?: string;
   onState: (state: PreviewState) => void;
@@ -82,7 +84,7 @@ export default function Preview3D({ url, resetLabel, onState }: {
         const box = new THREE.Box3().setFromObject(gltf.scene);
         const size = box.getSize(new THREE.Vector3());
         const centre = box.getCenter(new THREE.Vector3());
-        const radius = Math.max(size.x, size.y, size.z) * 0.62;
+        const radius = (frameMetres ?? Math.max(size.x, size.y, size.z)) * 0.62;
         const distance = radius / Math.sin(THREE.MathUtils.degToRad(camera.fov / 2));
         camera.position.copy(centre).add(new THREE.Vector3(0.28, 0.22, 1).normalize().multiplyScalar(distance));
         camera.near = distance / 100;
@@ -118,7 +120,7 @@ export default function Preview3D({ url, resetLabel, onState }: {
       renderer.dispose();
       renderer.domElement.remove();
     };
-  }, [url]);
+  }, [url, frameMetres]);
 
   return (
     <div className="relative h-full w-full">
