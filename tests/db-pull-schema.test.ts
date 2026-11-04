@@ -14,6 +14,12 @@ function column(name: string, overrides: Partial<DatabaseColumn> = {}): Database
 }
 
 describe("production data pull scope", () => {
+  it("copies the production catalog and the customer orders it points at", () => {
+    for (const table of ["print_models", "print_model_versions", "print_requests", "print_jobs", "print_job_files", "print_part_movements", "customer_orders", "customer_order_lines"]) {
+      expect(isXpotDataTable(table)).toBe(true);
+    }
+  });
+
   it("copies Xpot business data but excludes shared-product and authentication tables", () => {
     for (const table of ["app_branding", "organizations", "sales_leads", "tag_batches", "tags", "prospecting_routes", "mcp_tokens"]) {
       expect(isXpotDataTable(table)).toBe(true);

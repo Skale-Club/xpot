@@ -10,6 +10,8 @@ export interface DatabaseColumn {
 const XPOT_EXACT_TABLES = new Set([
   "app_branding",
   "landing_page_contents",
+  "lead_customer_contacts",
+  "organization_links",
   "organizations",
   "organization_audit_log",
   "organization_memberships",
@@ -17,7 +19,7 @@ const XPOT_EXACT_TABLES = new Set([
   "xphere_integrations",
 ]);
 
-const XPOT_TABLE_PREFIXES = ["mcp_", "prospecting_", "sales_", "tag_"];
+const XPOT_TABLE_PREFIXES = ["customer_order", "mcp_", "print_", "prospecting_", "sales_", "tag_"];
 
 /**
  * The Supabase development database is shared with other Skale Club products.
