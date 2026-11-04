@@ -142,10 +142,10 @@ describe("panelHome", () => {
 describe("the way between panels on desktop", () => {
   const layout = readFileSync("client/src/components/xpot/AppLayout.tsx", "utf8");
 
-  it("sits at the foot of the sidebar, after the menu and above Install app", () => {
+  it("sits at the foot of the sidebar, after the menu and above Settings", () => {
     const rows = layout.indexOf("<SidebarPanelRows");
     expect(rows).toBeGreaterThan(layout.indexOf("</ScrollingNav>"));
-    expect(rows).toBeLessThan(layout.indexOf("<InstallAppSidebarItem"));
+    expect(rows).toBeLessThan(layout.indexOf('href: "/settings", label: t("navSettings")', rows));
   });
 
   it("is rendered once, so nothing above the menu competes with Visits | Tags", () => {

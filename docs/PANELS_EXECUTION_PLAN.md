@@ -20,7 +20,7 @@ dados mas montou os menus por tarefa, dentro de um painel só por perfil. É ess
 
 **Correção do dono (2026-11-04), vale sobre todo o resto, inclusive a tabela acima:** a troca de painel **não** é uma aba no
 topo da barra lateral. A plataforma inteira já é a plataforma de visitas; entrar em Produção ou Admin é escolher trocar de
-página, então fica no pé da barra lateral, em linhas (`SidebarPanelRows`), acima de Install app. No topo fica só Visits | Tags.
+página, então fica no pé da barra lateral, em linhas (`SidebarPanelRows`), acima de Settings. No topo fica só Visits | Tags.
 Toda menção abaixo a um "seletor no topo" está superada.
 
 ---
