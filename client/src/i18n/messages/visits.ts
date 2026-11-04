@@ -25,8 +25,8 @@ const en = {
   noVisitsToday: "No visits today",
   noVisitsYesterday: "No visits yesterday",
   noVisitsOn: "No visits on {day}",
-  firstVisitHint: "Start your first visit from Route or Companies",
-  startVisitHint: "Start a visit from Route or Companies",
+  firstVisitHint: "Start your first visit from Route or Customers",
+  startVisitHint: "Start a visit from Route or Customers",
   nothingThisDay: "Nothing recorded for this day",
 
   // Visit detail
@@ -126,8 +126,8 @@ export const visitsMessages: Dictionary<typeof en> = {
     noVisitsToday: "Nenhuma visita hoje",
     noVisitsYesterday: "Nenhuma visita ontem",
     noVisitsOn: "Nenhuma visita em {day}",
-    firstVisitHint: "Inicie a primeira visita pela Rota ou por Empresas",
-    startVisitHint: "Inicie uma visita pela Rota ou por Empresas",
+    firstVisitHint: "Inicie a primeira visita pela Rota ou por Clientes",
+    startVisitHint: "Inicie uma visita pela Rota ou por Clientes",
     nothingThisDay: "Nada registrado neste dia",
 
     socialNetworks: "Redes sociais",
@@ -222,8 +222,8 @@ export const visitsMessages: Dictionary<typeof en> = {
     noVisitsToday: "No hay visitas hoy",
     noVisitsYesterday: "No hubo visitas ayer",
     noVisitsOn: "No hubo visitas el {day}",
-    firstVisitHint: "Inicia tu primera visita desde Ruta o Empresas",
-    startVisitHint: "Inicia una visita desde Ruta o Empresas",
+    firstVisitHint: "Inicia tu primera visita desde Ruta o Clientes",
+    startVisitHint: "Inicia una visita desde Ruta o Clientes",
     nothingThisDay: "No hay nada registrado este día",
 
     socialNetworks: "Redes sociales",

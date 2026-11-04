@@ -1,12 +1,12 @@
 import type { Dictionary } from "../index";
 
 // Leads and prospects (client/src/pages/xpot/XpotLeads.tsx, EditLeadDialog,
-// InlineField, useLeads). The record is a company (empresa) everywhere; its
+// InlineField, useLeads). The screen is Customers (PT/ES Clientes); the record on it is a company (empresa); its
 // stage is Prospect → Lead → Customer (PT Prospecto → Em negociação → Cliente).
 
 const en = {
   // Tabs and list
-  tabLeads: "Companies",
+  tabLeads: "Customers",
   tabPortfolio: "Portfolio",
   tabProspects: "To visit",
   searchLeads: "Search companies...",
@@ -110,7 +110,7 @@ const en = {
   edit: "Edit",
   moreActions: "More actions",
   closePane: "Close",
-  backToLeads: "Back to companies",
+  backToLeads: "Back to customers",
   directions: "Directions",
   backToVisit: "Back to visit",
   finishVisitFirst: "Check in here after you finish your visit at {name}.",
@@ -158,7 +158,7 @@ const en = {
 export const leadsMessages: Dictionary<typeof en> = {
   en,
   pt: {
-    tabLeads: "Empresas",
+    tabLeads: "Clientes",
     tabPortfolio: "Carteira",
     tabProspects: "A visitar",
     searchLeads: "Buscar empresas...",
@@ -257,7 +257,7 @@ export const leadsMessages: Dictionary<typeof en> = {
     edit: "Editar",
     moreActions: "Mais ações",
     closePane: "Fechar",
-    backToLeads: "Voltar para empresas",
+    backToLeads: "Voltar para clientes",
     directions: "Como chegar",
     backToVisit: "Voltar à visita",
     finishVisitFirst: "Faça o check-in aqui depois de terminar a visita em {name}.",
@@ -302,7 +302,7 @@ export const leadsMessages: Dictionary<typeof en> = {
     noVisitsYet: "Nenhuma visita ainda.",
   },
   es: {
-    tabLeads: "Empresas",
+    tabLeads: "Clientes",
     tabPortfolio: "Cartera",
     tabProspects: "Por visitar",
     searchLeads: "Buscar empresas...",
@@ -401,7 +401,7 @@ export const leadsMessages: Dictionary<typeof en> = {
     edit: "Editar",
     moreActions: "Más acciones",
     closePane: "Cerrar",
-    backToLeads: "Volver a empresas",
+    backToLeads: "Volver a clientes",
     directions: "Cómo llegar",
     backToVisit: "Volver a la visita",
     finishVisitFirst: "Haz el check-in aquí cuando termines la visita en {name}.",

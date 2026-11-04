@@ -7,7 +7,7 @@ const en = {
   skipToContent: "Skip to main content",
   // Bottom navigation
   tabVisits: "History",
-  tabLeads: "Companies",
+  tabLeads: "Customers",
   tabSales: "Sales",
   tabRoute: "Route",
   tabTasks: "Tasks",
@@ -54,7 +54,7 @@ const en = {
   palettePlaceholder: "Search companies, pieces or pages…",
   paletteEmpty: "Nothing matches.",
   groupPages: "Pages",
-  groupCompanies: "Companies",
+  groupCompanies: "Customers",
   groupPieces: "Pieces",
   paletteHint: "↑↓ move · Enter open · Esc close",
 
@@ -83,7 +83,7 @@ export const shellMessages: Dictionary<typeof en> = {
   pt: {
     skipToContent: "Pular para o conteúdo principal",
     tabVisits: "Histórico",
-    tabLeads: "Empresas",
+    tabLeads: "Clientes",
     tabSales: "Vendas",
     tabRoute: "Rota",
     tabTasks: "Tarefas",
@@ -126,7 +126,7 @@ export const shellMessages: Dictionary<typeof en> = {
     palettePlaceholder: "Buscar empresas, peças ou telas…",
     paletteEmpty: "Nada encontrado.",
     groupPages: "Telas",
-    groupCompanies: "Empresas",
+    groupCompanies: "Clientes",
     groupPieces: "Peças",
     paletteHint: "↑↓ mover · Enter abrir · Esc fechar",
 
@@ -149,7 +149,7 @@ export const shellMessages: Dictionary<typeof en> = {
   es: {
     skipToContent: "Saltar al contenido principal",
     tabVisits: "Historial",
-    tabLeads: "Empresas",
+    tabLeads: "Clientes",
     tabSales: "Ventas",
     tabRoute: "Ruta",
     tabTasks: "Tareas",
@@ -192,7 +192,7 @@ export const shellMessages: Dictionary<typeof en> = {
     palettePlaceholder: "Buscar empresas, piezas o pantallas…",
     paletteEmpty: "No hay resultados.",
     groupPages: "Pantallas",
-    groupCompanies: "Empresas",
+    groupCompanies: "Clientes",
     groupPieces: "Piezas",
     paletteHint: "↑↓ mover · Enter abrir · Esc cerrar",
 

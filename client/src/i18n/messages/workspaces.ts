@@ -11,7 +11,7 @@ const en = {
   switchPanel: "Switch panel",
   panelsHeading: "Panels",
   // The owner's Company group of Visits and Tags (components/xpot/moduleNav.ts panelGroups). The screens of the team are
-  // named apart from the person's own Companies, Tasks and Sales above them.
+  // named apart from the person's own Customers, Tasks and Sales above them.
   groupCompany: "Company",
   companyOverview: "Overview",
   companyPieces: "Pieces",

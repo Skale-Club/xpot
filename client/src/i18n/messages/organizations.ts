@@ -23,7 +23,7 @@ const en = {
   tabTeam: "Team",
   tabInventory: "Stock",
   tabKits: "Past hand-outs",
-  tabCustomers: "Companies",
+  tabCustomers: "Customers",
   tabSettings: "Settings",
   tabPurchases: "Team purchases",
 
@@ -63,7 +63,7 @@ const en = {
   seeAllRows: "See all ({count})",
   kitPieces_one: "{count} piece",
   kitPieces_other: "{count} pieces",
-  cardCustomers: "Companies",
+  cardCustomers: "Customers",
 
   memberAdded: "{name} added",
   noContact: "No contact",
@@ -161,7 +161,7 @@ export const organizationsMessages: Dictionary<typeof en> = {
     tabTeam: "Equipe",
     tabInventory: "Estoque",
     tabKits: "Entregas anteriores",
-    tabCustomers: "Empresas",
+    tabCustomers: "Clientes",
     tabSettings: "Configurações",
     tabPurchases: "Compras da equipe",
 
@@ -198,7 +198,7 @@ export const organizationsMessages: Dictionary<typeof en> = {
     seeAllRows: "Ver tudo ({count})",
     kitPieces_one: "{count} peça",
     kitPieces_other: "{count} peças",
-    cardCustomers: "Empresas",
+    cardCustomers: "Clientes",
 
     memberAdded: "{name} adicionado",
     noContact: "Sem contato",
@@ -292,7 +292,7 @@ export const organizationsMessages: Dictionary<typeof en> = {
     tabTeam: "Equipo",
     tabInventory: "Stock",
     tabKits: "Entregas anteriores",
-    tabCustomers: "Empresas",
+    tabCustomers: "Clientes",
     tabSettings: "Ajustes",
     tabPurchases: "Compras del equipo",
 
@@ -329,7 +329,7 @@ export const organizationsMessages: Dictionary<typeof en> = {
     seeAllRows: "Ver todo ({count})",
     kitPieces_one: "{count} pieza",
     kitPieces_other: "{count} piezas",
-    cardCustomers: "Empresas",
+    cardCustomers: "Clientes",
 
     memberAdded: "{name} agregado",
     noContact: "Sin contacto",
