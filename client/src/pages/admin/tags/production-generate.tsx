@@ -103,28 +103,28 @@ export function GenerateDialog({ option, models, onClose, onGenerated }: {
   ];
   const preview = face && colour ? <DesignPreview productType={option.productType} face={face.face} theme={colour.theme} style={face.style} modelSlug={face.slug} /> : null;
   return <Dialog open onOpenChange={(open) => { if (!open && !busy) onClose(); }}>
-    <DialogContent phoneSheet className="flex h-[min(90dvh,850px)] max-w-5xl flex-col gap-0 overflow-hidden p-0" onEscapeKeyDown={(event) => { if (busy) event.preventDefault(); }}>
-      <header className="shrink-0 border-b border-white/[0.08] px-5 py-5 sm:px-7">
-        <div className="pr-9"><DialogTitle className="text-lg text-white">{b("generateDialog", { product })}</DialogTitle>
-          <DialogDescription className="mt-1 text-xs">{d("onePlate")}</DialogDescription></div>
+    <DialogContent phoneSheet className="flex h-[min(90dvh,850px)] max-w-5xl flex-col gap-0 overflow-hidden p-0" onOpenAutoFocus={(event) => { event.preventDefault(); heading.current?.focus(); }} onEscapeKeyDown={(event) => { if (busy) event.preventDefault(); }}>
+      <header className="shrink-0 border-b border-white/[0.08] px-5 py-3 sm:px-7">
+        <div className="pr-9"><DialogTitle className="text-base text-white">{b("generateDialog", { product })}</DialogTitle>
+          <DialogDescription className="mt-0.5 text-xs">{d("onePlate")}</DialogDescription></div>
         <StepBar names={stepNames} current={step} progress={progress} />
       </header>
       <form onSubmit={submit} className="flex min-h-0 flex-1 flex-col" data-testid="production-generate-form">
         <div className="flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-contain [color-scheme:dark] md:flex-row md:overflow-hidden [&_*]:[scrollbar-width:thin]">
           <div className="order-1 min-w-0 flex-1 md:order-2 md:overflow-y-auto">
-          <fieldset disabled={busy} aria-labelledby={headingId} className="min-w-0 space-y-5 px-5 py-5 sm:px-7">
-            <div><h2 ref={heading} id={headingId} tabIndex={-1} className="text-lg font-semibold tracking-tight text-white outline-none">{d(`${STEP_KEYS[step]}Title`)}</h2>
-              <p className="mt-1 text-sm leading-relaxed text-white/55">{d(`${STEP_KEYS[step]}Hint`)}</p></div>
+          <fieldset disabled={busy} aria-labelledby={headingId} className="min-w-0 space-y-3 px-5 py-4 sm:px-7">
+            <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5"><h2 ref={heading} id={headingId} tabIndex={-1} className="text-base font-semibold tracking-tight text-white outline-none">{d(`${STEP_KEYS[step]}Title`)}</h2>
+              <p className="text-xs text-white/50">{d(`${STEP_KEYS[step]}Hint`)}</p></div>
             {step === 0 ? <>
-              <div className="relative"><Search className="pointer-events-none absolute left-3 top-3 h-4 w-4 text-white/40" aria-hidden="true" /><Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder={d("search")} aria-label={d("search")} className="pl-9" /></div>
-              <div className="flex flex-wrap gap-1.5" aria-label={d("design")}>
-                {PRINT_DESIGN_GROUPS.filter((g) => g === "all" || designs.some((f) => printDesignGroup(f.face) === g)).map((g) => <button type="button" key={g} aria-pressed={group === g} onClick={() => setGroup(g)} className={`min-h-9 rounded-lg px-3 text-xs font-medium transition-colors ${group === g ? "bg-white/10 text-white ring-1 ring-white/20" : "text-white/50 hover:bg-white/5 hover:text-white"}`}>{groupLabels[g]}</button>)}
+              <div className="flex flex-wrap items-center gap-x-1 gap-y-2" aria-label={d("design")}>
+                {PRINT_DESIGN_GROUPS.filter((g) => g === "all" || designs.some((f) => printDesignGroup(f.face) === g)).map((g) => <button type="button" key={g} aria-pressed={group === g} onClick={() => setGroup(g)} className={`min-h-7 rounded-md px-2.5 text-xs font-medium transition-colors ${group === g ? "bg-white/10 text-white ring-1 ring-white/20" : "text-white/50 hover:bg-white/5 hover:text-white"}`}>{groupLabels[g]}</button>)}
+                <div className="relative w-full sm:ml-auto sm:w-44"><Search className="pointer-events-none absolute left-2.5 top-2 h-3.5 w-3.5 text-white/40" aria-hidden="true" /><Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder={d("search")} aria-label={d("search")} className="h-7 min-h-0 py-0 pl-8 text-xs" /></div>
               </div>
-              <fieldset className="grid grid-cols-3 gap-2 sm:grid-cols-4" data-testid="production-generate-faces"><legend className="sr-only">{d("design")}</legend>
+              <fieldset className="grid grid-cols-3 gap-2.5 sm:grid-cols-4" data-testid="production-generate-faces"><legend className="sr-only">{d("design")}</legend>
                 {filtered.map((f) => {
                   const logo = PRINT_DESIGNS.find((entry) => entry.face === f.face)?.logo;
                   return <RadioCard key={f.face} name={`${radioId}-face`} value={f.face} checked={faceKey === f.face} onChange={() => chooseFace(f.face)} onPick={() => setStep(1)} testId={`production-generate-face-${f.face}`}>
-                    <span aria-hidden="true" className="flex h-16 w-16 items-center justify-center rounded-xl bg-white p-3 shadow-sm sm:h-20 sm:w-20">
+                    <span aria-hidden="true" className="flex h-20 w-20 items-center justify-center rounded-2xl bg-white p-3 shadow-sm sm:h-24 sm:w-24">
                       {f.face === "menu" ? <MenuGlyph className="h-full w-full text-black" /> : logo ? <img src={`/production/logos/${logo}.png`} alt="" className="h-full w-full object-contain" width={64} height={64} /> : <TagFaceIcon face={f.face} size="lg" />}
                     </span><span className="text-xs font-medium text-white sm:text-sm">{labels.face(f.face)}</span>
                   </RadioCard>;
@@ -173,17 +173,14 @@ export function GenerateDialog({ option, models, onClose, onGenerated }: {
             </div> : null}
           </fieldset>
           </div>
-          <aside className="order-2 shrink-0 space-y-6 border-t border-white/[0.08] bg-white/[0.025] px-5 py-5 md:order-1 md:w-72 md:overflow-y-auto md:border-r md:border-t-0" aria-label={d("summary")} data-testid="production-design-summary">
+          <aside className="order-2 flex shrink-0 flex-col gap-4 border-t border-white/[0.08] bg-white/[0.025] px-5 py-5 md:order-1 md:w-72 md:overflow-y-auto md:border-r md:border-t-0" aria-label={d("summary")} data-testid="production-design-summary">
             <StepRail names={stepNames} values={stepValues} current={step} canVisit={canVisit} busy={busy} onChange={setStep} progress={progress} />
-            <div className="space-y-3 md:border-t md:border-white/[0.08] md:pt-5">
-              <div className={`${PIECE_STAGE} h-32 rounded-xl md:h-36`}>
-                <Piece3D model={model} fallback={preview ?? <TagPieceVisual productType={option.productType} face="google_review" theme={theme} size="lg" still />} />
+            {/* The piece takes whatever the steps leave. Before a design is chosen it is the product's first one. */}
+            <div className={`${PIECE_STAGE} h-44 rounded-xl md:h-auto md:min-h-[120px] md:flex-1`} data-testid="production-design-stage">
+              <div className="absolute inset-0 flex items-center justify-center">
+                <Piece3D model={model ?? models.get(option.colours[0]?.faces[0]?.slug ?? "")} fallback={preview ?? <TagPieceVisual productType={option.productType} face="google_review" theme={theme} size="lg" still />} />
               </div>
-              <div className="min-w-0 space-y-1.5">
-                <p className="text-sm font-semibold text-white">{product}</p>
-                <TagModelChips productType={option.productType} face={faceKey || null} theme={colour?.theme} sizeText="long" />
-                {!faceKey ? <p className="text-xs text-white/50">{d("chooseDesign")}</p> : null}
-              </div>
+              <TagModelChips productType={option.productType} face={faceKey || null} theme={colour?.theme} sizeText="long" className="pointer-events-none absolute bottom-2 left-2" />
             </div>
           </aside>
         </div>

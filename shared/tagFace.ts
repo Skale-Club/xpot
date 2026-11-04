@@ -11,26 +11,27 @@ import type { TagProductType, TagDestinationType } from "./tags.js";
 import { guessDestinationType, socialNetworkOf } from "./tagApp.js";
 import { contentKindOf } from "./chipContent.js";
 
+// The order every list of designs shows them in: what is used most comes first.
 export const TAG_FACES = [
   "google_review",
-  "yelp",
   "instagram",
-  "facebook",
   "tiktok",
-  "whatsapp",
-  "youtube",
-  "linkedin",
+  "facebook",
   "website",
-  "phone",
-  "email",
   "menu",
-  "booking",
-  "vcard",
+  "wifi",
+  "whatsapp",
+  "yelp",
   "venmo",
   "cashapp",
   "paypal",
   "zelle",
-  "wifi",
+  "youtube",
+  "linkedin",
+  "phone",
+  "email",
+  "booking",
+  "vcard",
   "custom",
 ] as const;
 export type TagFace = (typeof TAG_FACES)[number];
