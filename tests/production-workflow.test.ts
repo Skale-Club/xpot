@@ -1,13 +1,23 @@
 import { describe, expect, it } from "vitest";
 import type { PrintModelItem, PrintRequestItem } from "../shared/printProduction";
 import { parseBatchName, batchTabsFor, pendingBatches } from "../client/src/pages/admin/tags/batches-model";
-import { assemblyParts, buildState, collapsedPlates, damagedToReprint, needsPrintComputer, journeyTitle, personName, plainTitle, batchPrefixFromTitle, boardGroups, chipsWritten, pauseNeedsChips, canAssembleJob, canPrintModel, journeyProgress, latestPlates, pendingPieces, plateActions, printableBeds, printComputers, printedOutcome, printQuantity, missingParts, productionNeedsAction, productionPath, productionTabFor, showPlateNumber, slugFromTitle } from "../client/src/pages/admin/tags/production-workflow";
+import { piecesAwaitingPrinted, assemblyParts, buildState, collapsedPlates, damagedToReprint, needsPrintComputer, journeyTitle, personName, plainTitle, batchPrefixFromTitle, boardGroups, chipsWritten, pauseNeedsChips, canAssembleJob, canPrintModel, journeyProgress, latestPlates, pendingPieces, plateActions, printableBeds, printComputers, printedOutcome, printQuantity, missingParts, productionNeedsAction, productionPath, productionTabFor, showPlateNumber, slugFromTitle } from "../client/src/pages/admin/tags/production-workflow";
 
 const model = {
   id: "model", kind: "serialized", status: "ready", productType: "large_plate", face: "google_review", salesProductId: 1,
   currentVersion: { builder: "plate.google", beds: [{ label: "x4", copies: 4 }, { label: "x8", copies: 8 }] },
 } as PrintModelItem;
 const batch = { id: "batch", batchCode: "LP-001", productType: "large_plate", face: "google_review", salesProductId: 1, tagCount: 6 };
+
+describe("the bar of pieces waiting to be marked printed", () => {
+  const plate = (status: string, quantity: number) => ({ status, quantity, downloads: [], redoneBy: null });
+  const request = (modelKind: string, ...plates: unknown[]) => ({ modelKind, plates }) as unknown as PrintRequestItem;
+  it("counts the pieces of the plates that can be marked printed, parts and finished plates apart", () => {
+    expect(piecesAwaitingPrinted([])).toBe(0);
+    expect(piecesAwaitingPrinted([request("serialized", plate("ready", 4), plate("printing", 2), plate("printed", 4), plate("requested", 8), plate("failed", 4))])).toBe(6);
+    expect(piecesAwaitingPrinted([request("part", plate("ready", 16))])).toBe(0);
+  });
+});
 
 describe("production tabs", () => {
   it("lights Models only on /models and Produce on every other view, the orders list included", () => {
@@ -16,7 +26,7 @@ describe("production tabs", () => {
     expect(productionTabFor("batches")).toBe("board");
     expect(productionTabFor("jobs")).toBe("board");
     expect(productionTabFor("models")).toBe("catalog");
-    expect(productionTabFor("printing")).toBe("printing");
+    expect(productionTabFor("printing")).toBe("board");
   });
 });
 

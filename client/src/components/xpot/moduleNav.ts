@@ -7,7 +7,6 @@ import {
   FileText,
   HeartPulse,
   History,
-  Layers,
   LayoutDashboard,
   ListTodo,
   MapPin,
@@ -258,7 +257,6 @@ export type PanelNames = {
   operation: string;
   /** Items. */
   make: string;
-  printing: string;
   models: string;
   customers: string;
   team: string;
@@ -370,15 +368,13 @@ export function panelGroups(profile: Profile | null | undefined, panel: Panel, m
   }
 
   if (panel === "production" && can(profile, "produce")) {
-    const printing = starts("/admin/tags/production/printing");
     const models = starts("/admin/tags/production/models");
-    // The board and its sub-views (a job, the orders queue, a batch), but not Printing or Models: those are items of their own.
-    const make = tagItem("/admin/tags/production", names.make).map((item) => ({ ...item, match: (path: string) => item.match(path) && !printing(path) && !models(path) }));
+    // The one screen and its sub-views (a job, the orders queue, a batch), but not Models: that is an item of its own.
+    const make = tagItem("/admin/tags/production", names.make).map((item) => ({ ...item, match: (path: string) => item.match(path) && !models(path) }));
     return groups([
       {
         label: names.pieces, items: [
           ...make,
-          ...(tags ? [{ href: "/admin/tags/production/printing", label: names.printing, icon: Layers, match: printing }] : []),
           // Distribution is one screen for everyone, Stuscle orders (?view=orders) included.
           ...stock, ...tagItem("/admin/tags/kits", names.kits), ...overview,
         ],
@@ -407,7 +403,7 @@ export function panelPhoneTabs(groups: NavGroup[], panel: Panel = "visits"): { t
   const all = groups.flatMap((group) => group.items);
   const wanted = panel === "admin"
     ? ["/admin", "/organizations", "/admin/reps"]
-    : ["/admin/tags/production", "/admin/tags/production/printing", "/admin/tags/pieces", "/admin/tags/kits"];
+    : ["/admin/tags/production", "/admin/tags/pieces", "/admin/tags/kits"];
   // Admin keeps three: the fourth place of the bar is "More".
   const limit = panel === "admin" ? 3 : 4;
   const tabs = wanted.map((href) => all.find((item) => item.href === href || item.href.startsWith(`${href}?`))).filter((item): item is NavItem => !!item);

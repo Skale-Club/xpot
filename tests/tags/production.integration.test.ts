@@ -585,6 +585,30 @@ describe("print requests", () => {
     expect((await q("SELECT count(*)::int AS n FROM tag_journey_entries WHERE batch_id = $1 AND action = 'piece_damaged'", [order.batchId]))[0].n).toBe(1);
   });
 
+  it("records what went wrong with each bad piece and adds it up in the problem rate", async () => {
+    const app = admin();
+    await createSerializedModel(app);
+    const order = await firstPlate(app, { model: "plate-large-menu-white" });
+    expect((await request(app, "GET", `/api/xpot/admin/print-jobs/${order.id}`)).body.serialFrom).toEqual(expect.any(Number));
+    await request(app, "POST", `/api/xpot/admin/print-jobs/${order.id}/files?filename=plate.3mf`, bytes("3mf"));
+    await request(app, "POST", `/api/xpot/admin/print-jobs/${order.id}/transition`, { action: "complete" });
+    const [warped, plain] = [order.pieces[0].publicCode as string, order.pieces[1].publicCode as string];
+
+    expect((await request(app, "GET", "/api/xpot/admin/print-quality")).body).toMatchObject({ days: 90, pieces: 0, withProblem: 0, byProblem: [], failedPrints: 0 });
+    const printed = await request(app, "POST", `/api/xpot/admin/print-jobs/${order.id}/transition`, { action: "printed", badPieces: [warped, plain], pieceProblems: { [warped]: "warped" } });
+    expect(printed.status).toBe(200);
+    expect(printed.body).toMatchObject({ receivedCount: 2, pendingCount: 0 });
+
+    const reasons = Object.fromEntries((await q("SELECT t.public_code, m.reason FROM tag_stock_movements m JOIN tags t ON t.id = m.tag_id WHERE m.movement_type = 'damage' AND t.batch_id = $1", [order.batchId])).map((row) => [row.public_code, row.reason]));
+    expect(reasons).toEqual({ [warped]: "Printer problem: warped", [plain]: "Came out bad on the printer plate" });
+    const [entry] = await q("SELECT e.content FROM tag_journey_entries e JOIN tags t ON t.id = e.tag_id WHERE e.action = 'piece_damaged' AND t.public_code = $1", [warped]);
+    expect(entry.content).toBe("Printer problem: warped");
+
+    const quality = await request(app, "GET", "/api/xpot/admin/print-quality?days=30");
+    expect(quality.body).toMatchObject({ days: 30, pieces: 4, withProblem: 2, failedPrints: 0 });
+    expect(quality.body.byProblem).toEqual(expect.arrayContaining([{ problem: "warped", count: 1 }, { problem: "unspecified", count: 1 }]));
+  });
+
   it("puts the pending pieces of a plate printed before this change in stock, and only once", async () => {
     const app = admin();
     await createSerializedModel(app);

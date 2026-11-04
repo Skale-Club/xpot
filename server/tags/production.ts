@@ -41,6 +41,11 @@ import {
   printGenerateOptions,
   splitIntoPlates,
   splitPrintedPieces,
+  printProblemOfReason,
+  printProblemReason,
+  problemsByCode,
+  type PrintPieceProblem,
+  type PrintQualitySummary,
   type PrintBed,
   type PrintFileKind,
   type PrintGenerateInput,
@@ -675,7 +680,7 @@ export async function currentPreview(modelRef: string, actor?: TagActor): Promis
 interface JobRow {
   id: string; model_id: string; model_slug: string; model_title: string; model_kind: string; version_id: string;
   version_number: number; bed_label: string; plates: number; quantity: number; status: string; batch_id: string | null; nfc_mount: string | null; menu_font: string | null;
-  batch_code: string | null; piece_count: number | null; received_count: number | null; pending_count: number | null; damaged_count: number | null; device_name: string | null;
+  batch_code: string | null; piece_count: number | null; received_count: number | null; pending_count: number | null; damaged_count: number | null; serial_from: number | null; serial_to: number | null; device_name: string | null;
   notes: string | null; error_code: string | null; error_message: string | null; report: Record<string, unknown> | null; created_at: Date | string;
   built_at: Date | string | null; printed_at: Date | string | null; updated_at: Date | string; last_event_at: Date | string | null;
   request_id: string | null; plate_number: number; plate_count: number; request_quantity: number;
@@ -708,6 +713,8 @@ const JOB_SELECT = sql`
       ELSE (SELECT count(*)::int FROM tags t WHERE t.batch_id = j.batch_id AND t.stock_status = 'pending') END AS pending_count,
     CASE WHEN j.batch_id IS NULL THEN NULL
       ELSE (SELECT count(*)::int FROM tags t WHERE t.batch_id = j.batch_id AND t.stock_status = 'damaged') END AS damaged_count,
+    CASE WHEN j.batch_id IS NULL THEN NULL ELSE (SELECT min(t.serial_number) FROM tags t WHERE t.batch_id = j.batch_id) END AS serial_from,
+    CASE WHEN j.batch_id IS NULL THEN NULL ELSE (SELECT max(t.serial_number) FROM tags t WHERE t.batch_id = j.batch_id) END AS serial_to,
     d.device_name, j.notes, j.error_code, j.error_message, j.report, j.created_at, j.built_at, j.printed_at, j.updated_at, j.last_event_at,
     j.request_id, COALESCE(j.plate_number, 1) AS plate_number,
     CASE WHEN j.request_id IS NULL THEN 1
@@ -749,6 +756,8 @@ function jobItem(j: JobRow, now = Date.now()): PrintJobItem {
     pendingCount: j.pending_count === null ? null : Number(j.pending_count),
     pieceCount: j.piece_count === null ? null : Number(j.piece_count),
     damagedCount: j.damaged_count === null ? null : Number(j.damaged_count),
+    serialFrom: j.serial_from === null ? null : Number(j.serial_from),
+    serialTo: j.serial_to === null ? null : Number(j.serial_to),
     deviceName: j.device_name,
     notes: j.notes,
     errorCode: j.error_code,
@@ -1422,13 +1431,13 @@ export interface TransitionInput {
   reason?: string | null;
   /** `printed`: public codes of the pieces that came out bad (they become damaged; the rest go into stock). */
   badPieces?: readonly string[];
+  /** What went wrong with each of `badPieces`, by public code. */
+  pieceProblems?: Readonly<Record<string, PrintPieceProblem>>;
   userId: string | null;
   source?: JourneySource;
 }
 
-const BAD_PIECE_REASON = "Came out bad on the printer plate";
-
-interface StockedPieces { stocked: Array<{ id: string; publicCode: string }>; damaged: Array<{ id: string; publicCode: string }> }
+interface StockedPieces { stocked: Array<{ id: string; publicCode: string }>; damaged: Array<{ id: string; publicCode: string; reason: string }> }
 
 /**
  * Puts a printed plate's pending pieces in house stock: the same end state as a successful intake scan (available,
@@ -1436,7 +1445,7 @@ interface StockedPieces { stocked: Array<{ id: string; publicCode: string }>; da
  * damaged instead (the same state and `damage` movement as markTagDamaged). A piece that is not pending any more is
  * left alone, so repeating it is harmless. Runs inside the caller's transaction.
  */
-async function stockPrintedPieces(tx: Tx, batchId: string, badPieces: readonly string[], userId: string | null): Promise<StockedPieces> {
+async function stockPrintedPieces(tx: Tx, batchId: string, badPieces: readonly string[], pieceProblems: Readonly<Record<string, PrintPieceProblem>> | undefined, userId: string | null): Promise<StockedPieces> {
   const [batch] = await tx.select().from(tagBatches).where(eq(tagBatches.id, batchId)).for("update");
   if (!batch) throw new TagError("Batch not found", 404, "batch_not_found");
   const list = await tx.select().from(tags).where(eq(tags.batchId, batchId)).for("update");
@@ -1451,6 +1460,8 @@ async function stockPrintedPieces(tx: Tx, batchId: string, badPieces: readonly s
   const goodTags = list.filter((t) => good.has(t.publicCode));
   const badTags = list.filter((t) => bad.has(t.publicCode));
   if (!goodTags.length && !badTags.length) return none;
+  const problems = problemsByCode(pieceProblems);
+  const reasonOf = (publicCode: string) => printProblemReason(problems.get(publicCode));
   const now = new Date();
   if (goodTags.length) {
     await tx.update(tags).set({
@@ -1488,13 +1499,13 @@ async function stockPrintedPieces(tx: Tx, batchId: string, badPieces: readonly s
       actorUserId: userId,
       referenceType: "batch",
       referenceId: batch.id,
-      reason: BAD_PIECE_REASON,
+      reason: reasonOf(t.publicCode),
     })));
   }
   await tx.update(tagBatches).set({ updatedAt: now }).where(eq(tagBatches.id, batch.id));
   return {
     stocked: goodTags.map((t) => ({ id: t.id, publicCode: t.publicCode })),
-    damaged: badTags.map((t) => ({ id: t.id, publicCode: t.publicCode })),
+    damaged: badTags.map((t) => ({ id: t.id, publicCode: t.publicCode, reason: reasonOf(t.publicCode) })),
   };
 }
 
@@ -1516,7 +1527,7 @@ async function recordStocked(batchId: string, result: StockedPieces, userId: str
       kind: "execution",
       action: "piece_damaged",
       title: `Piece ${piece.publicCode} marked damaged`,
-      content: BAD_PIECE_REASON,
+      content: piece.reason,
       tagId: piece.id,
       batchId,
       beforeValue: "pending",
@@ -1558,7 +1569,7 @@ export async function transitionJob(id: string, input: TransitionInput, scope: P
       await tx.update(printModels).set({ partOnHand: sql`${printModels.partOnHand} + ${job.quantity}`, updatedAt: now }).where(eq(printModels.id, model.id));
     }
     // Printed by hand and checked by eye: the good pieces are stock now, without scanning each QR.
-    return input.action === "printed" && job.batchId ? stockPrintedPieces(tx, job.batchId, input.badPieces ?? [], input.userId) : null;
+    return input.action === "printed" && job.batchId ? stockPrintedPieces(tx, job.batchId, input.badPieces ?? [], input.pieceProblems, input.userId) : null;
   });
   if (job.batchId && input.action === "printed") {
     const [batch] = await db.select({ batchCode: tagBatches.batchCode }).from(tagBatches).where(eq(tagBatches.id, job.batchId)).limit(1);
@@ -1594,15 +1605,49 @@ async function recordPrintFailed(job: PrintJobRow, reason: string | null, errorC
  * them in stock the same way (and `badPieces` come out damaged). Only a printed plate with a batch; repeating it
  * when nothing is pending changes nothing.
  */
-export async function stockJob(id: string, input: { badPieces?: readonly string[]; userId: string | null; source?: JourneySource }, scope: ProductionScope): Promise<PrintJobDetail> {
+export async function stockJob(id: string, input: { badPieces?: readonly string[]; pieceProblems?: Readonly<Record<string, PrintPieceProblem>>; userId: string | null; source?: JourneySource }, scope: ProductionScope): Promise<PrintJobDetail> {
   const job = await loadJob(id, scope);
   if (job.status !== "printed" || !job.batchId) {
     throw new TagError("Only a printed plate with codes can put its pieces in stock", 409, "print_job_state");
   }
   const batchId = job.batchId;
-  const stocked = await db.transaction((tx) => stockPrintedPieces(tx, batchId, input.badPieces ?? [], input.userId));
+  const stocked = await db.transaction((tx) => stockPrintedPieces(tx, batchId, input.badPieces ?? [], input.pieceProblems, input.userId));
   await recordStocked(batchId, stocked, input.userId, input.source ?? "admin");
   return getJob(job.id, scope);
+}
+
+/**
+ * How the pieces marked printed came out over the last `days`: counted from the stock movements the marking wrote, so
+ * only pieces of a print plate count, and a piece damaged later (in someone's hands) is not a printing problem.
+ */
+export async function printQuality(days: number, scope: ProductionScope): Promise<PrintQualitySummary> {
+  const since = sql`now() - make_interval(days => ${days})`;
+  const moved = await rows<{ movement_type: string; reason: string | null; n: number }>(sql`
+    SELECT m.movement_type, m.reason, count(*)::int AS n
+    FROM tag_stock_movements m JOIN tags t ON t.id = m.tag_id
+    WHERE m.reference_type = 'batch' AND m.from_stock_status = 'pending' AND m.movement_type IN ('intake', 'damage') AND m.created_at >= ${since}
+      AND EXISTS (SELECT 1 FROM print_jobs j WHERE j.batch_id = t.batch_id AND ${scopeSql("j.organization_id", scope)})
+    GROUP BY m.movement_type, m.reason`);
+  const [failed] = await rows<{ n: number }>(sql`
+    SELECT count(*)::int AS n FROM print_jobs j
+    WHERE j.status = 'failed' AND j.batch_id IS NOT NULL AND j.updated_at >= ${since} AND ${scopeSql("j.organization_id", scope)}`);
+  const byProblem = new Map<PrintPieceProblem | "unspecified", number>();
+  let good = 0;
+  for (const row of moved) {
+    if (row.movement_type === "intake") good += Number(row.n);
+    else {
+      const problem = printProblemOfReason(row.reason);
+      byProblem.set(problem, (byProblem.get(problem) ?? 0) + Number(row.n));
+    }
+  }
+  const withProblem = Array.from(byProblem.values()).reduce((sum, n) => sum + n, 0);
+  return {
+    days,
+    pieces: good + withProblem,
+    withProblem,
+    byProblem: Array.from(byProblem, ([problem, count]) => ({ problem, count })).sort((a, b) => b.count - a.count),
+    failedPrints: Number(failed?.n ?? 0),
+  };
 }
 
 export async function attachJobFile(id: string, kind: PrintFileKind, filename: string, body: Uint8Array, scope: ProductionScope, opts: { deviceId?: string | null } = {}): Promise<PrintJobFileItem> {

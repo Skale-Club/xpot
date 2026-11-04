@@ -1,10 +1,10 @@
 import { useEffect, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { CheckCircle2, ChevronLeft, TriangleAlert, XCircle } from "lucide-react";
-import type { PrintJobDetail, PrintJobItem } from "@shared/printProduction";
+import { PRINT_PIECE_PROBLEMS, type PrintJobDetail, type PrintJobItem, type PrintPieceProblem } from "@shared/printProduction";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Textarea } from "@/components/xpot/Field";
+import { Select, Textarea } from "@/components/xpot/Field";
 import { useToast } from "@/hooks/use-toast";
 import { useT } from "@/i18n";
 import { commonMessages } from "@/i18n/messages/common";
@@ -13,8 +13,9 @@ import { ADMIN_TAGS_KEY, errorMessage, getJson, invalidateAdminTags, sendJson } 
 import { Loading, LoadError } from "./pieces-shared";
 
 // "Did it come off the bed well?": the one confirmation of Mark printed, used from the orders list and the plate
-// page. Yes → printed and every piece of the plate goes into stock. Some bad → the checked pieces become damaged,
-// the rest go into stock. No → the plate failed (a reason is required). A part has no pieces to check.
+// page. Yes → printed and every piece of the plate goes into stock. Some had a problem → the checked pieces become
+// damaged, each with what went wrong (the problem rate counts them), and the rest go into stock. No → the plate failed
+// (a reason is required). A part has no pieces to check.
 
 type Mode = "ask" | "bad" | "failed";
 
@@ -27,7 +28,8 @@ function PrintedDialogBody({ job, onClose }: { job: PrintJobItem; onClose: () =>
   const tc = useT(commonMessages);
   const { toast } = useToast();
   const [mode, setMode] = useState<Mode>("ask");
-  const [bad, setBad] = useState<ReadonlySet<string>>(new Set());
+  // The checked pieces and what went wrong with each; "" until the person picks one.
+  const [bad, setBad] = useState<ReadonlyMap<string, PrintPieceProblem | "">>(new Map());
   const [reason, setReason] = useState("");
   const serialized = Boolean(job.batchId);
   // The list carries no pieces: fetch the plate when the checklist opens (the plate page already has it cached).
@@ -38,7 +40,7 @@ function PrintedDialogBody({ job, onClose }: { job: PrintJobItem; onClose: () =>
   });
   const pieces = (detail.data?.pieces ?? []).filter((piece) => piece.stockStatus === "pending");
   const send = useMutation({
-    mutationFn: (body: { action: "printed" | "fail"; reason?: string; badPieces?: string[] }) =>
+    mutationFn: (body: { action: "printed" | "fail"; reason?: string; badPieces?: string[]; pieceProblems?: Record<string, PrintPieceProblem> }) =>
       sendJson<PrintJobDetail>("POST", `/api/xpot/admin/print-jobs/${job.id}/transition`, body),
     onSuccess: async (updated) => {
       await invalidateAdminTags();
@@ -49,12 +51,15 @@ function PrintedDialogBody({ job, onClose }: { job: PrintJobItem; onClose: () =>
   });
   const busy = send.isPending;
   // Back to the three answers whenever the person changes their mind.
-  useEffect(() => { if (mode === "ask") { setBad(new Set()); setReason(""); } }, [mode]);
+  useEffect(() => { if (mode === "ask") { setBad(new Map()); setReason(""); } }, [mode]);
   const toggle = (code: string) => setBad((current) => {
-    const next = new Set(current);
-    if (!next.delete(code)) next.add(code);
+    const next = new Map(current);
+    if (!next.delete(code)) next.set(code, "");
     return next;
   });
+  const setProblem = (code: string, problem: PrintPieceProblem | "") => setBad((current) => new Map(current).set(code, problem));
+  const allNamed = bad.size > 0 && Array.from(bad.values()).every(Boolean);
+  const problemOptions = PRINT_PIECE_PROBLEMS.map((problem) => ({ value: problem, label: t(`pieceProblem_${problem}` as never) }));
   const description = serialized ? t("confirmPrintedBodyBatch") : t.plural("confirmPrintedBodyPart", job.quantity);
 
   return (
@@ -98,6 +103,19 @@ function PrintedDialogBody({ job, onClose }: { job: PrintJobItem; onClose: () =>
                       <span className="font-mono text-xs text-white/55">{piece.serialNumber ?? "—"}</span>
                       <span className="font-mono text-xs text-white">{piece.publicCode}</span>
                     </label>
+                    {bad.has(piece.publicCode) ? (
+                      <div className="px-3 pb-2.5 pl-10">
+                        <Select
+                          value={bad.get(piece.publicCode) ?? ""}
+                          onChange={(event) => setProblem(piece.publicCode, event.target.value as PrintPieceProblem | "")}
+                          placeholder={t("pieceProblemPick")}
+                          options={problemOptions}
+                          disabled={busy}
+                          aria-label={t("pieceProblemFor", { code: piece.publicCode })}
+                          data-testid="production-piece-problem"
+                        />
+                      </div>
+                    ) : null}
                   </li>
                 ))}
               </ul>
@@ -109,8 +127,8 @@ function PrintedDialogBody({ job, onClose }: { job: PrintJobItem; onClose: () =>
                 variant="brand"
                 accent="tags"
                 loading={busy}
-                disabled={!pieces.length || bad.size === 0}
-                onClick={() => send.mutate({ action: "printed", badPieces: Array.from(bad) })}
+                disabled={!pieces.length || !allNamed}
+                onClick={() => send.mutate({ action: "printed", badPieces: Array.from(bad.keys()), pieceProblems: Object.fromEntries(bad) as Record<string, PrintPieceProblem> })}
                 data-testid="production-printed-confirm-bad"
               >
                 {t("printedConfirmBad", { count: bad.size })}

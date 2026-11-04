@@ -19,7 +19,6 @@ export function usePanelNames() {
     pieces: t("groupPieces"),
     operation: t("groupOperation"),
     make: t("groupMake"),
-    printing: t("panelPrinting"),
     models: t("panelModels"),
     customers: t("panelCustomers"),
     team: t("panelTeam"),
