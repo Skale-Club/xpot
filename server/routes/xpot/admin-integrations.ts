@@ -25,7 +25,7 @@ const putSchema = z.object({
   calendarId: z.string().trim().max(120).optional().nullable(),
   // Twilio, kept in integration_settings.config. "" clears a value.
   accountSid: z.string().trim().regex(/^(AC[0-9a-zA-Z]{32})?$/, "Account SID starts with AC and has 34 characters").optional(),
-  fromNumber: z.string().trim().regex(/^(\+[1-9]\d{6,14})?$/, "From number must be in E.164 format, e.g. +15085550100").optional(),
+  fromNumber: z.string().trim().regex(/^(\+[1-9]\d{6,14})?$/, "From number must be in E.164 format, e.g. +10000000000").optional(),
   messagingServiceSid: z.string().trim().regex(/^(MG[0-9a-zA-Z]{32})?$/, "Messaging Service SID starts with MG and has 34 characters").optional(),
   enabled: z.boolean().optional(),
   // "Remove key": an empty apiKey keeps the stored secret, so removing it is explicit.

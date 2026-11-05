@@ -58,7 +58,7 @@ export const commonMessages: Dictionary<typeof en> = {
     clearField: "Limpar",
     linkHandlePlaceholder: "usuário",
     linkPagePlaceholder: "Nome da página",
-    linkPhonePlaceholder: "+55 (11) 99999-9999",
+    linkPhonePlaceholder: "+55 (00) 00000-0000",
     linkNetwork: "Rede",
     linkOther: "Outro link",
     pasteFailed: "Não consegui ler a área de transferência. Cole no campo.",
