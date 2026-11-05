@@ -461,8 +461,8 @@ export function XpotLandingPage() {
             <div className="grid grid-cols-1 gap-4 md:grid-cols-3 lg:gap-5">
               {content.audience.cards.map(({ imageUrl, title, body }, index) => (
                 <Reveal key={title} delay={index * 0.08}>
-                  <article className="flex h-full overflow-hidden rounded-xl border border-white/[0.07] bg-white/[0.035] md:block">
-                    <div className="relative w-28 shrink-0 overflow-hidden border-r border-white/[0.07] bg-[#080d19] sm:w-40 md:aspect-[16/10] md:w-full md:border-b md:border-r-0">
+                  <article className="h-full overflow-hidden rounded-xl border border-white/[0.07] bg-white/[0.035] sm:flex md:block">
+                    <div className="relative aspect-[2/1] overflow-hidden border-b border-white/[0.07] bg-[#080d19] sm:aspect-auto sm:min-h-[190px] sm:w-64 sm:shrink-0 sm:border-b-0 sm:border-r md:aspect-[16/10] md:min-h-0 md:w-full md:border-b md:border-r-0">
                       <img
                         src={imageUrl}
                         alt=""
@@ -474,9 +474,9 @@ export function XpotLandingPage() {
                       />
                       <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-[#080d19]/35 via-transparent to-transparent" />
                     </div>
-                    <div className="min-w-0 p-4 md:p-6 lg:p-7">
-                      <h2 className="text-sm font-bold text-white md:text-base">{title}</h2>
-                      <p className="mt-1 text-xs leading-relaxed text-white/55 md:mt-2 md:text-sm">{body}</p>
+                    <div className="min-w-0 p-5 sm:self-center md:self-auto md:p-6 lg:p-7">
+                      <h2 className="text-base font-bold text-white">{title}</h2>
+                      <p className="mt-2 text-sm leading-relaxed text-white/55">{body}</p>
                     </div>
                   </article>
                 </Reveal>
