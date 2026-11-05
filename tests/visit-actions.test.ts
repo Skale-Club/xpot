@@ -103,7 +103,7 @@ describe("the four things a rep says in the field", () => {
       evidence: "ele vendeu dez, recebi pelos dez e estou repondo mais dez", confidence: 0.9,
     }]) as SettlementAction[];
     expect(action).toMatchObject({ type: "settlement", consignmentId: 7, soldQuantity: 10, restockQuantity: 10, paid: true });
-    expect(describeAction(action)).toBe("Settle 3D Printed Keychain — 10 sold, restock 10");
+    expect(describeAction(action)).toBe("Settle 3D Printed Keychain: 10 sold, restock 10");
   });
 
   it('"sobraram só quatro na prateleira" — the same settlement said the other way', () => {
@@ -120,7 +120,7 @@ describe("the four things a rep says in the field", () => {
       items: [{ productId: null, description: "site", quantity: 1, unitPriceCents: 60000 }],
       paid: true, evidence: "vendi um site de seiscentos dólares pra ele", confidence: 0.92,
     }]);
-    expect(describeAction(action)).toBe("Sell 1× site — $600.00");
+    expect(describeAction(action)).toBe("Sell 1× site: $600.00");
   });
 
   it('"quer saber mais sobre o site, voltar semana que vem" — a follow-up', () => {

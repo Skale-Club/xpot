@@ -291,7 +291,7 @@ export async function syncVisitToGhl(visitId: number): Promise<{ synced: boolean
 
   // Prospects are never auto-synced
   if (lead.status === "prospect") {
-    return { synced: false, message: "Prospect — not synced" };
+    return { synced: false, message: "Prospect: not synced" };
   }
 
   // Ensure lead is synced to GHL first
@@ -318,7 +318,7 @@ export async function syncVisitToGhl(visitId: number): Promise<{ synced: boolean
   const durationSec = visit.durationSeconds ? visit.durationSeconds % 60 : null;
 
   const lines: string[] = [
-    `📍 Visit — ${checkedInAt ? checkedInAt.toLocaleString() : "unknown time"}`,
+    `📍 Visit: ${checkedInAt ? checkedInAt.toLocaleString() : "unknown time"}`,
     `Status: ${visit.status}`,
     durationMin !== null ? `Duration: ${durationMin}m ${durationSec}s` : null,
     note?.summary ? `\nSummary: ${note.summary}` : null,

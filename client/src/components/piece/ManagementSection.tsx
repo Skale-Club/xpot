@@ -92,7 +92,7 @@ export function ManagementSection() {
             ) : (
               <span className="font-mono">{tag.batchCode}{tag.serialNumber ? ` #${tag.serialNumber}` : ""}</span>
             )
-          ) : "—"}
+          ) : "-"}
         />
         <Row label={tp("rowKit")} value={kit ? <span className="font-mono">{tp("locationKit", { id: kit })}</span> : tp("noKit")} />
         {holderRow ? <Row label={holderRow.label} value={holderRow.value} testId="piece-holder" /> : null}

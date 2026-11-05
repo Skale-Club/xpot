@@ -223,7 +223,7 @@ export function CopyButton({ text, label, large = false }: { text: string; label
 export function ScanCounts({ qr, nfc, align = "right" }: { qr: number; nfc: number; align?: "left" | "right" }) {
   const t = useT(tagsMessages);
   const total = qr + nfc;
-  if (total === 0) return <span className="text-white/20">—</span>;
+  if (total === 0) return <span className="text-white/20">-</span>;
   return (
     <span className={`block tabular-nums ${align === "right" ? "text-right" : ""}`}>
       <span className="block text-sm font-semibold text-white">{t.plural("scansCount", total, { count: formatCount(total, t.locale) })}</span>

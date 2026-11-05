@@ -105,7 +105,7 @@ export function PackingListDialog({ kit, onOpenChange }: { kit: TagKitItem | nul
                 key: "batch",
                 label: tm("colBatch"),
                 cellClassName: "whitespace-nowrap font-mono text-xs text-white/50",
-                render: (p: TagKitPiece) => (p.batchCode ? `${p.batchCode}${p.serialNumber ? ` #${p.serialNumber}` : ""}` : "—"),
+                render: (p: TagKitPiece) => (p.batchCode ? `${p.batchCode}${p.serialNumber ? ` #${p.serialNumber}` : ""}` : "-"),
               },
               { key: "state", label: tm("colStatus"), render: (p: TagKitPiece) => <Pill tone={PIECE_STATE_TONE[p.state]}>{tf(PIECE_STATE_KEY[p.state])}</Pill> },
             ]}

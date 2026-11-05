@@ -296,7 +296,7 @@ function OrganizationWorkspace({ organizationId }: { organizationId: number }) {
   const [adding, setAdding] = useState(false);
   // Kits and companies name their rep, not "Rep #12".
   const repNames = useMemo(() => new Map((members.data ?? []).map((m) => [m.repId, m.displayName])), [members.data]);
-  const repName = (repId: number | null | undefined) => (repId ? repNames.get(repId) ?? "—" : t("unassigned"));
+  const repName = (repId: number | null | undefined) => (repId ? repNames.get(repId) ?? "-" : t("unassigned"));
 
   const changeMember = useMutation({
     mutationFn: async ({ member, kind }: MemberAction) => {
@@ -585,7 +585,7 @@ function PurchasesList({ query }: { query: { data?: Purchase[]; isLoading: boole
         {rows.map(({ acquisition, repName, lines }) => (
           <div key={acquisition.id} className="flex flex-wrap items-center gap-x-4 gap-y-1 px-4 py-3" data-testid={`organization-purchase-${acquisition.id}`}>
             <div className="min-w-0 flex-1">
-              <p className="truncate text-sm font-medium text-white">{repName ?? "—"}</p>
+              <p className="truncate text-sm font-medium text-white">{repName ?? "-"}</p>
               <p className="text-xs text-white/45">{lines.map((line) => (line.productName ? t("purchaseLine", { count: line.quantity, name: line.productName }) : t.plural("purchaseNoName", line.quantity))).join(", ")}</p>
             </div>
             <span className="text-xs tabular-nums text-white/45">{formatMoney(lines.reduce((sum, line) => sum + line.subtotalCents, 0), acquisition.currency)} · {formatDate(acquisition.purchasedAt)}</span>

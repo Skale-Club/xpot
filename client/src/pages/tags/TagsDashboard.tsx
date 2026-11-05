@@ -239,10 +239,10 @@ export function TagsDashboard({ afterTodo = false }: { afterTodo?: boolean }) {
         <ErrorState message={errorText(error, tc("requestFailed"))} onRetry={() => void refetch()} />
       ) : (
         <div className="grid grid-cols-2 gap-2 lg:grid-cols-4 lg:gap-4" data-testid="tags-summary">
-          <KpiTile accent="violet" icon={Package} loading={isLoading} label={fleet ? t("statWithResellers") : t("statInStock")} value={data ? formatCount(data.inStock, t.locale) : "—"} />
-          <KpiTile accent="violet" icon={Radio} loading={isLoading} label={t("statActive")} value={data ? formatCount(data.active, t.locale) : "—"} />
-          <KpiTile accent="violet" icon={DollarSign} loading={isLoading} label={t("statSold30")} value={data ? formatCount(data.soldInPeriod, t.locale) : "—"} />
-          <KpiTile accent="violet" icon={ScanLine} loading={isLoading} label={t("statScans30")} value={total != null ? formatCount(total, t.locale) : "—"} />
+          <KpiTile accent="violet" icon={Package} loading={isLoading} label={fleet ? t("statWithResellers") : t("statInStock")} value={data ? formatCount(data.inStock, t.locale) : "-"} />
+          <KpiTile accent="violet" icon={Radio} loading={isLoading} label={t("statActive")} value={data ? formatCount(data.active, t.locale) : "-"} />
+          <KpiTile accent="violet" icon={DollarSign} loading={isLoading} label={t("statSold30")} value={data ? formatCount(data.soldInPeriod, t.locale) : "-"} />
+          <KpiTile accent="violet" icon={ScanLine} loading={isLoading} label={t("statScans30")} value={total != null ? formatCount(total, t.locale) : "-"} />
         </div>
       )}
 

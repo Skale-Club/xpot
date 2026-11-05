@@ -295,7 +295,7 @@ function Application({ rep }: { rep: Rep }) {
   const experienceKey = a.salesExperience ? `applicationSales_${a.salesExperience}` as const : null;
   const readinessKey = a.fieldSalesReadiness ? `applicationReadiness_${a.fieldSalesReadiness}` as const : null;
   const item = (label: string, value: ReactNode, wide = false) => (
-    <div className={wide ? "sm:col-span-2" : undefined}><dt className="text-xs text-white/35">{label}</dt><dd className="mt-0.5 break-words text-white/75">{value || "—"}</dd></div>
+    <div className={wide ? "sm:col-span-2" : undefined}><dt className="text-xs text-white/35">{label}</dt><dd className="mt-0.5 break-words text-white/75">{value || "-"}</dd></div>
   );
   // The form no longer asks these; they show only on applications sent before.
   const legacy = (label: string, value: ReactNode) => (value ? item(label, value) : null);

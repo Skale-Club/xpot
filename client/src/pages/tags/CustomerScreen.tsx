@@ -300,7 +300,7 @@ export default function CustomerScreen({ leadId }: { leadId: number }) {
                   <ChipMark tag={p} />
                 </span>
               </span>
-              <span className="hidden w-48 truncate text-xs text-white/45 md:block">{p.destinationUrl ? shortUrl(p.destinationUrl) : "—"}</span>
+              <span className="hidden w-48 truncate text-xs text-white/45 md:block">{p.destinationUrl ? shortUrl(p.destinationUrl) : "-"}</span>
               <span className="hidden w-24 flex-wrap items-center gap-1 sm:flex">
                 <PieceStatusPills tag={p} />
                 <ChipMark tag={p} />

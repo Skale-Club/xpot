@@ -41,7 +41,7 @@ const en = {
   noScansYet: "No scans yet.",
   periodToday: "Today",
   periodLastDays: "Last {count} days",
-  periodRange: "{from} – {to}",
+  periodRange: "{from} to {to}",
   periodScans: "Scans in this period",
   allTimeScans: "All time, since the piece was made",
 
@@ -178,7 +178,7 @@ export const pieceScreenMessages: Dictionary<typeof en> = {
     noScansYet: "Nenhuma leitura ainda.",
     periodToday: "Hoje",
     periodLastDays: "Últimos {count} dias",
-    periodRange: "{from} – {to}",
+    periodRange: "{from} a {to}",
     periodScans: "Leituras no período",
     allTimeScans: "Desde que a peça foi feita",
 
@@ -308,7 +308,7 @@ export const pieceScreenMessages: Dictionary<typeof en> = {
     noScansYet: "Sin lecturas todavía.",
     periodToday: "Hoy",
     periodLastDays: "Últimos {count} días",
-    periodRange: "{from} – {to}",
+    periodRange: "{from} a {to}",
     periodScans: "Lecturas en el período",
     allTimeScans: "Desde que se hizo la pieza",
 

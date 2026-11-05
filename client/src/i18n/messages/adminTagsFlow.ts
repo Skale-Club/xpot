@@ -8,7 +8,7 @@ const en = {
   // Scan stations
   cameraOn: "Use camera",
   cameraOff: "Camera off",
-  cameraReading: "Reading — hold each QR in the square",
+  cameraReading: "Reading: hold each QR in the square",
   cameraSending: "Sending…",
   entryPlaceholder: "Scan, type or paste codes",
   entryAdd: "Add",
@@ -236,7 +236,7 @@ export const adminTagsFlowMessages: Dictionary<typeof en> = {
   pt: {
     cameraOn: "Usar câmera",
     cameraOff: "Desligar câmera",
-    cameraReading: "Lendo — segure cada QR dentro do quadrado",
+    cameraReading: "Lendo: segure cada QR dentro do quadrado",
     cameraSending: "Enviando…",
     entryPlaceholder: "Leia, digite ou cole códigos",
     entryAdd: "Adicionar",
@@ -452,7 +452,7 @@ export const adminTagsFlowMessages: Dictionary<typeof en> = {
   es: {
     cameraOn: "Usar cámara",
     cameraOff: "Apagar cámara",
-    cameraReading: "Leyendo — sostén cada QR dentro del cuadro",
+    cameraReading: "Leyendo: sostén cada QR dentro del cuadro",
     cameraSending: "Enviando…",
     entryPlaceholder: "Lee, escribe o pega códigos",
     entryAdd: "Agregar",

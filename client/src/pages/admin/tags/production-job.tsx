@@ -287,8 +287,8 @@ export function PrintJobPage({ id, go }: { id: string; go: Go }) {
               <tbody className="divide-y divide-white/[0.06]">
                 {job.pieces.map((piece) => (
                   <tr key={piece.publicCode}>
-                    <td className="py-1.5 pr-3 text-white/70">{piece.position ?? "—"}</td>
-                    <td className="py-1.5 pr-3 font-mono text-white/70">{piece.serialNumber ?? "—"}</td>
+                    <td className="py-1.5 pr-3 text-white/70">{piece.position ?? "-"}</td>
+                    <td className="py-1.5 pr-3 font-mono text-white/70">{piece.serialNumber ?? "-"}</td>
                     <td className="py-1.5 pr-3 font-mono text-white">{piece.publicCode}</td>
                     <td className="py-1.5 text-white/60">{piece.stockStatus === "pending" ? t("stockPending") : piece.stockStatus === "damaged" ? t("stockDamaged") : t("stockReceived")}</td>
                   </tr>

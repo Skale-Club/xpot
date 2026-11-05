@@ -50,7 +50,7 @@ const en = {
 
   // Audience
   audienceTitle: "Made for people who want to earn on their own terms",
-  audienceSub: "Sell a few hours a week or make it your full-time work — you choose how far you want to take it.",
+  audienceSub: "Sell a few hours a week or make it your full-time work. You choose how far you want to take it.",
   audienceExtraTitle: "Build income your way",
   audienceExtraBody: "Start with the hours you have and grow your selling routine at the pace that works for you.",
   audienceMobileTitle: "Already out and about",
@@ -171,7 +171,7 @@ export const landingMessages: Dictionary<typeof en> = {
     mockConfirm: "Confirmar",
 
     audienceTitle: "Feito para quem quer ganhar no próprio ritmo",
-    audienceSub: "Venda algumas horas por semana ou faça disso sua atividade principal — você escolhe até onde quer chegar.",
+    audienceSub: "Venda algumas horas por semana ou faça disso sua atividade principal. Você escolhe até onde quer chegar.",
     audienceExtraTitle: "Construa sua renda do seu jeito",
     audienceExtraBody: "Comece com as horas que você tem e amplie sua rotina de vendas no ritmo que fizer sentido para você.",
     audienceMobileTitle: "Já passa o dia na rua",

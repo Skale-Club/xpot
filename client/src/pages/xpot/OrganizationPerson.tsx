@@ -155,7 +155,7 @@ export function OrganizationPerson({ organizationId, repId }: { organizationId: 
               >
                 <Icon className={`h-5 w-5 shrink-0 ${on ? "text-blue-300" : "text-white/45"}`} aria-hidden="true" />
                 <span className="min-w-0">
-                  <span className="block text-xl font-bold leading-none tabular-nums text-white">{badge ?? "–"}</span>
+                  <span className="block text-xl font-bold leading-none tabular-nums text-white">{badge ?? "-"}</span>
                   <span className={`mt-1 block truncate text-xs font-medium ${on ? "text-blue-200" : "text-white/55"}`}>{label}</span>
                 </span>
               </button>
@@ -185,7 +185,7 @@ export function OrganizationPerson({ organizationId, repId }: { organizationId: 
             rows={(visits.data ?? []).map((visit) => ({
               key: visit.id,
               href: `/admin/work/leads/${visit.leadId}`,
-              title: visit.lead?.name ?? "—",
+              title: visit.lead?.name ?? "-",
               detail: formatDate(visit.checkedInAt ?? visit.scheduledAt ?? visit.createdAt),
               trailing: <StatusBadge status={visit.status} />,
             }))}
@@ -215,7 +215,7 @@ export function OrganizationPerson({ organizationId, repId }: { organizationId: 
             rows={(sales.data ?? []).map(({ sale, lead }) => ({
               key: sale.id,
               href: `/admin/work${salesPath("sales", sale.id)}`,
-              title: lead?.name ?? "—",
+              title: lead?.name ?? "-",
               detail: formatDate(sale.soldAt),
               trailing: <span className="text-sm font-semibold tabular-nums text-white">{formatMoney(sale.totalCents)}</span>,
             }))}

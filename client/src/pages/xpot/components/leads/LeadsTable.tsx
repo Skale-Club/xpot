@@ -229,14 +229,14 @@ export function LeadsTable({
       ...sortable("city", t("fieldCity")),
       headerClassName: "hidden xl:table-cell",
       cellClassName: "hidden whitespace-nowrap text-white/55 xl:table-cell",
-      render: (lead) => [lead.locations?.[0]?.city, lead.locations?.[0]?.state].filter(Boolean).join(", ") || "—",
+      render: (lead) => [lead.locations?.[0]?.city, lead.locations?.[0]?.state].filter(Boolean).join(", ") || "-",
     },
     {
       key: "phone",
       label: t("colPhone"),
       headerClassName: "hidden 2xl:table-cell",
       cellClassName: "hidden whitespace-nowrap text-white/55 2xl:table-cell",
-      render: (lead) => displayPhone(lead.phone) || "—",
+      render: (lead) => displayPhone(lead.phone) || "-",
     },
     {
       key: "shelf",
@@ -244,7 +244,7 @@ export function LeadsTable({
       align: "right",
       headerClassName: "hidden 2xl:table-cell",
       cellClassName: "hidden whitespace-nowrap text-white/70 2xl:table-cell",
-      render: (lead) => lead.unitsOnShelf || <span className="text-white/20">—</span>,
+      render: (lead) => lead.unitsOnShelf || <span className="text-white/20">-</span>,
     },
     {
       key: "lastVisit",
@@ -252,7 +252,7 @@ export function LeadsTable({
       cellClassName: "whitespace-nowrap text-white/55",
       render: (lead) => {
         const last = lastVisitFor(lead.id);
-        return last ? formatShortDate(last) : <span className="text-white/20">—</span>;
+        return last ? formatShortDate(last) : <span className="text-white/20">-</span>;
       },
     },
     {

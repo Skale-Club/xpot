@@ -35,7 +35,7 @@ export function VisitsTable({
             <div className="font-medium text-white/85">{when.date}</div>
             <div className="text-[11px] text-white/40">{when.time}</div>
           </>
-        ) : <span className="text-white/25">—</span>;
+        ) : <span className="text-white/25">-</span>;
       },
     },
     {
@@ -76,7 +76,7 @@ export function VisitsTable({
       align: "right",
       headerClassName: "hidden 2xl:table-cell",
       cellClassName: "hidden whitespace-nowrap text-white/55 2xl:table-cell",
-      render: (visit) => (visit.durationSeconds ? formatDuration(visit.durationSeconds) : <span className="text-white/20">—</span>),
+      render: (visit) => (visit.durationSeconds ? formatDuration(visit.durationSeconds) : <span className="text-white/20">-</span>),
     },
     {
       key: "notes",

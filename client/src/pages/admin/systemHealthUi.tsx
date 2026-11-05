@@ -43,7 +43,7 @@ export function useAgo(t: T) {
 }
 
 export function formatDuration(ms: number | null) {
-  if (ms === null) return "—";
+  if (ms === null) return "-";
   const total = Math.round(ms / 1000);
   if (total < 60) return `${total}s`;
   const minutes = Math.floor(total / 60);

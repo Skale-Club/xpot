@@ -87,7 +87,7 @@ export function InlineField({ label, value, onSave, large, linkable, linkHref, l
               aria-label={label || undefined}
               className={`block min-h-8 w-full text-left text-white/80 ${large ? "text-xl font-bold leading-tight" : "text-sm break-all"}`}
             >
-              {value ? (display ? display(value) : value) : <span className="text-white/20 italic">—</span>}
+              {value ? (display ? display(value) : value) : <span className="text-white/20 italic">-</span>}
             </button>
           )}
         </div>

@@ -120,7 +120,7 @@ function TimelineRow({ event }: { event: PieceTimelineEvent }) {
       const named = m.movementType === "transfer"
         ? m.toCustodianName ? tp("movement_transfer", { name: m.toCustodianName }) : tp("movement_transfer_house")
         : tp(key as never);
-      title = named === key ? tp("movementGeneric", { from: labels.stock(m.fromStockStatus ?? "—"), to: labels.stock(m.toStockStatus) }) : named;
+      title = named === key ? tp("movementGeneric", { from: labels.stock(m.fromStockStatus ?? "-"), to: labels.stock(m.toStockStatus) }) : named;
       who = m.actorName;
       detail = reasonText(m.reason);
       break;
