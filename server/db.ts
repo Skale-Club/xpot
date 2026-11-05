@@ -45,4 +45,10 @@ export const pool = new Pool({
     : false,
   max: 20,
 });
+
+// An idle connection the database drops (a network blip, a restart) is replaced on the next query. Without a listener
+// this event has no handler and takes the whole process down.
+pool.on("error", (err) => {
+  console.error("[db] idle connection lost:", err.message);
+});
 export const db = drizzle(pool, { schema });
