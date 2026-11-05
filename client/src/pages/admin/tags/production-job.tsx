@@ -230,10 +230,10 @@ export function PrintJobPage({ id, go }: { id: string; go: Go }) {
           <div className="flex flex-wrap items-center gap-2">
             {/* The computer is making it: nothing to do. When it is off or silent, the way out is to try again. */}
             {job.status === "building" && building && building !== "making" ? <Button type="button" variant="brand" accent="tags" onClick={() => setConfirming("release")} data-testid="production-release"><RotateCcw />{t("release")}</Button> : null}
-            {job.status === "ready" || job.status === "printing" ? <>
-              <Button type="button" variant="brand" accent="tags" onClick={() => setMarking(true)} data-testid="production-mark-printed"><Printer />{t("markPrinted")}</Button>
-              {download1 ? <DownloadFileButton id={download1.id} label={t("downloadSliced")} quiet /> : null}
-            </> : null}
+            {/* The next step in colour: a plate ready to print is downloaded, which puts it on the printer. */}
+            {job.status === "ready" && download1 ? <DownloadFileButton id={download1.id} label={t("downloadSliced")} onDownloaded={() => step.mutate({ action: "start" })} /> : null}
+            {job.status === "ready" || job.status === "printing" ? <Button type="button" variant={job.status === "ready" && download1 ? "ghost" : "brand"} accent="tags" onClick={() => setMarking(true)} data-testid="production-mark-printed"><Printer />{t("markPrinted")}</Button> : null}
+            {job.status === "printing" && download1 ? <DownloadFileButton id={download1.id} label={t("downloadSliced")} quiet /> : null}
             {outcome === "pending" ? <Button type="button" variant="brand" accent="tags" loading={stock.isPending} onClick={() => stock.mutate()} data-testid="production-stock-pending"><PackageCheck />{t.plural("putInStock", pending)}</Button> : null}
             {reprint > 0 ? <Button type="button" variant="brand" accent="tags" loading={again.isPending} onClick={() => again.mutate()} data-testid="production-print-damaged"><RotateCcw />{t.plural("printDamagedAgain", reprint)}</Button> : null}
             {canAssemble ? <Button type="button" variant="secondary" onClick={() => setAssembling(true)} data-testid="production-assembled">{t("markAssembled")}</Button> : null}
