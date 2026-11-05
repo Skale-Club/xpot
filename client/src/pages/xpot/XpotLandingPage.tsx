@@ -461,8 +461,8 @@ export function XpotLandingPage() {
             <div className="grid grid-cols-1 gap-4 md:grid-cols-3 lg:gap-5">
               {content.audience.cards.map(({ imageUrl, title, body }, index) => (
                 <Reveal key={title} delay={index * 0.08}>
-                  <article className="h-full overflow-hidden rounded-xl border border-white/[0.07] bg-white/[0.035]">
-                    <div className="relative aspect-[16/10] overflow-hidden border-b border-white/[0.07] bg-[#080d19]">
+                  <article className="flex h-full overflow-hidden rounded-xl border border-white/[0.07] bg-white/[0.035] md:block">
+                    <div className="relative w-28 shrink-0 overflow-hidden border-r border-white/[0.07] bg-[#080d19] sm:w-40 md:aspect-[16/10] md:w-full md:border-b md:border-r-0">
                       <img
                         src={imageUrl}
                         alt=""
@@ -470,13 +470,13 @@ export function XpotLandingPage() {
                         height={600}
                         loading="lazy"
                         decoding="async"
-                        className="h-full w-full object-cover transition-transform duration-500 hover:scale-[1.02]"
+                        className="absolute inset-0 h-full w-full object-cover transition-transform duration-500 hover:scale-[1.02]"
                       />
                       <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-[#080d19]/35 via-transparent to-transparent" />
                     </div>
-                    <div className="p-6 sm:p-7">
-                      <h2 className="text-base font-bold text-white">{title}</h2>
-                      <p className="mt-2 text-sm leading-relaxed text-white/55">{body}</p>
+                    <div className="min-w-0 p-4 md:p-6 lg:p-7">
+                      <h2 className="text-sm font-bold text-white md:text-base">{title}</h2>
+                      <p className="mt-1 text-xs leading-relaxed text-white/55 md:mt-2 md:text-sm">{body}</p>
                     </div>
                   </article>
                 </Reveal>
@@ -522,7 +522,7 @@ export function XpotLandingPage() {
                 return (
                 <Reveal key={title} delay={i * 0.08} className="h-full">
                   <article className={`grid h-full overflow-hidden rounded-2xl border border-white/[0.07] bg-white/[0.035] transition-colors hover:border-white/[0.12] hover:bg-white/[0.05] sm:flex ${hasImage ? "sm:h-[400px] lg:h-[360px] xl:h-[380px]" : "sm:h-auto"} ${productPhoto ? "grid-cols-[38%_minmax(0,1fr)]" : "grid-cols-1"}`}>
-                    <div className={`relative min-h-[280px] overflow-hidden border-r border-white/[0.07] bg-[#070b16] sm:aspect-[5/8] sm:h-full sm:min-h-0 sm:w-auto sm:shrink-0 ${productPhoto ? "" : "hidden"} ${hasImage ? "sm:block" : "sm:hidden"}`}>
+                    <div className={`relative min-h-[170px] overflow-hidden border-r border-white/[0.07] bg-[#070b16] sm:aspect-[5/8] sm:h-full sm:min-h-0 sm:w-auto sm:shrink-0 ${productPhoto ? "" : "hidden"} ${hasImage ? "sm:block" : "sm:hidden"}`}>
                       <img
                         src={screenshot}
                         alt={productPhoto ? title : `${title} — mobile screen with demo data`}
