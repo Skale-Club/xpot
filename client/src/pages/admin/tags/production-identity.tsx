@@ -4,6 +4,8 @@ import { TagModelChips, TagPieceVisual, TagThemeChip } from "@/components/xpot/T
 import { useT } from "@/i18n";
 import { productionMessages } from "@/i18n/messages/production";
 import { productionBoardMessages } from "@/i18n/messages/productionBoard";
+import { productionDesignMessages } from "@/i18n/messages/productionDesign";
+import { printStyle } from "@shared/printDesigns";
 import { unifiedProductionMessages } from "@/i18n/messages/unifiedProduction";
 import { useTagLabels } from "./labels";
 import { PRINT_THEMES } from "./production-shared";
@@ -18,6 +20,8 @@ export interface ProductionIdentityData {
   productType?: string | null;
   face?: string | null;
   theme?: string | null;
+  /** The catalog model's version, when this is one: a Menu piece's font is in it. */
+  currentVersion?: { params?: Record<string, unknown> } | null;
 }
 
 /**
@@ -27,12 +31,16 @@ export interface ProductionIdentityData {
 export function useModelName() {
   const labels = useTagLabels();
   const b = useT(productionBoardMessages);
-  return (model: Pick<ProductionIdentityData, "title" | "productType" | "face" | "theme">): string => {
+  const d = useT(productionDesignMessages);
+  return (model: Pick<ProductionIdentityData, "title" | "productType" | "face" | "theme" | "currentVersion">): string => {
     if (!model.productType) return plainTitle(model.title);
     const theme = model.theme?.trim().toLowerCase();
     const themeLabel = theme ? (theme === "mixed" ? b("themeName_mixed") : (PRINT_THEMES as readonly string[]).includes(theme) ? b(`theme_${theme}` as "theme_white") : model.theme!) : null;
     const face = model.face && model.face !== "custom" ? labels.face(model.face) : null;
-    return [labels.product(model.productType), face, themeLabel].filter(Boolean).join(" · ") || plainTitle(model.title);
+    // Menu pieces differ by font: the name says which, in the words of the font step.
+    const style = model.face === "menu" && model.currentVersion ? printStyle(model.currentVersion.params) : null;
+    const styleLabel = style && ["classic", "italic", "modern", "spaced", "bold", "rounded"].includes(style) ? d(style as "classic") : null;
+    return [labels.product(model.productType), face, themeLabel, styleLabel].filter(Boolean).join(" · ") || plainTitle(model.title);
   };
 }
 
@@ -40,6 +48,9 @@ export function useModelName() {
 export function ProductionIdentity({ model, hero = false, compact = false }: { model: ProductionIdentityData; hero?: boolean; /** Picture, name and pills only: the name already says what is printed. */ compact?: boolean }) {
   const u = useT(unifiedProductionMessages);
   const labels = useTagLabels();
+  const nameOf = useModelName();
+  // One name for a piece everywhere; a part, which has no product, keeps the title it was given.
+  const name = model.productType ? nameOf(model) : model.title;
   const artwork = model.productType
     ? <TagPieceVisual productType={model.productType} face={model.face} theme={model.theme} modelSlug={model.slug} batchCode={model.batchCode} size={hero ? "lg" : "md"} />
     : <Shapes className={hero ? "h-14 w-14 text-white/40" : "h-9 w-9 text-white/40"} aria-hidden="true" />;
@@ -47,7 +58,7 @@ export function ProductionIdentity({ model, hero = false, compact = false }: { m
   if (!hero) return <span className="flex min-w-0 items-center gap-3" data-testid="production-identity">
     {artwork}
     <span className="min-w-0 space-y-1.5">
-      <span className="block text-sm font-semibold leading-snug text-white">{model.title}</span>
+      <span className="block text-sm font-semibold leading-snug text-white">{name}</span>
       <span className="flex flex-wrap items-center gap-1.5 text-xs text-white/55">
         {model.face && !compact ? <><TagFaceIcon face={model.face} size="xs" /><span>{labels.face(model.face)}</span></> : null}
         {model.productType ? <TagModelChips productType={model.productType} face={model.face} theme={model.theme} /> : model.theme ? <TagThemeChip theme={model.theme} /> : null}
@@ -62,7 +73,7 @@ export function ProductionIdentity({ model, hero = false, compact = false }: { m
     <div className="min-w-0 space-y-3 py-4 pr-4">
       <div className="space-y-2">
         {model.productType ? <TagModelChips productType={model.productType} face={model.face} theme={model.theme} sizeText="long" /> : model.theme ? <TagThemeChip theme={model.theme} /> : null}
-        <p className="break-words text-base font-semibold leading-snug text-white">{model.title}</p>
+        <p className="break-words text-base font-semibold leading-snug text-white">{name}</p>
       </div>
       {model.face ? <div className="flex items-center gap-2.5">
         <TagFaceIcon face={model.face} size="md" />
