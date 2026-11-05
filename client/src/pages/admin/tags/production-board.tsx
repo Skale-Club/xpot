@@ -1,10 +1,8 @@
 import { Suspense, lazy, useMemo, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
 import { ChevronRight, Clock, Download, Loader2, Shapes } from "lucide-react";
 import {
   isAlwaysReadyPart,
   printGenerateOptions,
-  printProblemRate,
   printPreviewPath,
   printPartFamilies,
   printPartVariant,
@@ -12,7 +10,6 @@ import {
   type PrintGenerateOption,
   type PrintModelItem,
   type PrintPartFamily,
-  type PrintQualitySummary,
 } from "@shared/printProduction";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
@@ -22,7 +19,6 @@ import { useT } from "@/i18n";
 import { productionMessages } from "@/i18n/messages/production";
 import { productionBoardMessages } from "@/i18n/messages/productionBoard";
 import { unifiedProductionMessages } from "@/i18n/messages/unifiedProduction";
-import { ADMIN_TAGS_KEY, getJson } from "./api";
 import { useTagLabels } from "./labels";
 import { Loading, LoadError } from "./pieces-shared";
 import { DesignPreview, GenerateDialog } from "./production-generate";
@@ -35,7 +31,7 @@ import { needsPrintComputer, orderedPath, piecesAwaitingPrinted, serializedReque
 import { relativeTime } from "@/pages/my/format";
 
 // Tags › Production's one screen. On one side, what can be made; on the other, the queue of what was sent to print, to
-// mark printed (or say which pieces had a problem), with the problem rate under it. Below `xl` the queue goes under.
+// mark printed (or say which pieces had a problem). Below `xl` the queue goes under.
 //   To generate     serialized pieces (Stands, Plates): a short step-by-step (colour → face → quantity) asks for new
 //                   pieces; each print job gets its own batch of fresh serials, pending in stock until it is printed.
 //   Bases, tokens   parts with no serial (Stand bases, G tokens), one card per piece: the next step asks which version,
@@ -156,39 +152,7 @@ function PrintQueue({ go, awaiting }: { go: Go; awaiting: number }) {
       ) : null}
       {waiting ? <PrintComputerLine go={go} waiting={waiting} /> : null}
       <ToPrintList go={go} emptyHint={b("pendingEmptyHint")} />
-      <PrintQuality />
     </aside>
-  );
-}
-
-/** How the pieces marked printed came out lately: what the problems reported on the queue add up to. */
-function PrintQuality() {
-  const b = useT(productionBoardMessages);
-  const t = useT(productionMessages);
-  const { data } = useQuery({
-    queryKey: [ADMIN_TAGS_KEY, "production", "quality"],
-    queryFn: () => getJson<PrintQualitySummary>("/api/xpot/admin/print-quality"),
-  });
-  if (!data) return null;
-  const rate = printProblemRate(data);
-  return (
-    <section className="rounded-xl border border-white/[0.06] px-3 py-2 text-xs" aria-labelledby="production-quality-title" title={b("qualityWindow", { days: data.days })} data-testid="production-quality">
-      <div className="flex items-baseline gap-2">
-        <h3 id="production-quality-title" className="shrink-0 font-medium text-white/60">{b("qualityTitle")}</h3>
-        {rate === null ? <span className="min-w-0 truncate text-white/45">{b("qualityEmpty")}</span> : <>
-          <span className="shrink-0 text-sm font-semibold text-white" data-testid="production-quality-rate">{rate}%</span>
-          <span className="min-w-0 truncate text-white/45">{b("qualityLine", { problems: data.withProblem, pieces: data.pieces })}</span>
-        </>}
-      </div>
-      {data.byProblem.length || data.failedPrints > 0 ? (
-        <ul className="mt-1.5 space-y-0.5 border-t border-white/[0.06] pt-1.5 text-white/60">
-          {data.byProblem.map(({ problem, count }) => (
-            <li key={problem} className="flex justify-between gap-2"><span className="min-w-0 truncate">{t(`pieceProblem_${problem}` as never)}</span><span className="font-medium text-white/80">{count}</span></li>
-          ))}
-          {data.failedPrints > 0 ? <li>{b.plural("qualityFailed", data.failedPrints)}</li> : null}
-        </ul>
-      ) : null}
-    </section>
   );
 }
 

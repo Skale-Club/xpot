@@ -1628,8 +1628,8 @@ export async function printQuality(days: number, scope: ProductionScope): Promis
     WHERE m.reference_type = 'batch' AND m.from_stock_status = 'pending' AND m.movement_type IN ('intake', 'damage') AND m.created_at >= ${since}
       AND EXISTS (SELECT 1 FROM print_jobs j WHERE j.batch_id = t.batch_id AND ${scopeSql("j.organization_id", scope)})
     GROUP BY m.movement_type, m.reason`);
-  const [failed] = await rows<{ n: number }>(sql`
-    SELECT count(*)::int AS n FROM print_jobs j
+  const [failed] = await rows<{ n: number; pieces: number }>(sql`
+    SELECT count(*)::int AS n, coalesce(sum(j.quantity), 0)::int AS pieces FROM print_jobs j
     WHERE j.status = 'failed' AND j.batch_id IS NOT NULL AND j.updated_at >= ${since} AND ${scopeSql("j.organization_id", scope)}`);
   const byProblem = new Map<PrintPieceProblem | "unspecified", number>();
   let good = 0;
@@ -1647,6 +1647,7 @@ export async function printQuality(days: number, scope: ProductionScope): Promis
     withProblem,
     byProblem: Array.from(byProblem, ([problem, count]) => ({ problem, count })).sort((a, b) => b.count - a.count),
     failedPrints: Number(failed?.n ?? 0),
+    failedPieces: Number(failed?.pieces ?? 0),
   };
 }
 

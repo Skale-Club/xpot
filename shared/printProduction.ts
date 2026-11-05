@@ -689,6 +689,7 @@ export interface PrintQualitySummary {
   byProblem: Array<{ problem: PrintPieceProblem | "unspecified"; count: number }>;
   /** Whole prints marked failed. Their pieces never came out, so they are apart from `pieces`. */
   failedPrints: number;
+  failedPieces: number;
 }
 
 /** The share of pieces with a problem, as a percentage to one decimal; null with nothing printed. */
