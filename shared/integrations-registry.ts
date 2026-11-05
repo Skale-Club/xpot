@@ -163,7 +163,7 @@ export const INTEGRATION_PROVIDERS: IntegrationProviderDef[] = [
     fields: [
       { key: "accountSid", label: "Account SID", placeholder: "AC..." },
       { key: "apiKey", label: "Auth Token", secret: true },
-      { key: "fromNumber", label: "From number (E.164)", placeholder: "+15085550100", optional: true },
+      { key: "fromNumber", label: "From number (E.164)", placeholder: "+10000000000", optional: true },
       { key: "messagingServiceSid", label: "Messaging Service SID", placeholder: "MG...", optional: true },
     ],
   },
