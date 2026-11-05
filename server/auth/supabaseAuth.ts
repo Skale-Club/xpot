@@ -2,6 +2,7 @@ import type { Express, Request, Response, RequestHandler } from "express";
 import session from "express-session";
 import connectPg from "connect-pg-simple";
 import { db, pool } from "../db.js";
+import { retryIfConnectionDropped } from "../lib/db-connection.js";
 import { users } from "#shared/schema.js";
 import { eq } from "drizzle-orm";
 import { normalizeIpKey, rateLimit } from "../tags/rateLimit.js";
@@ -15,8 +16,13 @@ export async function setupSupabaseAuth(app: Express) {
   // logged everyone out every Monday regardless of daily use.
   const sessionTtl = 30 * 24 * 60 * 60 * 1000; // 30 days
   const pgStore = connectPg(session);
+  // Session reads and writes are keyed upserts, so one retry on a connection the database already dropped is safe
+  // and keeps a stale socket from failing the request.
+  const sessionPool = {
+    query: (text: string, params?: unknown[]) => retryIfConnectionDropped(() => pool.query(text, params)),
+  } as unknown as typeof pool;
   const sessionStore = new pgStore({
-    pool: pool,
+    pool: sessionPool,
     createTableIfMissing: false,
     ttl: sessionTtl,
     tableName: "sessions",

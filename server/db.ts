@@ -44,6 +44,11 @@ export const pool = new Pool({
       }
     : false,
   max: 20,
+  // The Supabase pooler and home routers silently drop sockets that sit idle. Retiring idle connections early and
+  // keeping TCP keepalive on means a query rarely picks up a socket that is already dead (read ECONNRESET).
+  idleTimeoutMillis: 30_000,
+  keepAlive: true,
+  keepAliveInitialDelayMillis: 10_000,
 });
 
 // An idle connection the database drops (a network blip, a restart) is replaced on the next query. Without a listener
