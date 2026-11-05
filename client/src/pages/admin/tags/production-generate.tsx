@@ -1,7 +1,7 @@
 import { useEffect, useId, useRef, useState, type FormEvent, type ReactNode } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { Check, ChevronRight, Minus, Plus, Search } from "lucide-react";
-import { materialsForNfc, preferredNfcMount, type PrintGenerateOption, type PrintModelItem, type PrintNfcMount, type PrintRequestItem } from "@shared/printProduction";
+import { PRINT_MENU_FONTS, materialsForNfc, preferredNfcMount, type PrintGenerateOption, type PrintMenuFont, type PrintModelItem, type PrintNfcMount, type PrintRequestItem } from "@shared/printProduction";
 import { PRINT_DESIGNS, PRINT_DESIGN_GROUPS, PRINT_PALETTE, printDesignGroup, type PrintDesignGroup } from "@shared/printDesigns";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
@@ -23,11 +23,13 @@ import { useTagLabels } from "./labels";
 import { ProductionPlatePreview } from "./production-identity";
 import { Piece3D } from "./production-piece-3d";
 import { MaterialsNeeded } from "./production-materials";
-import { NfcMountChoice, useNfcMountName } from "./production-nfc";
+import { MenuFontChoice, NfcMountChoice, useNfcMountName } from "./production-nfc";
 import { assemblyParts, filamentColours, printQuantity } from "./production-workflow";
 import { useProductionAccess } from "./production-shared";
 
 const STEP_KEYS = ["design", "appearance", "nfc", "quantity", "review"] as const;
+// A Menu piece's style and its title font, in print-pipeline/builders/service.py's pairs.
+const MENU_FONT_OF_STYLE: Record<string, PrintMenuFont> = { classic: PRINT_MENU_FONTS[0], italic: PRINT_MENU_FONTS[1], modern: PRINT_MENU_FONTS[2], spaced: PRINT_MENU_FONTS[3], bold: PRINT_MENU_FONTS[4], rounded: PRINT_MENU_FONTS[5] };
 
 export function GenerateDialog({ option, models, onClose, onGenerated }: {
   option: PrintGenerateOption; models: Map<string, PrintModelItem>; onClose: () => void;
@@ -93,11 +95,16 @@ export function GenerateDialog({ option, models, onClose, onGenerated }: {
   const chooseFace = (value: string) => { setFaceKey(value); setQuantity(null); };
   const chooseColour = (value: string) => { setTheme(value); setQuantity(null); };
   const stepNames = STEP_KEYS.map((key) => d(key));
+  // A style is a choice only when there is more than one; the Menu's are its fonts.
+  const hasStyles = styles.length > 1;
+  const isMenu = faceKey === "menu" && hasStyles;
+  const styleOfFont = (font: PrintMenuFont) => Object.keys(MENU_FONT_OF_STYLE).find((style) => MENU_FONT_OF_STYLE[style] === font) ?? "classic";
+  const appearanceName = colour ? (hasStyles && face ? `${themeName(colour.theme)} · ${styleName(face.style)}` : themeName(colour.theme)) : null;
   const progress = d("progress", { current: step + 1, total: 5 });
   // What each step settled, kept on the rail once the person has moved on.
   const stepValues = [
     faceKey ? labels.face(faceKey) : null,
-    face && colour ? `${themeName(colour.theme)} · ${styleName(face.style)}` : null,
+    appearanceName,
     face ? (nfcMount ? nfcName(nfcMount) : n("fixed")) : null,
     plan.valid ? t.plural("pieceCount", plan.count) : null,
   ];
@@ -113,8 +120,8 @@ export function GenerateDialog({ option, models, onClose, onGenerated }: {
         <div className="flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-contain [color-scheme:dark] md:flex-row md:overflow-hidden [&_*]:[scrollbar-width:thin]">
           <div className="order-1 min-w-0 flex-1 md:order-2 md:overflow-y-auto">
           <fieldset disabled={busy} aria-labelledby={headingId} className="min-w-0 space-y-3 px-5 py-4 sm:px-7">
-            <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5"><h2 ref={heading} id={headingId} tabIndex={-1} className="text-base font-semibold tracking-tight text-white !shadow-none !outline-none !ring-0">{d(`${STEP_KEYS[step]}Title`)}</h2>
-              <p className="text-xs text-white/50">{d(`${STEP_KEYS[step]}Hint`)}</p></div>
+            <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5"><h2 ref={heading} id={headingId} tabIndex={-1} className="text-base font-semibold tracking-tight text-white !shadow-none !outline-none !ring-0">{step === 1 && isMenu ? d("menuTitle") : d(`${STEP_KEYS[step]}Title`)}</h2>
+              <p className="text-xs text-white/50">{step === 1 && isMenu ? d("menuHint") : d(`${STEP_KEYS[step]}Hint`)}</p></div>
             {step === 0 ? <>
               <div className="flex flex-wrap items-center gap-x-1 gap-y-2" aria-label={d("design")}>
                 {PRINT_DESIGN_GROUPS.filter((g) => g === "all" || designs.some((f) => printDesignGroup(f.face) === g)).map((g) => <button type="button" key={g} aria-pressed={group === g} onClick={() => setGroup(g)} className={`min-h-7 rounded-md px-2.5 text-xs font-medium transition-colors ${group === g ? "bg-white/10 text-white ring-1 ring-white/20" : "text-white/50 hover:bg-white/5 hover:text-white"}`}>{groupLabels[g]}</button>)}
@@ -134,38 +141,60 @@ export function GenerateDialog({ option, models, onClose, onGenerated }: {
               {faceKey === "wifi" ? <p className="text-xs leading-relaxed text-white/60">{d("wifiHint")}</p> : null}
             </> : null}
             {step === 1 ? <>
-              <fieldset className="space-y-3" data-testid="production-generate-colours"><legend className="mb-2 text-sm font-medium text-white/80">{d("colour")}</legend>
-                <div className="flex flex-wrap gap-2">{colours.map((c) => <label key={c.theme} className="relative cursor-pointer">
-                  <input type="radio" name={`${radioId}-colour`} value={c.theme} checked={colour?.theme === c.theme} onChange={() => chooseColour(c.theme)} className="peer sr-only" data-testid={`production-generate-colour-${c.theme}`} />
-                  <span className="flex min-h-11 items-center gap-2 rounded-xl border border-white/15 px-3 py-2 text-xs text-white/70 peer-checked:border-violet-400 peer-checked:bg-violet-400/10 peer-checked:text-white peer-focus-visible:ring-2 peer-focus-visible:ring-violet-400">
-                    <span className="h-5 w-5 rounded-full border border-white/30" style={{ background: PRINT_PALETTE.find((p) => p.theme === c.theme)?.hex ?? "#888" }} />{themeName(c.theme)}
-                  </span></label>)}</div><p className="text-xs text-white/45">{d("colourHint")}</p>
-              </fieldset>
-              <fieldset className="grid grid-cols-2 gap-3 sm:grid-cols-3" data-testid="production-generate-styles"><legend className="mb-3 text-sm font-medium text-white/80">{d("style")}</legend>
-                {styles.map((choice) => <RadioCard key={choice.slug} name={`${radioId}-style`} value={choice.slug} checked={face?.slug === choice.slug} onChange={() => { setStyleKey(choice.style); setQuantity(null); }} testId={`production-generate-style-${choice.style}`}>
-                  <DesignPreview productType={option.productType} face={choice.face} theme={colour!.theme} style={choice.style} modelSlug={choice.slug} />
-                  <span className="text-xs font-medium text-white">{styleName(choice.style)}</span>
-                </RadioCard>)}
-              </fieldset>
+              {hasStyles ? (
+                <fieldset className="flex flex-wrap items-center gap-2" data-testid="production-generate-colours"><legend className="sr-only">{d("colour")}</legend>
+                  {colours.map((c) => <label key={c.theme} className="relative cursor-pointer">
+                    <input type="radio" name={`${radioId}-colour`} value={c.theme} checked={colour?.theme === c.theme} onChange={() => chooseColour(c.theme)} className="peer sr-only" data-testid={`production-generate-colour-${c.theme}`} />
+                    <span className="flex min-h-9 items-center gap-2 rounded-lg border border-white/15 px-2.5 text-xs text-white/70 peer-checked:border-violet-400 peer-checked:bg-violet-400/10 peer-checked:text-white peer-focus-visible:ring-2 peer-focus-visible:ring-violet-400">
+                      <span className="h-4 w-4 rounded-full border border-white/30" style={{ background: PRINT_PALETTE.find((p) => p.theme === c.theme)?.hex ?? "#888" }} />{themeName(c.theme)}
+                    </span></label>)}
+                </fieldset>
+              ) : (
+                <fieldset className="grid grid-cols-2 gap-2.5 md:grid-cols-3" data-testid="production-generate-colours"><legend className="sr-only">{d("colour")}</legend>
+                  {colours.map((c) => {
+                    const shown = c.faces.find((f) => f.face === faceKey);
+                    return <RadioCard key={c.theme} name={`${radioId}-colour`} value={c.theme} checked={colour?.theme === c.theme} onChange={() => chooseColour(c.theme)} onPick={() => setStep(2)} testId={`production-generate-colour-${c.theme}`}>
+                      {shown ? <DesignPreview productType={option.productType} face={shown.face} theme={c.theme} style={shown.style} modelSlug={shown.slug} /> : null}
+                      <span className="text-xs font-medium text-white sm:text-sm">{themeName(c.theme)}</span>
+                    </RadioCard>;
+                  })}
+                </fieldset>
+              )}
+              {isMenu && face ? (
+                <MenuFontChoice
+                  fonts={styles.map((choice) => MENU_FONT_OF_STYLE[choice.style]).filter(Boolean)}
+                  value={MENU_FONT_OF_STYLE[face.style] ?? null}
+                  theme={colour?.theme ?? theme}
+                  nameOf={(font) => styleName(styleOfFont(font))}
+                  onChange={(font) => { setStyleKey(styleOfFont(font)); setQuantity(null); }}
+                />
+              ) : hasStyles ? (
+                <fieldset className="grid grid-cols-2 gap-2.5 md:grid-cols-3" data-testid="production-generate-styles"><legend className="mb-2 text-xs font-semibold text-white/60">{d("style")}</legend>
+                  {styles.map((choice) => <RadioCard key={choice.slug} name={`${radioId}-style`} value={choice.slug} checked={face?.slug === choice.slug} onChange={() => { setStyleKey(choice.style); setQuantity(null); }} testId={`production-generate-style-${choice.style}`}>
+                    <DesignPreview productType={option.productType} face={choice.face} theme={colour!.theme} style={choice.style} modelSlug={choice.slug} />
+                    <span className="text-xs font-medium text-white">{styleName(choice.style)}</span>
+                  </RadioCard>)}
+                </fieldset>
+              ) : null}
             </> : null}
-            {step === 2 && face ? <NfcMountChoice mounts={mounts} value={nfcMount} onChange={setPickedMount} /> : null}
+            {step === 2 && face ? <NfcMountChoice mounts={mounts} value={nfcMount} onChange={setPickedMount} onPick={() => setStep(3)} /> : null}
             {step === 3 && face ? <div className="space-y-5">
               <div className="space-y-2">
-                <label htmlFor={quantityId} className="block text-xs font-semibold text-white/60">{t("fieldQuantity")}</label>
+                <label htmlFor={quantityId} className="sr-only">{t("fieldQuantity")}</label>
                 <div className="flex items-center gap-2">
                   <Button type="button" variant="secondary" size="icon" aria-label={b("lessPieces")} disabled={!plan.valid || plan.count <= 1} onClick={() => setQuantity(String(plan.count - 1))}><Minus className="h-4 w-4" /></Button>
                   <Input id={quantityId} type="number" inputMode="numeric" required min={1} max={copies} step={1} aria-describedby={`${quantityId}-hint`} value={quantity ?? String(copies)} onChange={(e) => setQuantity(e.target.value)} aria-invalid={!plan.valid} className="w-24 text-center text-lg tabular-nums" data-testid="production-generate-quantity" />
                   <Button type="button" variant="secondary" size="icon" aria-label={b("morePieces")} disabled={!plan.valid || plan.count >= copies} onClick={() => setQuantity(String(plan.count + 1))}><Plus className="h-4 w-4" /></Button>
                 </div>
-                <p id={`${quantityId}-hint`} className="text-xs text-white/45">{b("quantityHint", { copies, max: copies })}</p>
+                <p id={`${quantityId}-hint`} className="text-xs text-white/45">{b("quantityHint", { max: copies })}</p>
               </div>
               <div className="flex flex-wrap gap-2">{Array.from(new Set([1, Math.ceil(copies / 2), copies])).map((count) => <Button key={count} type="button" size="sm" variant={plan.count === count ? "secondary" : "ghost"} onClick={() => setQuantity(String(count))}>{t.plural("pieceCount", count)}</Button>)}</div>
               {organizations.length > 1 ? <Field label={t("organization")} hint={t("organizationHint")}><Select value={organization ? String(organization.id) : ""} onChange={(e) => setOrganizationId(e.target.value)} options={organizations.map((o) => ({ value: String(o.id), label: o.name }))} data-testid="production-generate-organization" /></Field> : null}
               {model && plan.valid ? <ProductionPlatePreview model={model} plates={plan.plates} /> : null}
             </div> : null}
             {step === 4 && face ? <div className="space-y-4">
-              <dl className="divide-y divide-white/10 rounded-xl border border-white/10 px-4">
-                {[[d("design"), labels.face(face.face), 0], [d("appearance"), `${themeName(colour!.theme)} · ${styleName(face.style)}`, 1], [n("field"), nfcMount ? nfcName(nfcMount) : n("fixed"), 2], [d("pieces"), t.plural("pieceCount", plan.count), 3], ...(organizations.length > 1 && organization ? [[t("organization"), organization.name, 3]] : [])].map(([label, value, target]) => <div key={label} className="flex items-center justify-between gap-3 py-3"><div><dt className="text-xs text-white/45">{label}</dt><dd className="mt-1 text-sm font-medium text-white">{value}</dd></div><button type="button" aria-label={d("edit", { step: label })} disabled={busy} onClick={() => setStep(Number(target))} className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg text-white/50 hover:bg-white/5 hover:text-white"><ChevronRight className="h-4 w-4" /></button></div>)}
+              <dl className="divide-y divide-white/10 rounded-xl border border-white/10 px-4 md:hidden">
+                {[[d("design"), labels.face(face.face), 0], [d("appearance"), appearanceName ?? "", 1], [n("field"), nfcMount ? nfcName(nfcMount) : n("fixed"), 2], [d("pieces"), t.plural("pieceCount", plan.count), 3], ...(organizations.length > 1 && organization ? [[t("organization"), organization.name, 3]] : [])].map(([label, value, target]) => <div key={label} className="flex items-center justify-between gap-3 py-3"><div><dt className="text-xs text-white/45">{label}</dt><dd className="mt-1 text-sm font-medium text-white">{value}</dd></div><button type="button" aria-label={d("edit", { step: label })} disabled={busy} onClick={() => setStep(Number(target))} className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg text-white/50 hover:bg-white/5 hover:text-white"><ChevronRight className="h-4 w-4" /></button></div>)}
               </dl>
               <MaterialsNeeded materials={materialsForNfc(face.materials, nfcMount ? face.nfcVariants[nfcMount] : null)} filaments={filamentColours(model)} assembly={assemblyParts(model, models, nfcMount)} />
               <p className="text-xs leading-relaxed text-white/55">{b("generateDialogIntro")}</p>

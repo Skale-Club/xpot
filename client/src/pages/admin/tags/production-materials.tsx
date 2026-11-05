@@ -27,7 +27,11 @@ export function MaterialsNeeded({ materials, filaments = [], assembly = [] }: {
   const m = useT(partnerMaterialsMessages);
   const t = useT(productionMessages);
   const named = (materials ?? []).map((material) => `${material.name} ${material.spec ?? ""}`.toLowerCase());
-  const extraFilaments = Array.from(new Set(filaments)).filter((colour) => !named.some((text) => text.includes(colour.toLowerCase())));
+  const extraFilaments = Array.from(new Set(filaments)).filter((colour) => {
+    // "ELEGOO PLA #161616" and "ELEGOO PLA · 1.75 mm · #161616" are one filament: the colour code tells.
+    const key = (/#[0-9a-f]{6}/i.exec(colour)?.[0] ?? colour).toLowerCase();
+    return !named.some((text) => text.includes(key));
+  });
   if (!materials?.length && !extraFilaments.length && !assembly.length) return null;
   return (
     <section className="space-y-2 rounded-xl border border-amber-300/20 bg-amber-400/[0.05] p-3.5" aria-label={m("needTitle")} data-testid="production-materials-needed">
