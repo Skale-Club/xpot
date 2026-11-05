@@ -68,7 +68,8 @@ export function ProductionBoard({ go, onOtherWays }: { go: Go; onOtherWays?: () 
 
   return (
     <div className="space-y-4" data-testid="production-board">
-      {awaiting > 0 ? <AwaitingBar count={awaiting} /> : null}
+      {/* Beside the queue it says so in the queue; when the queue sits far below, a way down to it. */}
+      {awaiting > 0 ? <AwaitingBar count={awaiting} className="xl:hidden" /> : null}
       <div className="grid gap-8 xl:grid-cols-[minmax(0,1fr)_minmax(340px,420px)] xl:items-start">
       <div className="min-w-0 space-y-8">
       <section className="space-y-3" aria-labelledby="production-generate-title" data-testid="production-generate-area">
@@ -105,7 +106,7 @@ export function ProductionBoard({ go, onOtherWays }: { go: Go; onOtherWays?: () 
         </div>
       ) : null}
       </div>
-      <PrintQueue go={go} />
+      <PrintQueue go={go} awaiting={awaiting} />
       </div>
 
       {generating ? <GenerateDialog option={generating} models={bySlug} onClose={() => setGenerating(null)} onGenerated={(request) => go(orderedPath(request))} /> : null}
@@ -115,18 +116,18 @@ export function ProductionBoard({ go, onOtherWays }: { go: Go; onOtherWays?: () 
 }
 
 /** Something was sent to print and still waits for an answer: said once, at the top, whichever side the person is on. */
-function AwaitingBar({ count }: { count: number }) {
+function AwaitingBar({ count, className = "" }: { count: number; className?: string }) {
   const b = useT(productionBoardMessages);
   return (
     <button
       type="button"
       onClick={() => document.getElementById(QUEUE_ID)?.scrollIntoView({ behavior: "smooth", block: "start" })}
-      className="flex w-full items-center gap-2 rounded-xl border border-amber-400/25 bg-amber-400/[0.08] px-3 py-2 text-left text-sm font-medium text-amber-100 transition-colors hover:bg-amber-400/[0.14]"
+      className={`flex w-full items-center gap-2 rounded-xl border border-amber-400/25 bg-amber-400/[0.08] px-3 py-2 text-left text-sm font-medium text-amber-100 transition-colors hover:bg-amber-400/[0.14] ${className}`}
       data-testid="production-awaiting-bar"
     >
       <Clock className="h-4 w-4 shrink-0 text-amber-300" aria-hidden="true" />
       <span className="min-w-0 flex-1">{b.plural("awaitingBar", count)}</span>
-      <ChevronRight className="h-4 w-4 shrink-0 text-amber-200/70 xl:hidden" aria-hidden="true" />
+      <ChevronRight className="h-4 w-4 shrink-0 text-amber-200/70" aria-hidden="true" />
     </button>
   );
 }
@@ -134,7 +135,7 @@ function AwaitingBar({ count }: { count: number }) {
 const QUEUE_ID = "production-queue";
 
 /** The queue: what was sent to print with a serial and still waits for "did it print?". Everything else is in All orders. */
-function PrintQueue({ go }: { go: Go }) {
+function PrintQueue({ go, awaiting }: { go: Go; awaiting: number }) {
   const b = useT(productionBoardMessages);
   const { data: requests } = usePrintRequests("all");
   const waiting = needsPrintComputer(serializedRequests(requests ?? []));
@@ -147,6 +148,12 @@ function PrintQueue({ go }: { go: Go }) {
           <ChevronRight className="h-3.5 w-3.5" aria-hidden="true" />
         </button>
       </div>
+      {awaiting > 0 ? (
+        <p className="hidden items-center gap-2 rounded-xl border border-amber-400/25 bg-amber-400/[0.08] px-3 py-2 text-xs font-medium text-amber-100 xl:flex" data-testid="production-awaiting-line">
+          <Clock className="h-3.5 w-3.5 shrink-0 text-amber-300" aria-hidden="true" />
+          {b.plural("awaitingBar", awaiting)}
+        </p>
+      ) : null}
       {waiting ? <PrintComputerLine go={go} waiting={waiting} /> : null}
       <ToPrintList go={go} emptyHint={b("pendingEmptyHint")} />
       <PrintQuality />
