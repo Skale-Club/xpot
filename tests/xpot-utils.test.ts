@@ -50,9 +50,9 @@ describe("pages/xpot/utils formatters", () => {
 
   it("short dates and durations use the kit, with a dash when missing", () => {
     expect(formatShortDate("2026-03-04T12:00:00")).toBe("Mar 4");
-    expect(formatShortDate(null)).toBe("—");
+    expect(formatShortDate(null)).toBe("-");
     expect(formatDuration(90 * 60)).toBe("1 h 30 min");
-    expect(formatDuration(null)).toBe("—");
+    expect(formatDuration(null)).toBe("-");
   });
 
   it("the currency symbol follows the currency, not a hardcoded $", () => {
