@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { ArrowLeft, ArrowRight, Phone } from "lucide-react";
-import { formatPhone } from "@shared/phone";
+import { formatPhone, phonePlaceholderFor } from "@shared/phone";
 import { phoneCountryCodeFromLocales } from "@shared/phoneCountry";
 import { Button } from "@/components/ui/button";
 import { CountryCodePicker } from "@/components/CountryCodePicker";
@@ -179,7 +179,7 @@ export function SignIn({ onSignedIn }: { onSignedIn: () => void | Promise<unknow
               type="tel"
               inputMode="tel"
               autoComplete="tel-national"
-              placeholder={t("phonePlaceholder")}
+              placeholder={phonePlaceholderFor(countryCode)}
               className={`${FIELD} pl-10`}
               data-testid="my-input-phone"
             />

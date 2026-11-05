@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Loader2 } from "@/components/ui/loader";
 import { FIELD_CONTROL } from "@/components/xpot/Field";
 import { InlineAlert } from "@/components/xpot/InlineAlert";
-import { formatPhone, normalizePhone } from "@shared/phone";
+import { formatPhone, normalizePhone, phonePlaceholderFor } from "@shared/phone";
 import { CountryCodePicker } from "@/components/CountryCodePicker";
 import { useT } from "@/i18n";
 import { signinMessages } from "@/i18n/messages/signin";
@@ -304,7 +304,7 @@ export function PhoneSignIn({ onSignedIn }: { onSignedIn: () => void | Promise<u
         kind={step}
         whatsappHref={whatsappLink(step)}
         action={
-          <button type="button" onClick={restart} className="min-h-10 text-sm text-white/50 hover:text-white">
+          <button type="button" onClick={restart} className="min-h-11 text-sm text-white/50 hover:text-white">
             {t("backToStart")}
           </button>
         }
@@ -368,7 +368,7 @@ export function PhoneSignIn({ onSignedIn }: { onSignedIn: () => void | Promise<u
           {applicationStep === APPLICATION_STEPS - 1 ? t("requestAccess") : t("next")}
           {applicationStep < APPLICATION_STEPS - 1 ? <ArrowRight /> : null}
         </Button>
-        {applicationStep > 0 ? <button type="button" disabled={busy} onClick={() => goToStep(applicationStep - 1)} className="mx-auto flex min-h-10 items-center gap-2 text-sm text-white/45 hover:text-white"><ArrowLeft className="h-4 w-4" />{t("previous")}</button> : null}
+        {applicationStep > 0 ? <button type="button" disabled={busy} onClick={() => goToStep(applicationStep - 1)} className="mx-auto flex min-h-11 items-center gap-2 text-sm text-white/45 hover:text-white"><ArrowLeft className="h-4 w-4" />{t("previous")}</button> : null}
         <p className="text-center text-xs text-white/35">{t("draftSaved")}</p>
       </form>
     );
@@ -385,7 +385,7 @@ export function PhoneSignIn({ onSignedIn }: { onSignedIn: () => void | Promise<u
         className="space-y-4"
         data-testid="signin-code"
       >
-        <button type="button" onClick={restart} className="flex min-h-10 items-center gap-2 text-sm text-white/60 hover:text-white">
+        <button type="button" onClick={restart} className="flex min-h-11 items-center gap-2 text-sm text-white/60 hover:text-white">
           <ArrowLeft className="h-4 w-4" />
           {t("changeNumber")}
         </button>
@@ -415,7 +415,7 @@ export function PhoneSignIn({ onSignedIn }: { onSignedIn: () => void | Promise<u
           type="button"
           disabled={busy || wait > 0}
           onClick={() => void sendCode(phone)}
-          className="min-h-10 w-full text-sm text-blue-300 hover:text-white disabled:text-white/35"
+          className="min-h-11 w-full text-sm text-blue-300 hover:text-white disabled:text-white/35"
         >
           {wait > 0 ? t("resendIn", { seconds: wait }) : t("resend")}
         </button>
@@ -447,7 +447,7 @@ export function PhoneSignIn({ onSignedIn }: { onSignedIn: () => void | Promise<u
                 type="tel"
                 inputMode="tel"
                 autoComplete="tel-national"
-                placeholder={t("phonePlaceholder")}
+                placeholder={phonePlaceholderFor(countryCode)}
                 autoFocus
                 required
                 className={`${FIELD} pl-10`}

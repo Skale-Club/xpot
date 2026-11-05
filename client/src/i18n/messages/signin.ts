@@ -10,7 +10,6 @@ const en = {
 
   country: "Country",
   phoneLabel: "Phone number",
-  phonePlaceholder: "(508) 555-0100",
   sendCode: "Send code",
   codeTitle: "Enter the code",
   codeSent: "We texted a 6-digit code to {phone}.",
@@ -75,7 +74,6 @@ export const signinMessages: Dictionary<typeof en> = {
     or: 'ou', continueGoogle: 'Continuar com Google', googleNeedsPhone: 'Confirme seu telefone uma vez para conectar o Google à sua conta Xpot.',
     country: "País",
     phoneLabel: "Número de celular",
-    phonePlaceholder: "(508) 555-0100",
     sendCode: "Enviar código",
     codeTitle: "Digite o código",
     codeSent: "Mandamos um código de 6 dígitos para {phone}.",
@@ -137,7 +135,6 @@ export const signinMessages: Dictionary<typeof en> = {
     or: 'o', continueGoogle: 'Continuar con Google', googleNeedsPhone: 'Confirma tu teléfono una vez para conectar Google a tu cuenta Xpot.',
     country: "País",
     phoneLabel: "Número de celular",
-    phonePlaceholder: "(508) 555-0100",
     sendCode: "Enviar código",
     codeTitle: "Escribe el código",
     codeSent: "Enviamos un código de 6 dígitos a {phone}.",

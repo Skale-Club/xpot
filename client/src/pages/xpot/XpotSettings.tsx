@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { Link, useLocation, useSearchParams } from "wouter";
+import { phonePlaceholderFor } from "@shared/phone";
 import {
   Building2,
   Camera,
@@ -168,7 +169,7 @@ function CountryPhoneInput({
         type="tel"
         value={local}
         onChange={handleLocalChange}
-        placeholder={active.code === "BR" ? "(11) 99999-9999" : "(555) 000-0000"}
+        placeholder={phonePlaceholderFor(active.dial)}
         className={`${FIELD_CONTROL} rounded-l-none py-2`}
       />
       {open && (
