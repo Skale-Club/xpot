@@ -17,6 +17,7 @@ import { PROVISIONER_STATUS_TONE, Pill, toneOf } from "@/components/xpot/StatusP
 import { GLASS_CLASS } from "@/components/xpot/surface";
 import { ADMIN_TAGS_KEY, STALE_MS, errorMessage, formatDateTime, getJson, invalidateAdminTags, sendJson } from "./api";
 import { Loading } from "./pieces-shared";
+import { ThisComputer } from "./production-this-computer";
 
 const DEVICE_KEYS = { active: "device_active", pairing: "device_pairing", revoked: "device_revoked" } as const;
 
@@ -124,6 +125,7 @@ export function ProvisionersTab(_props: { go: (path: string) => void }) {
 
   return (
     <div className="space-y-6">
+      <ThisComputer />
       <SectionCard accent="tags" icon={KeyRound} title={t("pairComputer")} bodyClassName="space-y-4 p-4">
         <p className="text-xs text-white/45">{t("pairComputerHint")}</p>
         <form onSubmit={submit} className="flex flex-col gap-2 sm:flex-row">

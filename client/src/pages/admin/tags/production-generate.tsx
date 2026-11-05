@@ -193,12 +193,16 @@ export function GenerateDialog({ option, models, onClose, onGenerated }: {
               {model && plan.valid ? <ProductionPlatePreview model={model} plates={plan.plates} /> : null}
             </div> : null}
             {step === 4 && face ? <div className="space-y-4">
-              <dl className="divide-y divide-white/10 rounded-xl border border-white/10 px-4 md:hidden">
-                {[[d("design"), labels.face(face.face), 0], [d("appearance"), appearanceName ?? "", 1], [n("field"), nfcMount ? nfcName(nfcMount) : n("fixed"), 2], [d("pieces"), t.plural("pieceCount", plan.count), 3], ...(organizations.length > 1 && organization ? [[t("organization"), organization.name, 3]] : [])].map(([label, value, target]) => <div key={label} className="flex items-center justify-between gap-3 py-3"><div><dt className="text-xs text-white/45">{label}</dt><dd className="mt-1 text-sm font-medium text-white">{value}</dd></div><button type="button" aria-label={d("edit", { step: label })} disabled={busy} onClick={() => setStep(Number(target))} className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg text-white/50 hover:bg-white/5 hover:text-white"><ChevronRight className="h-4 w-4" /></button></div>)}
-              </dl>
+              <div className="divide-y divide-white/[0.06] rounded-xl border border-white/10 md:hidden" data-testid="production-review-summary">
+                {[[d("design"), labels.face(face.face), 0], [d("appearance"), appearanceName ?? "", 1], [n("field"), nfcMount ? nfcName(nfcMount) : n("fixed"), 2], [d("pieces"), t.plural("pieceCount", plan.count), 3], ...(organizations.length > 1 && organization ? [[t("organization"), organization.name, 3]] : [])].map(([label, value, target]) => (
+                  <button key={label} type="button" aria-label={d("edit", { step: label })} disabled={busy} onClick={() => setStep(Number(target))} className="flex min-h-10 w-full items-center justify-between gap-3 px-3 text-left transition-colors first:rounded-t-xl last:rounded-b-xl hover:bg-white/[0.04]">
+                    <span className="shrink-0 text-xs text-white/45">{label}</span>
+                    <span className="min-w-0 truncate text-sm font-medium text-white">{value}</span>
+                  </button>
+                ))}
+              </div>
               <MaterialsNeeded materials={materialsForNfc(face.materials, nfcMount ? face.nfcVariants[nfcMount] : null)} filaments={filamentColours(model)} assembly={assemblyParts(model, models, nfcMount)} />
-              <p className="text-xs leading-relaxed text-white/55">{b("generateDialogIntro")}</p>
-              <p className="text-xs leading-relaxed text-white/55">{b("reviewNext")}</p>
+              <p className="text-xs leading-relaxed text-white/50">{b("generateDialogIntro")} {b("reviewNext")}</p>
             </div> : null}
           </fieldset>
           </div>

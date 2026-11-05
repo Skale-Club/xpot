@@ -29,7 +29,6 @@ import { DesignPreview, GenerateDialog } from "./production-generate";
 import { printStyle } from "@shared/printDesigns";
 import { Piece3D } from "./production-piece-3d";
 import { ToPrintList } from "./production-orders";
-import { ThisComputer } from "./production-this-computer";
 import type { PreviewState } from "./production-preview-3d";
 import { PRODUCTION_BASE, minutesText, usePrintComputers, usePrintModels, usePrintRequests, useProductionAccess } from "./production-shared";
 import { needsPrintComputer, orderedPath, piecesAwaitingPrinted, serializedRequests } from "./production-workflow";
@@ -141,17 +140,16 @@ function PrintQueue({ go }: { go: Go }) {
   const waiting = needsPrintComputer(serializedRequests(requests ?? []));
   return (
     <aside id={QUEUE_ID} className="min-w-0 scroll-mt-20 space-y-3" aria-labelledby="production-pending-title" data-testid="production-pending-area">
-      <div className="flex flex-wrap items-end justify-between gap-2">
-        <SectionHeading id="production-pending-title" title={b("pendingTitle")} intro={b("pendingIntro")} />
-        <Button type="button" variant="ghost" size="sm" onClick={() => go(`${PRODUCTION_BASE}/queue`)}>
+      <div className="flex items-center justify-between gap-2">
+        <SectionHeading id="production-pending-title" title={b("pendingTitle")} />
+        <button type="button" onClick={() => go(`${PRODUCTION_BASE}/queue`)} className="inline-flex shrink-0 items-center gap-0.5 text-xs font-medium text-white/55 transition-colors hover:text-white" data-testid="production-all-orders">
           {b("allOrders")}
-          <ChevronRight />
-        </Button>
+          <ChevronRight className="h-3.5 w-3.5" aria-hidden="true" />
+        </button>
       </div>
+      {waiting ? <PrintComputerLine go={go} waiting={waiting} /> : null}
       <ToPrintList go={go} emptyHint={b("pendingEmptyHint")} />
       <PrintQuality />
-      <PrintComputerLine go={go} waiting={waiting} />
-      <ThisComputer />
     </aside>
   );
 }
@@ -167,27 +165,22 @@ function PrintQuality() {
   if (!data) return null;
   const rate = printProblemRate(data);
   return (
-    <section className="rounded-2xl border border-white/[0.08] bg-white/[0.03] p-3" aria-labelledby="production-quality-title" data-testid="production-quality">
-      <div className="flex items-baseline justify-between gap-2">
-        <h3 id="production-quality-title" className="text-sm font-semibold text-white">{b("qualityTitle")}</h3>
-        <span className="text-xs text-white/45">{b("qualityWindow", { days: data.days })}</span>
+    <section className="rounded-xl border border-white/[0.06] px-3 py-2 text-xs" aria-labelledby="production-quality-title" title={b("qualityWindow", { days: data.days })} data-testid="production-quality">
+      <div className="flex items-baseline gap-2">
+        <h3 id="production-quality-title" className="shrink-0 font-medium text-white/60">{b("qualityTitle")}</h3>
+        {rate === null ? <span className="min-w-0 truncate text-white/45">{b("qualityEmpty")}</span> : <>
+          <span className="shrink-0 text-sm font-semibold text-white" data-testid="production-quality-rate">{rate}%</span>
+          <span className="min-w-0 truncate text-white/45">{b("qualityLine", { problems: data.withProblem, pieces: data.pieces })}</span>
+        </>}
       </div>
-      {rate === null ? (
-        <p className="mt-1 text-xs text-white/55">{b("qualityEmpty")}</p>
-      ) : (
-        <>
-          <p className="mt-1 text-2xl font-semibold tracking-tight text-white" data-testid="production-quality-rate">{rate}%</p>
-          <p className="text-xs text-white/55">{b("qualityLine", { problems: data.withProblem, pieces: data.pieces })}</p>
-          {data.byProblem.length ? (
-            <ul className="mt-2 space-y-1 border-t border-white/[0.06] pt-2 text-xs text-white/70">
-              {data.byProblem.map(({ problem, count }) => (
-                <li key={problem} className="flex justify-between gap-2"><span className="min-w-0 truncate">{t(`pieceProblem_${problem}` as never)}</span><span className="font-medium text-white">{count}</span></li>
-              ))}
-            </ul>
-          ) : null}
-        </>
-      )}
-      {data.failedPrints > 0 ? <p className="mt-2 text-xs text-white/55">{b.plural("qualityFailed", data.failedPrints)}</p> : null}
+      {data.byProblem.length || data.failedPrints > 0 ? (
+        <ul className="mt-1.5 space-y-0.5 border-t border-white/[0.06] pt-1.5 text-white/60">
+          {data.byProblem.map(({ problem, count }) => (
+            <li key={problem} className="flex justify-between gap-2"><span className="min-w-0 truncate">{t(`pieceProblem_${problem}` as never)}</span><span className="font-medium text-white/80">{count}</span></li>
+          ))}
+          {data.failedPrints > 0 ? <li>{b.plural("qualityFailed", data.failedPrints)}</li> : null}
+        </ul>
+      ) : null}
     </section>
   );
 }

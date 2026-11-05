@@ -6,7 +6,7 @@ import { useT } from "@/i18n";
 import { thisComputerMessages } from "@/i18n/messages/thisComputer";
 import { sendJson } from "./api";
 
-// "This computer" on the Printing tab: any computer can make print files, so the page asks this one what it has. A page
+// "This computer" on the Computers screen: any computer can make print files, so the page asks this one what it has. A page
 // cannot see what is installed: Xpot Desktop (print-pipeline/desktop.py) answers on 127.0.0.1, and only to Xpot's pages.
 
 const DESKTOP = "http://127.0.0.1:47631";
