@@ -65,7 +65,7 @@ export const INTEGRATION_PROVIDERS: IntegrationProviderDef[] = [
   },
   {
     provider: "groq",
-    label: "Groq — Whisper (voice)",
+    label: "Groq: Whisper (voice)",
     description: "Primary for visit voice notes: turns the recording into text.",
     table: "chat",
     category: "Voice",
@@ -74,7 +74,7 @@ export const INTEGRATION_PROVIDERS: IntegrationProviderDef[] = [
   },
   {
     provider: "openai",
-    label: "OpenAI — Whisper (voice fallback)",
+    label: "OpenAI: Whisper (voice fallback)",
     description: "Fallback for visit voice notes: used when Groq is off or fails.",
     table: "chat",
     category: "Voice",
@@ -83,7 +83,7 @@ export const INTEGRATION_PROVIDERS: IntegrationProviderDef[] = [
   },
   {
     provider: "openrouter",
-    label: "OpenRouter — LLM",
+    label: "OpenRouter: LLM",
     description: "Primary for AI text: visit summaries and suggested follow-ups.",
     table: "chat",
     category: "AI",
@@ -114,7 +114,7 @@ export const INTEGRATION_PROVIDERS: IntegrationProviderDef[] = [
   },
   {
     provider: "gemini",
-    label: "Gemini — LLM (fallback)",
+    label: "Gemini: LLM (fallback)",
     description: "Fallback for AI text: used when OpenRouter is off or has no key.",
     table: "chat",
     category: "AI",

@@ -259,7 +259,7 @@ export function IntegrationsHub() {
           }
         >
           <dl className="mt-3 grid grid-cols-2 gap-x-4 gap-y-2">
-            <Meta label={tp("lastSuccess")}>{xphere?.lastSuccessAt ? lines.ago(xphere.lastSuccessAt) : "—"}</Meta>
+            <Meta label={tp("lastSuccess")}>{xphere?.lastSuccessAt ? lines.ago(xphere.lastSuccessAt) : "-"}</Meta>
             {lines.lastError(xphere) && <Meta label={tp("lastError")} tone="bad">{lines.lastError(xphere)}</Meta>}
           </dl>
           <XphereConnectedPeople />

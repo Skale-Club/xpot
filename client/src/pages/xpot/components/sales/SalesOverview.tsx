@@ -136,7 +136,7 @@ export function SalesOverview({ onGoToConsignments, onNewSale }: { onGoToConsign
                 {showProfit ? (days === 1 ? t("keptToday") : t("keptPeriod", { days })) : days === 1 ? t("soldToday") : t("soldPeriod", { days })}
               </div>
               <div className="mt-4 text-[38px] font-bold leading-none tracking-[-0.055em] tabular-nums text-white sm:text-5xl lg:text-[58px]" data-testid="sales-overview-main">
-                {showProfit ? (hasProfit ? formatCents(costed.profitCents) : "—") : formatCents(s.revenue.periodCents)}
+                {showProfit ? (hasProfit ? formatCents(costed.profitCents) : "-") : formatCents(s.revenue.periodCents)}
               </div>
               <div className="mt-2.5 flex flex-wrap items-center gap-2 text-xs text-emerald-50/45">
                 {hasProfit ? (
@@ -165,7 +165,7 @@ export function SalesOverview({ onGoToConsignments, onNewSale }: { onGoToConsign
               </div>
               <div className="bg-[#0b2425]/80 px-4 py-3">
                 <div className="text-[9px] font-bold uppercase tracking-[0.17em] text-white/30">{t("keptThisMonth")}</div>
-                <div className="mt-1 text-lg font-bold tabular-nums text-white">{allCosted ? formatCents(s.profit?.monthToDateCents ?? 0) : "—"}</div>
+                <div className="mt-1 text-lg font-bold tabular-nums text-white">{allCosted ? formatCents(s.profit?.monthToDateCents ?? 0) : "-"}</div>
                 <div className="text-[10px] text-white/35">{allCosted ? t("billedAmount", { amount: formatCents(s.revenue.monthToDateCents) }) : t("partialCostShort")}</div>
               </div>
             </div>
@@ -205,7 +205,7 @@ export function SalesOverview({ onGoToConsignments, onNewSale }: { onGoToConsign
             <FinancialMetric label={t("acquisitionCosts")} value={formatCents(s.financial.costCents ?? 0)} accent="cost" />
             <FinancialMetric
               label={allCosted ? t("grossProfitMetric") : t("profitWithCost")}
-              value={allCosted ? formatCents(s.financial.grossProfitCents ?? 0) : hasProfit ? t("profitOfSales", { profit: formatCents(costed.profitCents), sales: formatCents(costed.revenueCents) }) : "—"}
+              value={allCosted ? formatCents(s.financial.grossProfitCents ?? 0) : hasProfit ? t("profitOfSales", { profit: formatCents(costed.profitCents), sales: formatCents(costed.revenueCents) }) : "-"}
               accent="profit"
             />
           </div>

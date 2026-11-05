@@ -377,11 +377,11 @@ function PiecesTable({ items, selectedCode, onSelect, onCustomer }: {
                       <span className="truncate group-hover:underline">{tag.leadName}</span>
                     </button>
                   ) : (
-                    <span className="text-white/35" aria-label={t("noCustomer")}>—</span>
+                    <span className="text-white/35" aria-label={t("noCustomer")}>-</span>
                   )}
                   {tag.label && <div className="mt-0.5 truncate text-xs text-white/35">{tag.label}</div>}
                 </td>
-                <td className="truncate px-3 py-2.5 text-xs text-white/45">{tag.destinationUrl ? <DestinationLabel url={tag.destinationUrl} /> : "—"}</td>
+                <td className="truncate px-3 py-2.5 text-xs text-white/45">{tag.destinationUrl ? <DestinationLabel url={tag.destinationUrl} /> : "-"}</td>
                 <td className="px-3 py-2.5">
                   <div className="flex flex-wrap items-center gap-1">
                     <PieceStatusPills tag={tag} />

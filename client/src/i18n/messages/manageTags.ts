@@ -127,7 +127,7 @@ const en = {
   event_redirect: "Opened destination",
   event_inventory_scan: "Scanned with no customer yet",
   event_disabled_scan: "Scanned while paused",
-  event_misconfigured_scan: "Scanned — destination invalid",
+  event_misconfigured_scan: "Scanned: destination invalid",
 
   // Shared by the screens below
   revoke: "Revoke",
@@ -440,7 +440,7 @@ export const manageTagsMessages: Dictionary<typeof en> = {
     event_redirect: "Abriu o destino",
     event_inventory_scan: "Lida sem cliente",
     event_disabled_scan: "Lida enquanto pausada",
-    event_misconfigured_scan: "Lida — destino inválido",
+    event_misconfigured_scan: "Lida: destino inválido",
 
     revoke: "Revogar",
     creating: "Criando…",
@@ -742,7 +742,7 @@ export const manageTagsMessages: Dictionary<typeof en> = {
     event_redirect: "Abrió el destino",
     event_inventory_scan: "Leída sin cliente",
     event_disabled_scan: "Leída mientras estaba pausada",
-    event_misconfigured_scan: "Leída — destino no válido",
+    event_misconfigured_scan: "Leída: destino no válido",
 
     revoke: "Revocar",
     creating: "Creando…",

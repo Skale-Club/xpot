@@ -106,13 +106,13 @@ export function AdminOverview() {
       align: "right",
       render: (r) => <span className={r.locationExceptions > 0 ? "text-amber-300" : ""}>{r.locationExceptions}</span>,
     },
-    { key: "sales", label: tw("colSales"), align: "right", render: (r) => (r.salesCount > 0 ? money(r.salesTotalCents) : "—") },
+    { key: "sales", label: tw("colSales"), align: "right", render: (r) => (r.salesCount > 0 ? money(r.salesTotalCents) : "-") },
     {
       key: "last",
       label: tw("colLastActivity"),
       align: "right",
       cellClassName: "whitespace-nowrap text-white/55",
-      render: (r) => (r.lastActivityAt ? formatDateTime(r.lastActivityAt, t.locale) : "—"),
+      render: (r) => (r.lastActivityAt ? formatDateTime(r.lastActivityAt, t.locale) : "-"),
     },
   ];
 
@@ -168,7 +168,7 @@ export function AdminOverview() {
                   >
                     <span className="flex items-baseline justify-between gap-3">
                       <span className="truncate font-medium text-white">{r.displayName}</span>
-                      <span className="shrink-0 text-sm tabular-nums text-white/80">{r.salesCount > 0 ? money(r.salesTotalCents) : "—"}</span>
+                      <span className="shrink-0 text-sm tabular-nums text-white/80">{r.salesCount > 0 ? money(r.salesTotalCents) : "-"}</span>
                     </span>
                     <span className="mt-1 block text-xs text-white/45">
                       {tw("colVisits")} {r.visits} · {tw("colFinished")} {r.finishedVisits} ·{" "}

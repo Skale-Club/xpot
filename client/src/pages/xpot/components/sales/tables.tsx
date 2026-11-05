@@ -15,7 +15,7 @@ import { leadsMessages } from "@/i18n/messages/leads";
 import { salesMessages } from "@/i18n/messages/sales";
 import { salesModuleMessages } from "@/i18n/messages/salesModule";
 
-const itemsLine = (row: SaleWithItems) => row.items.map((i) => `${i.quantity}× ${i.description}`).join(" · ") || "—";
+const itemsLine = (row: SaleWithItems) => row.items.map((i) => `${i.quantity}× ${i.description}`).join(" · ") || "-";
 
 export function SalesTable({ rows, selectedId, onSelect }: {
   rows: SaleWithItems[];

@@ -428,7 +428,7 @@ export function createProspectingRouter() {
           // or reused businesses has none, so the search's automatic pipeline
           // never mistakes it for its own.
           jobId: input.jobId ?? null,
-          name: input.name ?? `Route — ${input.routeDate}`,
+          name: input.name ?? `Route: ${input.routeDate}`,
           routeDate: input.routeDate,
           plannedStartAt,
           plannedEndAt: new Date(plannedStartAt.getTime() + optimized.totalDurationSeconds * 1000),

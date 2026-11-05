@@ -99,8 +99,8 @@ function PrintedDialogBody({ job, onClose }: { job: PrintJobItem; onClose: () =>
                   <li key={piece.publicCode}>
                     <label className="flex min-h-11 cursor-pointer items-center gap-3 px-3 py-2 text-sm hover:bg-white/[0.03]">
                       <input type="checkbox" checked={bad.has(piece.publicCode)} disabled={busy} onChange={() => toggle(piece.publicCode)} className="h-4 w-4 shrink-0 accent-violet-500" />
-                      <span className="min-w-0 flex-1 text-white/80">{piece.position ?? "—"}</span>
-                      <span className="font-mono text-xs text-white/55">{piece.serialNumber ?? "—"}</span>
+                      <span className="min-w-0 flex-1 text-white/80">{piece.position ?? "-"}</span>
+                      <span className="font-mono text-xs text-white/55">{piece.serialNumber ?? "-"}</span>
                       <span className="font-mono text-xs text-white">{piece.publicCode}</span>
                     </label>
                     {bad.has(piece.publicCode) ? (

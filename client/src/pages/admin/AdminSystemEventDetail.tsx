@@ -19,7 +19,7 @@ import { eventScreenPath } from "./platform/servicesUi";
 
 /** Context values the panel can show as plain text; nested ones keep their JSON. */
 function contextValue(value: unknown) {
-  if (value === null || value === undefined || value === "") return "—";
+  if (value === null || value === undefined || value === "") return "-";
   if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") return String(value);
   return JSON.stringify(value);
 }

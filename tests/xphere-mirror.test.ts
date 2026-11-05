@@ -70,8 +70,8 @@ describe("a sale is its own won opportunity", () => {
     expect(b.opportunity).toMatchObject({
       pipeline: "Xpot Field Sales", external_id: "sale-7", stage: "Customer", status: "won", value: 600, currency: "USD",
     });
-    expect(b.opportunity.title).toBe("Barbearia do Zé — 1× Landing Page Website");
-    expect(b.note.content).toContain("1 × Landing Page Website — $600.00");
+    expect(b.opportunity.title).toBe("Barbearia do Zé: 1× Landing Page Website");
+    expect(b.note.content).toContain("1 × Landing Page Website: $600.00");
     expect(createSalesSyncEvent).toHaveBeenCalledWith(expect.objectContaining({
       provider: "xphere", entityType: "sales_sale", entityId: "7", status: "synced",
       payload: expect.objectContaining({ convertedInterest: false }),

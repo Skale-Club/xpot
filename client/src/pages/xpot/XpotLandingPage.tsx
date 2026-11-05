@@ -312,14 +312,14 @@ export function XpotLandingPage() {
   );
 
   const toolVisuals = [
-    { icon: Route, tone: "text-[#8FA8FF] bg-[#5272F2]/10 border-[#5272F2]/20", screenshot: "/landing/product/route-mobile-clean.webp", productPhoto: false, imageClass: "object-contain object-top sm:object-cover" },
-    { icon: MapPinned, tone: "text-[#61D8CE] bg-[#0BB8AF]/10 border-[#0BB8AF]/20", screenshot: "/landing/product/visit-mobile-clean.webp", productPhoto: false, imageClass: "object-contain object-top sm:object-cover" },
-    { icon: Boxes, tone: "text-[#8FA8FF] bg-[#5272F2]/10 border-[#5272F2]/20", screenshot: "/landing/product/sales-mobile-clean.webp", productPhoto: false, imageClass: "origin-top -translate-y-[3%] object-contain object-top scale-[0.94]" },
+    { icon: Route, tone: "text-[#8FA8FF] bg-[#5272F2]/10 border-[#5272F2]/20", screenshot: "/landing/product/route-mobile-clean.webp", productPhoto: false, imageClass: "object-cover object-top" },
+    { icon: MapPinned, tone: "text-[#61D8CE] bg-[#0BB8AF]/10 border-[#0BB8AF]/20", screenshot: "/landing/product/visit-mobile-clean.webp", productPhoto: false, imageClass: "object-cover object-top" },
+    { icon: Boxes, tone: "text-[#8FA8FF] bg-[#5272F2]/10 border-[#5272F2]/20", screenshot: "/landing/product/sales-mobile-clean.webp", productPhoto: false, imageClass: "object-cover object-top sm:origin-top sm:-translate-y-[3%] sm:scale-[0.94] sm:object-contain" },
     { icon: Nfc, tone: "text-[#61D8CE] bg-[#0BB8AF]/10 border-[#0BB8AF]/20", screenshot: "/landing/product/nfc-stands-barbershop.webp", productPhoto: true, imageClass: "object-cover object-[48%_center] brightness-[0.72] saturate-[0.82]" },
   ];
-  // The screen prints are the app in English: beside Portuguese or Spanish text they read as another product, and on a phone
-  // they come out about 130 px wide, too small to read. They stay where they can be read (a computer, English); the
-  // photo of the stands, which has no words, stays everywhere.
+  // The screen prints are the app in English: beside Portuguese or Spanish text they read as another product. On a phone
+  // they go above the text at full width, cropped from the top, so they can be read. The photo of the stands, which has no
+  // words, stays everywhere.
   const showPrints = t.lang === "en";
   const tools = content.tools.cards.map((card, index) => ({
     ...card,
@@ -522,10 +522,10 @@ export function XpotLandingPage() {
                 return (
                 <Reveal key={title} delay={i * 0.08} className="h-full">
                   <article className={`grid h-full overflow-hidden rounded-2xl border border-white/[0.07] bg-white/[0.035] transition-colors hover:border-white/[0.12] hover:bg-white/[0.05] sm:flex ${hasImage ? "sm:h-[400px] lg:h-[360px] xl:h-[380px]" : "sm:h-auto"} ${productPhoto ? "grid-cols-[38%_minmax(0,1fr)]" : "grid-cols-1"}`}>
-                    <div className={`relative min-h-[170px] overflow-hidden border-r border-white/[0.07] bg-[#070b16] sm:aspect-[5/8] sm:h-full sm:min-h-0 sm:w-auto sm:shrink-0 ${productPhoto ? "" : "hidden"} ${hasImage ? "sm:block" : "sm:hidden"}`}>
+                    <div className={`relative overflow-hidden border-white/[0.07] bg-[#070b16] sm:aspect-[5/8] sm:h-full sm:min-h-0 sm:w-auto sm:shrink-0 sm:border-b-0 sm:border-r ${productPhoto ? "min-h-[170px] border-r" : "h-72 border-b"} ${hasImage ? "" : "hidden"}`}>
                       <img
                         src={screenshot}
-                        alt={productPhoto ? title : `${title} — mobile screen with demo data`}
+                        alt={productPhoto ? title : `${title}: mobile screen with demo data`}
                         width={productPhoto ? 960 : 520}
                         height={productPhoto ? 720 : 832}
                         loading="lazy"

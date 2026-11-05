@@ -43,7 +43,7 @@ export function formatCurrency(value: number, currency: string) {
   return formatWholeCurrency(value, currency);
 }
 
-/** Seconds → "45 s", "12 min", "1 h 05 min"; missing: "—". */
+/** Seconds → "45 s", "12 min", "1 h 05 min"; missing: "-". */
 export function formatDuration(seconds?: number | null) {
   return formatKitDuration(seconds);
 }
@@ -156,7 +156,7 @@ export function centsToInput(cents: number | null | undefined): string {
   return (cents / 100).toFixed(2);
 }
 
-/** "Mar 4"; missing: "—". */
+/** "Mar 4"; missing: "-". */
 export function formatShortDate(value?: string | Date | null) {
   return formatDate(value, { month: "short", day: "numeric" });
 }

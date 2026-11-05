@@ -43,7 +43,7 @@ export function SaleStatusPills({ sale }: { sale: SaleWithItems["sale"] }) {
 /** Where an agreement stands: closed, late (red), due soon (amber), or its next date. */
 export function ConsignmentDuePill({ consignment, emptyAsDash = false }: {
   consignment: ConsignmentWithRefs["consignment"];
-  /** Tables show "—" when there is nothing to say; cards show nothing. */
+  /** Tables show "-" when there is nothing to say; cards show nothing. */
   emptyAsDash?: boolean;
 }) {
   const t = useT(salesModuleMessages);
@@ -52,7 +52,7 @@ export function ConsignmentDuePill({ consignment, emptyAsDash = false }: {
   if (overdue) return <Pill tone="red">{t("daysOverdue", { days: daysOverdue })}</Pill>;
   if (dueInDays !== null) return <Pill tone="amber">{dueInDays === 0 ? t("dueToday") : t("dueInDays", { days: dueInDays })}</Pill>;
   if (consignment.nextVisitDueAt) return <Pill tone="slate">{t("settleOn", { date: formatShortDate(consignment.nextVisitDueAt) })}</Pill>;
-  return emptyAsDash ? <span className="text-white/20">—</span> : null;
+  return emptyAsDash ? <span className="text-white/20">-</span> : null;
 }
 
 export function SaleCard({ row, onOpen }: { row: SaleWithItems; onOpen?: () => void }) {
@@ -76,7 +76,7 @@ export function SaleCard({ row, onOpen }: { row: SaleWithItems; onOpen?: () => v
             <span className="truncate text-sm font-semibold text-white">{lead?.name ?? ts("leadNumber", { id: sale.leadId })}</span>
           </div>
           <div className="mt-1 truncate text-xs text-white/45">
-            {items.map((i) => `${i.quantity}× ${i.description}`).join(" · ") || "—"}
+            {items.map((i) => `${i.quantity}× ${i.description}`).join(" · ") || "-"}
           </div>
           <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
             <span className="text-[11px] text-white/40">
@@ -293,7 +293,7 @@ export function SaleDetail({ row }: { row: SaleWithItems }) {
 
       {sale.status === "cancelled" ? (
         <InlineAlert tone="error">
-          {t("cancelledOn", { date: formatShortDate(sale.cancelledAt) })}{sale.cancelReason ? ` — ${sale.cancelReason}` : ""}
+          {t("cancelledOn", { date: formatShortDate(sale.cancelledAt) })}{sale.cancelReason ? `: ${sale.cancelReason}` : ""}
         </InlineAlert>
       ) : null}
     </div>

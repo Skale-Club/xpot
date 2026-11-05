@@ -242,12 +242,12 @@ export function describeAction(action: VisitAction, currency = "USD"): string {
     case "settlement": {
       const sold = action.soldQuantity != null ? `${action.soldQuantity} sold` : `${action.countedRemaining} left on the shelf`;
       const restock = action.restockQuantity ? `, restock ${action.restockQuantity}` : "";
-      return `Settle ${action.productName ?? "stock"} — ${sold}${restock}`;
+      return `Settle ${action.productName ?? "stock"}: ${sold}${restock}`;
     }
     case "sale": {
       const total = action.items.reduce((sum, i) => sum + (i.unitPriceCents ?? 0) * (i.quantity ?? 1), 0);
       const what = action.items.map((i) => `${i.quantity ?? 1}× ${i.description}`).join(", ");
-      return `Sell ${what}${total ? ` — ${fmt(total)}` : ""}`;
+      return `Sell ${what}${total ? `: ${fmt(total)}` : ""}`;
     }
     case "follow_up":
       return `${action.title}${action.inDays != null ? ` (in ${action.inDays}d)` : ""}`;

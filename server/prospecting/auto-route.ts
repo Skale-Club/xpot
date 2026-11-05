@@ -177,7 +177,7 @@ async function buildAutomaticRoute(job: ProspectingJob) {
     const [route] = await tx.insert(prospectingRoutes).values({
       repId: job.repId,
       jobId: job.id,
-      name: `Route — ${routeDate}`,
+      name: `Route: ${routeDate}`,
       routeDate,
       plannedStartAt,
       plannedEndAt: new Date(plannedStartAt.getTime() + optimized.totalDurationSeconds * 1000),

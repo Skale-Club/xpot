@@ -113,11 +113,11 @@ export async function syncSaleToXphere(saleId: number): Promise<Outcome> {
   const locations = await db.select().from(salesLeadLocations).where(eq(salesLeadLocations.leadId, lead.id)).limit(1);
 
   const lines = sale.items
-    .map((i) => `• ${i.quantity} × ${i.description} — ${money(i.totalCents, sale.sale.currency)}`)
+    .map((i) => `• ${i.quantity} × ${i.description}: ${money(i.totalCents, sale.sale.currency)}`)
     .join("\n");
   const kind = sale.sale.kind === "consignment_settlement" ? "Consignment settlement" : "Sale";
   const content = [
-    `${kind} — ${money(sale.sale.totalCents, sale.sale.currency)} (${sale.sale.paymentStatus})`,
+    `${kind}: ${money(sale.sale.totalCents, sale.sale.currency)} (${sale.sale.paymentStatus})`,
     lines,
     sale.sale.notes ? `\n${sale.sale.notes}` : null,
   ].filter(Boolean).join("\n");
@@ -148,7 +148,7 @@ export async function syncSaleToXphere(saleId: number): Promise<Outcome> {
       status: "won",
       value: sale.sale.totalCents / 100,
       currency: sale.sale.currency,
-      title: `${lead.name} — ${summary}`.slice(0, 200),
+      title: `${lead.name}: ${summary}`.slice(0, 200),
     },
     note: { title: kind, content, dedup_id: `xpot-sale-${sale.sale.id}` },
   });
@@ -228,9 +228,9 @@ export async function syncInterestToXphere(input: {
       status: "open",
       value: (input.estimatedValueCents ?? 0) / 100,
       currency: lifetime.currency,
-      title: `${lead.name} — ${input.interest ?? input.title}`.slice(0, 200),
+      title: `${lead.name}: ${input.interest ?? input.title}`.slice(0, 200),
     },
-    note: { title: "Field visit — interest", content },
+    note: { title: "Field visit: interest", content },
   });
 
   await storage.createSalesSyncEvent({
@@ -295,7 +295,7 @@ export async function syncTaskToXphere(taskId: number): Promise<Outcome> {
       source: task.source,
     },
     ...(lead ? { note: {
-      title: `Task — ${task.title}`,
+      title: `Task: ${task.title}`,
       content: [task.description, task.dueAt ? `Due: ${new Date(task.dueAt).toISOString()}` : null, `Status: ${task.status}`].filter(Boolean).join("\n"),
       dedup_id: `xpot-task-${task.id}-${task.updatedAt ? new Date(task.updatedAt).getTime() : task.status}`,
     } } : {}),

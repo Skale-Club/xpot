@@ -114,7 +114,7 @@ export function PieceTable({
 
   const selectableCodes = selection ? pieces.filter(selection.canSelect).map((p) => p.publicCode) : [];
   const allOn = selectableCodes.length > 0 && selectableCodes.every((c) => selection?.selected.has(c));
-  const none = <span className="text-white/30">—</span>;
+  const none = <span className="text-white/30">-</span>;
   // Many columns (Stock with its Batch): tighter cells and the model name under the code, so the table fits in any language.
   const crowded = columns.length >= 5;
   // A long label (Spanish: "Falló la grabación del chip") wraps in its pill instead of widening the column.

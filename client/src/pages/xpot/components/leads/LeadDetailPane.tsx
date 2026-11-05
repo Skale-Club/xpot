@@ -214,7 +214,7 @@ export function LeadDetailPane({ lead, pieces, visits, onClose, backLabel, onDel
       {/* Two zeros say nothing; with stock or pieces here the numbers are worth the room. */}
       {(unitsOnShelf ?? 0) > 0 || (pieces?.pieces ?? 0) > 0 ? (
         <div className={`grid grid-cols-2 overflow-hidden rounded-2xl ${GLASS_SUBTLE_CLASS}`}>
-          <Metric icon={<PackageCheck className="h-3.5 w-3.5" aria-hidden="true" />} label={t("colShelf")} value={unitsOnShelf == null ? "—" : String(unitsOnShelf)} />
+          <Metric icon={<PackageCheck className="h-3.5 w-3.5" aria-hidden="true" />} label={t("colShelf")} value={unitsOnShelf == null ? "-" : String(unitsOnShelf)} />
           <Metric icon={<Nfc className="h-3.5 w-3.5" aria-hidden="true" />} label={t("sectionPieces")} value={String(pieces?.pieces ?? 0)} />
         </div>
       ) : null}
@@ -257,7 +257,7 @@ export function LeadDetailPane({ lead, pieces, visits, onClose, backLabel, onDel
                 const when = formatVisitWhen(visit);
                 return (
                   <Link key={visit.id} href={`/dashboard/history/${visit.id}`} className="flex min-h-11 items-center justify-between gap-3 py-2.5 text-xs">
-                    <span className="tabular-nums text-white/55">{when ? `${when.date} · ${when.time}` : "—"}</span><StatusBadge status={visit.status} />
+                    <span className="tabular-nums text-white/55">{when ? `${when.date} · ${when.time}` : "-"}</span><StatusBadge status={visit.status} />
                   </Link>
                 );
               })}</div>

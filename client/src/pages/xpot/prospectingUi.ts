@@ -236,7 +236,7 @@ export function routeDateLabel(routeDate: string, locale: string, referenceDate 
 }
 
 export function routeDisplayName(route: { name: string; routeDate: string }, locale: string, referenceDate = new Date()) {
-  const generatedNames = [`Prospecting — ${route.routeDate}`, `Route — ${route.routeDate}`];
+  const generatedNames = [`Prospecting — ${route.routeDate}`, `Route — ${route.routeDate}`, `Route: ${route.routeDate}`];
   return generatedNames.includes(route.name.trim()) ? routeDateLabel(route.routeDate, locale, referenceDate) : route.name;
 }
 

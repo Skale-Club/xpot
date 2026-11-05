@@ -60,7 +60,7 @@ export function AdminXphere() {
       render: (row) => (
         <div className="min-w-0">
           <p className="truncate font-medium text-white/90" data-testid={`xphere-person-${row.repId}`}>{row.displayName}</p>
-          <p className="truncate text-xs text-white/40">{row.email ?? "—"}</p>
+          <p className="truncate text-xs text-white/40">{row.email ?? "-"}</p>
         </div>
       ),
     },
@@ -88,7 +88,7 @@ export function AdminXphere() {
             {row.lastSync.at && <span className="text-[11px] text-white/40">{formatDateTime(row.lastSync.at)}</span>}
           </div>
         ) : (
-          <span className="text-white/35">—</span>
+          <span className="text-white/35">-</span>
         ),
     },
     {

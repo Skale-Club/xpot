@@ -91,7 +91,7 @@ export function RangePicker({ value, onChange }: { value: AnalyticsRange; onChan
         className={`flex w-full min-w-0 items-center gap-1 rounded-full border py-0.5 pl-1 pr-0.5 sm:w-auto ${customOn ? "border-violet-400/40 bg-violet-500/[0.12]" : "border-white/[0.08] bg-white/[0.03]"}`}
       >
         <input type="date" aria-label={t("rangeFrom")} className={DATE_INPUT} value={custom.from} onChange={(e) => setCustom((c) => ({ ...c, from: e.target.value }))} />
-        <span className="text-xs text-white/40">–</span>
+        <span className="text-xs text-white/40">-</span>
         <input type="date" aria-label={t("rangeTo")} className={DATE_INPUT} value={custom.to} onChange={(e) => setCustom((c) => ({ ...c, to: e.target.value }))} />
         {/* Only once there is a start date: a button that does nothing is not shown. */}
         {custom.from ? <button
