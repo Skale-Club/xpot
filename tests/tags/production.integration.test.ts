@@ -605,7 +605,7 @@ describe("print requests", () => {
     expect(entry.content).toBe("Printer problem: warped");
 
     const quality = await request(app, "GET", "/api/xpot/admin/print-quality?days=30");
-    expect(quality.body).toMatchObject({ days: 30, pieces: 4, withProblem: 2, failedPrints: 0 });
+    expect(quality.body).toMatchObject({ days: 30, pieces: 4, withProblem: 2, failedPrints: 0, failedPieces: 0 });
     expect(quality.body.byProblem).toEqual(expect.arrayContaining([{ problem: "warped", count: 1 }, { problem: "unspecified", count: 1 }]));
   });
 

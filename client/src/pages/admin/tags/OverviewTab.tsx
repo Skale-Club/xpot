@@ -40,6 +40,7 @@ import { Loading, LoadError, organizationFilterOptions, uniqueOptions, useBatchO
 import { PieceDetail } from "./PieceDetail";
 import { useTagLabels } from "./labels";
 import { PieceTable } from "./piece-table";
+import { ProductionResults } from "./production-results";
 import { AnalyticsPanel, RangePicker, useDeviceLabel, type AnalyticsRange } from "./pieces-analytics";
 import {
   ACTIVITY_FILTERS,
@@ -290,6 +291,7 @@ export function OverviewTab({ go }: { go: Go }) {
 
   return (
     <div className="min-w-0 space-y-4" data-testid="admin-tags-overview">
+      <ProductionResults activated={data.counts.active} />
       <FleetAnalytics go={go} />
       <ActivityFeed overview={data} go={go} />
     </div>
