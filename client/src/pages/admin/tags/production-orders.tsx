@@ -196,7 +196,13 @@ function useRowActions() {
   const [redoing, setRedoing] = useState<PrintJobItem | null>(null);
   const { loaded, computers } = usePrintComputers();
   const sentence = useBuildSentence();
+  // Downloading a plate that is ready puts it on the printer: the row's next step becomes marking it printed.
+  const onPrinter = useMutation({
+    mutationFn: (id: string) => sendJson<PrintJobItem>("POST", `/api/xpot/admin/print-jobs/${id}/transition`, { action: "start" }),
+    onSettled: () => invalidateAdminTags(),
+  });
   return {
+    downloaded: (plate: PrintJobItem) => { if (plate.status === "ready") onPrinter.mutate(plate.id); },
     build: (plate: PrintJobItem) => { const state = buildState(plate, loaded ? computers : null); return state ? { state, text: sentence(plate, state) } : null; },
     markPrinted: setPrinting,
     printAgain: setRedoing,
@@ -221,10 +227,10 @@ function PlateRow({ plate, go, showStatus, queue = false, rows }: { plate: Print
     const primary = index === 0;
     switch (action) {
       case "download":
-        return file ? <DownloadFileButton key={action} id={file.id} label={t("downloadSliced")} quiet={!primary} /> : null;
+        return file ? <DownloadFileButton key={action} id={file.id} label={t("downloadSliced")} quiet={!primary} className={queue && primary ? "flex-1" : undefined} onDownloaded={() => rows.downloaded(plate)} /> : null;
       case "markPrinted":
         return (
-          <Button key={action} type="button" variant="brand" accent="tags" size="sm" className={queue ? "flex-1" : undefined} onClick={() => rows.markPrinted(plate)} data-testid="production-plate-printed">
+          <Button key={action} type="button" variant={primary ? "brand" : "ghost"} accent="tags" size="sm" className={queue && primary ? "flex-1" : undefined} onClick={() => rows.markPrinted(plate)} data-testid="production-plate-printed">
             <Printer />
             {t("markPrinted")}
           </Button>

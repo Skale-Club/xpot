@@ -111,7 +111,7 @@ export function useFileDownload() {
 }
 
 /** "Download file": the main action of a job that is ready, a quiet one once it is on the printer. */
-export function DownloadFileButton({ id, label, quiet = false, onDownloaded }: { id: string; label: string; quiet?: boolean; onDownloaded?: () => void }) {
+export function DownloadFileButton({ id, label, quiet = false, onDownloaded, className }: { id: string; label: string; quiet?: boolean; onDownloaded?: () => void; className?: string }) {
   const { download, busy } = useFileDownload();
   return (
     <Button
@@ -119,6 +119,7 @@ export function DownloadFileButton({ id, label, quiet = false, onDownloaded }: {
       variant={quiet ? "ghost" : "brand"}
       accent="tags"
       size="sm"
+      className={className}
       loading={busy === id}
       onClick={() => void download(id).then((ok) => { if (ok) onDownloaded?.(); })}
       data-testid="production-plate-download"
