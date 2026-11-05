@@ -6,9 +6,7 @@ import type { Dictionary } from "../index";
 
 const en = {
   needTitle: "What you need",
-  needIntro: "Have these ready before you print. Use exactly what is listed here.",
-  needSupplier: "From {supplier}",
-  needBuy: "Where to buy",
+  needIntro: "Have these at hand before you print.",
   kind_nfc_sticker: "NFC sticker",
   kind_filament: "Filament",
   kind_other: "Other",
@@ -70,9 +68,7 @@ export const partnerMaterialsMessages: Dictionary<typeof en> = {
   en,
   pt: {
     needTitle: "O que você precisa",
-    needIntro: "Deixe isto à mão antes de imprimir. Use exatamente o que está listado aqui.",
-    needSupplier: "De {supplier}",
-    needBuy: "Onde comprar",
+    needIntro: "Deixe isto à mão antes de imprimir.",
     kind_nfc_sticker: "Adesivo NFC",
     kind_filament: "Filamento",
     kind_other: "Outro",
@@ -131,9 +127,7 @@ export const partnerMaterialsMessages: Dictionary<typeof en> = {
   },
   es: {
     needTitle: "Lo que necesitas",
-    needIntro: "Ten esto a mano antes de imprimir. Usa exactamente lo que aparece aquí.",
-    needSupplier: "De {supplier}",
-    needBuy: "Dónde comprar",
+    needIntro: "Ten esto a mano antes de imprimir.",
     kind_nfc_sticker: "Adhesivo NFC",
     kind_filament: "Filamento",
     kind_other: "Otro",

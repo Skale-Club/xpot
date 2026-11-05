@@ -37,7 +37,7 @@ export function useModelName() {
 }
 
 /** The physical piece and its printed brand stay together throughout production. */
-export function ProductionIdentity({ model, hero = false }: { model: ProductionIdentityData; hero?: boolean }) {
+export function ProductionIdentity({ model, hero = false, compact = false }: { model: ProductionIdentityData; hero?: boolean; /** Picture, name and pills only: the name already says what is printed. */ compact?: boolean }) {
   const u = useT(unifiedProductionMessages);
   const labels = useTagLabels();
   const artwork = model.productType
@@ -49,7 +49,7 @@ export function ProductionIdentity({ model, hero = false }: { model: ProductionI
     <span className="min-w-0 space-y-1.5">
       <span className="block text-sm font-semibold leading-snug text-white">{model.title}</span>
       <span className="flex flex-wrap items-center gap-1.5 text-xs text-white/55">
-        {model.face ? <><TagFaceIcon face={model.face} size="xs" /><span>{labels.face(model.face)}</span></> : null}
+        {model.face && !compact ? <><TagFaceIcon face={model.face} size="xs" /><span>{labels.face(model.face)}</span></> : null}
         {model.productType ? <TagModelChips productType={model.productType} face={model.face} theme={model.theme} /> : model.theme ? <TagThemeChip theme={model.theme} /> : null}
       </span>
     </span>
