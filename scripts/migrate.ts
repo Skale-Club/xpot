@@ -8,23 +8,39 @@
 // whole run holds a Postgres advisory lock, so two containers starting at once
 // (a rolling deploy) never apply the same migration twice.
 
-import "dotenv/config";
+import dotenv from "dotenv";
 import { readdirSync, readFileSync } from "fs";
 import { join, resolve } from "path";
 import pg from "pg";
 import { inferLegacySalesBaseline, type SchemaColumn } from "./migration-baseline.js";
-import { resolveDatabaseUrl } from "../server/lib/database-target.js";
+import { describeDatabaseTarget, ignoredDatabaseOverride, resolveDatabaseUrl } from "../server/lib/database-target.js";
 
 const { Client } = pg;
 
 /** Arbitrary constant: the advisory-lock key every Xpot migration run shares. */
 const MIGRATION_LOCK_KEY = 72_110_001;
 
+// What the shell set for this run, before .env fills in the rest (dotenv never overrides it).
+const shellEnv = { ...process.env };
+dotenv.config();
+
+// A database typed in the shell that development would ignore: refuse, never migrate the development database by surprise.
+const ignored = ignoredDatabaseOverride(shellEnv);
+if (ignored) {
+  console.error(
+    `${ignored} is set in the shell, but NODE_ENV=development (from .env) migrates DEV_DATABASE_URL and ignores it, ` +
+    `so nothing was applied. For a disposable database run with NODE_ENV=test as well; ` +
+    `for the development database, unset ${ignored} (or use npm run migrate:dev).`,
+  );
+  process.exit(1);
+}
+
 const rawUrl = resolveDatabaseUrl();
 if (!rawUrl) {
   console.error("DATABASE_URL or POSTGRES_URL must be set");
   process.exit(1);
 }
+const target = describeDatabaseTarget(rawUrl);
 
 const useSsl =
   !rawUrl.includes("sslmode=disable") &&
@@ -47,11 +63,12 @@ async function main() {
       const ledger = (await client.query("SELECT to_regclass('public._xpot_migrations') AS ledger")).rows[0].ledger;
       const applied = new Set<string>(ledger ? (await client.query<{ name: string }>("SELECT name FROM _xpot_migrations")).rows.map(row => row.name) : []);
       const files = readdirSync(MIGRATIONS_DIR).filter(file => file.endsWith(".sql")).sort();
-      console.log(JSON.stringify({ mode: "read-only-plan", applied: applied.size, pending: files.filter(file => !applied.has(file)) }, null, 2));
+      console.log(JSON.stringify({ mode: "read-only-plan", database: target, applied: applied.size, pending: files.filter(file => !applied.has(file)) }, null, 2));
       await client.query("COMMIT");
     } finally { await client.end(); }
     return;
   }
+  console.log(`Database: ${target}`);
   try {
     await client.query("SELECT pg_advisory_lock($1)", [MIGRATION_LOCK_KEY]);
     await client.query(`

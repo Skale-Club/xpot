@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { resolveDatabaseUrl } from "../server/lib/database-target.js";
+import { describeDatabaseTarget, ignoredDatabaseOverride, resolveDatabaseUrl } from "../server/lib/database-target.js";
 
 const project = "developmentproject";
 const devUrl = `postgresql://postgres.${project}:test-secret@aws-1-us-east-1.pooler.supabase.com:5432/postgres`;
@@ -39,5 +39,26 @@ describe("development and production database separation", () => {
   });
   it("preserves test database configuration", () => {
     expect(resolveDatabaseUrl({ NODE_ENV: "test", DATABASE_URL: "postgres://disposable/test" })).toBe("postgres://disposable/test");
+  });
+});
+
+describe("a database typed in the shell that development would ignore", () => {
+  const disposable = "postgresql://postgres@localhost:55432/xpot_ci?sslmode=disable";
+  it("names DATABASE_URL or POSTGRES_URL set in the shell when development would migrate DEV_DATABASE_URL instead", () => {
+    expect(ignoredDatabaseOverride({ DATABASE_URL: disposable }, { ...development, DATABASE_URL: disposable })).toBe("DATABASE_URL");
+    expect(ignoredDatabaseOverride({ POSTGRES_URL: disposable }, { ...development, POSTGRES_URL: disposable })).toBe("POSTGRES_URL");
+  });
+  it("leaves alone the aliases written in .env, the dev URL itself, and every other environment", () => {
+    expect(ignoredDatabaseOverride({}, { ...development, DATABASE_URL: "postgres://prod/db", POSTGRES_URL: devUrl })).toBeNull();
+    expect(ignoredDatabaseOverride({ DATABASE_URL: devUrl }, { ...development, DATABASE_URL: devUrl })).toBeNull();
+    expect(ignoredDatabaseOverride({ DATABASE_URL: disposable }, { NODE_ENV: "test", DATABASE_URL: disposable })).toBeNull();
+    expect(ignoredDatabaseOverride({ DATABASE_URL: disposable }, { NODE_ENV: "production", DATABASE_URL: disposable })).toBeNull();
+  });
+  it("describes where a run goes without the user or password", () => {
+    const dev = describeDatabaseTarget(devUrl, development);
+    expect(dev).toBe(`the Supabase development database, project ${project} (aws-1-us-east-1.pooler.supabase.com:5432/postgres)`);
+    expect(dev).not.toContain("test-secret");
+    expect(describeDatabaseTarget(disposable, { NODE_ENV: "test" })).toBe("localhost:55432/xpot_ci");
+    expect(describeDatabaseTarget("not a url", { NODE_ENV: "test" })).toBe("an unreadable database URL");
   });
 });
