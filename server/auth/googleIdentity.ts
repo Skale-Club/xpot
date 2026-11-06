@@ -20,6 +20,9 @@ export async function verifyGoogleIdentity(token: string): Promise<GoogleIdentit
   const { payload } = await jwtVerify(token, keys, {
     algorithms: ['RS256'], audience: projectId, issuer: `https://securetoken.google.com/${projectId}`,
     requiredClaims: ['sub', 'iat', 'exp', 'auth_time'], maxTokenAge: '65m',
+    // Google stamps the token by its own clock; a server clock a little behind
+    // must not read a fresh token as one from the future.
+    clockTolerance: '5m',
   });
   return identityFromVerifiedClaims(payload);
 }

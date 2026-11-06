@@ -19,7 +19,8 @@ async function token(options: { issuer?: string; audience?: string; expired?: bo
  return new SignJWT({ auth_time: options.authTime ?? Math.floor(Date.now()/1000), phone_number:'+12015550123', firebase:{ sign_in_provider:'phone' } })
   .setProtectedHeader({ alg:'RS256', kid:'test-key' }).setSubject('verified-uid')
   .setIssuer(options.issuer ?? 'https://securetoken.google.com/skaleclub').setAudience(options.audience ?? 'skaleclub')
-  .setIssuedAt().setExpirationTime(options.expired ? '0s' : '1h').sign(privateKey);
+  // Expired an hour ago: well past the clock tolerance the verifier allows.
+  .setIssuedAt(options.expired ? Math.floor(Date.now()/1000) - 7200 : undefined).setExpirationTime(options.expired ? Math.floor(Date.now()/1000) - 3600 : '1h').sign(privateKey);
 }
 describe('Google token cryptographic boundary', () => {
  it('accepts a signed token for the configured project', async () => { expect(await verifyGoogleIdentity(await token())).toMatchObject({ uid:'verified-uid',phone:'+12015550123' }); });

@@ -41,7 +41,11 @@ export function registerGoogleLoginRoutes(app: Express) {
       if (typeof token !== 'string' || token.length > 16_384) return res.status(400).json({ code: 'invalid_token' });
       let identity;
       try { identity = await verifyGoogleIdentity(token); }
-      catch { return res.status(401).json({ code: 'invalid_token' }); }
+      catch (error) {
+        // The reason only (expired, wrong audience, unreachable keys), never the token.
+        console.warn('[google-login] token rejected:', error instanceof Error ? `${error.name}: ${error.message}` : String(error));
+        return res.status(401).json({ code: 'invalid_token' });
+      }
       const binding: IdentityBinding = { projectId: config.projectId!, uid: identity.uid, provider: identity.provider, email: identity.email };
       const user = await findAccount(binding, identity.phone);
       if (!user) {
