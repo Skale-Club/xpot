@@ -9,6 +9,8 @@ import {
   legacyPublicPath,
   parseRef,
   setFileStoresForTests,
+  activeStore,
+  storeFor,
   uploaderRepId,
 } from "../server/lib/files.js";
 import { memoryStore } from "./helpers/memoryStore.js";
@@ -102,5 +104,18 @@ describe("isRepAvatarUrl", () => {
 
   it("trusts nothing when the storage project is not configured", () => {
     expect(isRepAvatarUrl(`${base}/avatars/7/1700_abc.jpg`, 7)).toBe(false);
+  });
+});
+
+describe("R2_READ_ONLY (development reading production's bucket)", () => {
+  afterEach(() => vi.unstubAllEnvs());
+  it("uploads go to Supabase while R2 files still open", () => {
+    const r2 = memoryStore("r2");
+    const supabase = memoryStore("supabase");
+    setFileStoresForTests({ r2, supabase });
+    expect(activeStore()).toBe(r2);
+    vi.stubEnv("R2_READ_ONLY", "true");
+    expect(activeStore()).toBe(supabase);
+    expect(storeFor("r2")).toBe(r2);
   });
 });
