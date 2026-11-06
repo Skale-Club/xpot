@@ -443,6 +443,41 @@ describe("serialized print orders", () => {
     expect((await q("SELECT count(*)::int AS n FROM tag_batches"))[0].n).toBe(1);
   });
 
+  it("retires a cancelled plate's codes out of the stock numbers, and brings the same codes back when printed again", async () => {
+    const app = admin();
+    await createSerializedModel(app);
+    const order = await firstPlate(app, { model: "plate-large-menu-white" });
+    const codes = (await q("SELECT public_code FROM tags WHERE batch_id = $1 ORDER BY serial_number", [order.batchId])).map((r) => r.public_code);
+    const notReceived = async () => (await request(app, "GET", "/api/xpot/admin/tags/overview")).body.funnel.notReceived;
+    expect(await notReceived()).toBe(4);
+
+    await request(app, "POST", `/api/xpot/admin/print-jobs/${order.id}/transition`, { action: "cancel" });
+    expect(await q("SELECT status, stock_status FROM tags WHERE batch_id = $1", [order.batchId])).toEqual(Array(4).fill({ status: "retired", stock_status: "retired" }));
+    expect((await q("SELECT status FROM tag_batches WHERE id = $1", [order.batchId]))[0].status).toBe("cancelled");
+    expect(await notReceived()).toBe(0);
+    const [entry] = await q("SELECT after_value, metadata FROM tag_journey_entries WHERE batch_id = $1 AND action = 'batch_status_changed'", [order.batchId]);
+    expect(entry).toMatchObject({ after_value: "cancelled", metadata: { printJobId: order.id, retired: 4 } });
+
+    // It had been printed after all: printed again on the same batch, the same codes are pending again, then stocked.
+    const redo = await request(app, "POST", `/api/xpot/admin/print-jobs/${order.id}/redo`);
+    expect(redo.status).toBe(201);
+    expect(redo.body).toMatchObject({ batchId: order.batchId, batchCode: order.batchCode, pendingCount: 4 });
+    expect((await q("SELECT public_code FROM tags WHERE batch_id = $1 AND stock_status = 'pending' AND status = 'inventory' ORDER BY serial_number", [order.batchId])).map((r) => r.public_code)).toEqual(codes);
+    expect((await q("SELECT status FROM tag_batches WHERE id = $1", [order.batchId]))[0].status).toBe("open");
+    const printed = await request(app, "POST", `/api/xpot/admin/print-jobs/${redo.body.id}/transition`, { action: "printed" });
+    expect(printed.body).toMatchObject({ status: "printed", receivedCount: 4, pendingCount: 0 });
+  });
+
+  it("leaves a cancelled plate's batch alone once any of its pieces was received", async () => {
+    const app = admin();
+    await createSerializedModel(app);
+    const order = await firstPlate(app, { model: "plate-large-menu-white" });
+    await q("UPDATE tags SET stock_status = 'available' WHERE batch_id = $1 AND serial_number = (SELECT min(serial_number) FROM tags WHERE batch_id = $1)", [order.batchId]);
+    await request(app, "POST", `/api/xpot/admin/print-jobs/${order.id}/transition`, { action: "cancel" });
+    expect((await q("SELECT status FROM tag_batches WHERE id = $1", [order.batchId]))[0].status).not.toBe("cancelled");
+    expect((await q("SELECT count(*)::int AS n FROM tags WHERE batch_id = $1 AND stock_status = 'pending'", [order.batchId]))[0].n).toBe(3);
+  });
+
   it("prints a plate that failed its QR check again with fresh codes, and retires the old ones", async () => {
     const app = admin();
     await createSerializedModel(app);
