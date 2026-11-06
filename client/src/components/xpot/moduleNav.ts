@@ -49,6 +49,8 @@ export type NavItem = {
   match: (path: string) => boolean;
   /** Only the global admin sees it, and it shows the "Xpot admin" tag (AdminBadge). */
   adminOnly?: boolean;
+  /** A live state shown as a small dot with a sentence on hover: "thisComputer" is whether this computer prints. */
+  status?: "thisComputer";
 };
 export type NavGroup = {
   label: string;
@@ -225,7 +227,7 @@ export function moduleGroups(module: XpotModule, viewer: Viewer, l: Labels): Nav
         // The showcase the resellers see in Tags › Shop: the Xpot admin keeps it.
         { href: "/admin/tags/shop", label: l.shell("manageShop"), icon: ShoppingBag, match: tab("shop"), adminOnly: true },
         { href: "/admin/tags/journey", label: l.shell("manageJourney"), icon: History, match: tab("journey"), adminOnly: true },
-        { href: "/admin/tags/provisioners", label: l.shell("manageWriters"), icon: Nfc, match: tab("provisioners"), adminOnly: true },
+        { href: "/admin/tags/provisioners", label: l.shell("manageWriters"), icon: Nfc, match: tab("provisioners"), adminOnly: true, status: "thisComputer" },
       ]),
     },
   ];

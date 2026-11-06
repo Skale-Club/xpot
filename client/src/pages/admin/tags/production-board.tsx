@@ -1,5 +1,5 @@
-import { Suspense, lazy, useMemo, useState } from "react";
-import { ChevronRight, Clock, Download, Loader2, Shapes } from "lucide-react";
+import { Suspense, lazy, useMemo, useState, type ReactNode } from "react";
+import { ChevronRight, Clock, Download, Loader2, MonitorOff, Shapes, type LucideIcon } from "lucide-react";
 import {
   isAlwaysReadyPart,
   printGenerateOptions,
@@ -25,10 +25,11 @@ import { DesignPreview, GenerateDialog } from "./production-generate";
 import { printStyle } from "@shared/printDesigns";
 import { Piece3D } from "./production-piece-3d";
 import { ToPrintList } from "./production-orders";
+import { isWindows, ThisComputerSteps, useXpotDesktopStatus } from "./production-this-computer";
+import { DesktopPreviewSwitcher } from "./DesktopPreviewSwitcher";
 import type { PreviewState } from "./production-preview-3d";
-import { PRODUCTION_BASE, minutesText, usePrintComputers, usePrintModels, usePrintRequests, useProductionAccess } from "./production-shared";
-import { needsPrintComputer, orderedPath, piecesAwaitingPrinted, serializedRequests } from "./production-workflow";
-import { relativeTime } from "@/pages/my/format";
+import { PRODUCTION_BASE, minutesText, usePrintModels, usePrintRequests, useProductionAccess } from "./production-shared";
+import { orderedPath, piecesAwaitingPrinted } from "./production-workflow";
 
 // Tags › Production's one screen. On one side, what can be made; on the other, the queue of what was sent to print, to
 // mark printed (or say which pieces had a problem). Below `xl` the queue goes under.
@@ -58,9 +59,15 @@ export function ProductionBoard({ go, onOtherWays }: { go: Go; onOtherWays?: () 
   const openModel = (model: PrintModelItem) => go(`${PRODUCTION_BASE}/models/${model.slug}`);
   const { data: requests } = usePrintRequests("all");
   const awaiting = piecesAwaitingPrinted(requests ?? []);
+  // Make exists to turn pieces into the file the 3D printer prints, and Xpot Desktop on this computer makes that file.
+  // Until it is ready here (or on a phone, or not Windows) the screen is the way to set this computer up instead.
+  const desktop = useXpotDesktopStatus(20_000);
+  const generatesHere = isWindows() && desktop.data?.ready === true;
 
   if (error && !data) return <LoadError what={t("catalogWhat")} error={error} onRetry={() => void refetch()} />;
-  if (isLoading) return <Loading rows={4} />;
+  // Only the first answer is waited for: a later re-ask must not unmount the board (that re-asked again, in a loop).
+  const desktopKnown = !isWindows() || desktop.dataUpdatedAt > 0 || desktop.errorUpdatedAt > 0;
+  if (isLoading || !desktopKnown) return <Loading rows={4} />;
 
   return (
     <div className="space-y-4" data-testid="production-board">
@@ -69,8 +76,10 @@ export function ProductionBoard({ go, onOtherWays }: { go: Go; onOtherWays?: () 
       <div className="grid gap-8 xl:grid-cols-[minmax(0,1fr)_minmax(340px,420px)] xl:items-start">
       <div className="min-w-0 space-y-8">
       <section className="space-y-3" aria-labelledby="production-generate-title" data-testid="production-generate-area">
+        {/* Whether this computer is connected shows as the dot on Devices in the menu, not on this screen. */}
         <SectionHeading id="production-generate-title" title={b("generateTitle")} intro={b("generateIntro")} />
-        {options.length ? (
+        {/* Only generating needs this computer (Xpot Desktop makes the file); the queue and the parts work on any device. */}
+        {!generatesHere ? <SetUpThisComputer /> : options.length ? (
           <ul className="grid grid-cols-2 gap-3">
             {options.map((option) => (
               <ProductCard key={option.productType} option={option} model={bySlug.get(option.colours[0].faces[0].slug)} onOpen={() => setGenerating(option)} />
@@ -105,6 +114,7 @@ export function ProductionBoard({ go, onOtherWays }: { go: Go; onOtherWays?: () 
       <PrintQueue go={go} awaiting={awaiting} />
       </div>
 
+      <DesktopPreviewSwitcher />
       {generating ? <GenerateDialog option={generating} models={bySlug} onClose={() => setGenerating(null)} onGenerated={(request) => go(orderedPath(request))} /> : null}
       {picking ? <PartFamilyDialog family={picking} onOpenModel={openModel} onClose={() => setPicking(null)} /> : null}
     </div>
@@ -115,16 +125,59 @@ export function ProductionBoard({ go, onOtherWays }: { go: Go; onOtherWays?: () 
 function AwaitingBar({ count, className = "" }: { count: number; className?: string }) {
   const b = useT(productionBoardMessages);
   return (
+    <BoardBar tone="amber" icon={Clock} className={className} testId="production-awaiting-bar"
+      onClick={() => document.getElementById(QUEUE_ID)?.scrollIntoView({ behavior: "smooth", block: "start" })}>
+      {b.plural("awaitingBar", count)}
+    </BoardBar>
+  );
+}
+
+const BAR_TONES = {
+  amber: { bar: "border-amber-400/25 bg-amber-400/[0.08] text-amber-100 hover:bg-amber-400/[0.14]", icon: "text-amber-300", end: "text-amber-200/70" },
+  green: { bar: "border-emerald-400/20 bg-emerald-400/[0.06] text-emerald-50/90 hover:bg-emerald-400/[0.1]", icon: "text-emerald-300", end: "text-emerald-200/60" },
+  slate: { bar: "border-white/[0.1] bg-white/[0.03] text-white/75 hover:bg-white/[0.06]", icon: "text-white/45", end: "text-white/45" },
+} as const;
+
+/** A line across the top of Make, the one shape for its notices: the tone says how much it asks for, `action` what a click does. */
+function BoardBar({ tone, icon: Icon, children, action, onClick, className = "", testId }: {
+  tone: keyof typeof BAR_TONES;
+  icon: LucideIcon;
+  children: ReactNode;
+  action?: string;
+  onClick: () => void;
+  className?: string;
+  testId?: string;
+}) {
+  const look = BAR_TONES[tone];
+  return (
     <button
       type="button"
-      onClick={() => document.getElementById(QUEUE_ID)?.scrollIntoView({ behavior: "smooth", block: "start" })}
-      className={`flex w-full items-center gap-2 rounded-xl border border-amber-400/25 bg-amber-400/[0.08] px-3 py-2 text-left text-sm font-medium text-amber-100 transition-colors hover:bg-amber-400/[0.14] ${className}`}
-      data-testid="production-awaiting-bar"
+      onClick={onClick}
+      className={`flex w-full items-center gap-2 rounded-xl border px-3 py-2 text-left text-sm font-medium transition-colors ${look.bar} ${className}`}
+      data-testid={testId}
     >
-      <Clock className="h-4 w-4 shrink-0 text-amber-300" aria-hidden="true" />
-      <span className="min-w-0 flex-1">{b.plural("awaitingBar", count)}</span>
-      <ChevronRight className="h-4 w-4 shrink-0 text-amber-200/70" aria-hidden="true" />
+      <Icon className={`h-4 w-4 shrink-0 ${look.icon}`} aria-hidden="true" />
+      <span className="min-w-0 flex-1">{children}</span>
+      {action ? <span className={`shrink-0 text-xs font-semibold ${look.end}`}>{action}</span> : null}
+      <ChevronRight className={`h-4 w-4 shrink-0 ${look.end}`} aria-hidden="true" />
     </button>
+  );
+}
+
+/** This computer does not generate print files yet: why, and the whole setup right here (download, install, pairing). */
+function SetUpThisComputer() {
+  const b = useT(productionBoardMessages);
+  return (
+    <section className="space-y-4 rounded-2xl border border-amber-400/25 bg-amber-400/[0.05] p-5" data-testid="production-set-up">
+      <div className="flex items-start gap-3">
+        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-amber-400/10 text-amber-300"><MonitorOff className="h-4 w-4" aria-hidden="true" /></span>
+        <div className="min-w-0">
+          <h3 className="text-sm font-semibold text-white">{b("setUpTitle")}</h3>
+          <p className="mt-1 text-sm text-white/60">{b("setUpBody")}</p>
+        </div>
+      </div>
+      <div className="pl-12"><ThisComputerSteps readyLine={false} /></div>
+    </section>
   );
 }
 
@@ -133,8 +186,6 @@ const QUEUE_ID = "production-queue";
 /** The queue: what was sent to print with a serial and still waits for "did it print?". Everything else is in All orders. */
 function PrintQueue({ go, awaiting }: { go: Go; awaiting: number }) {
   const b = useT(productionBoardMessages);
-  const { data: requests } = usePrintRequests("all");
-  const waiting = needsPrintComputer(serializedRequests(requests ?? []));
   return (
     <aside id={QUEUE_ID} className="min-w-0 scroll-mt-20 space-y-3" aria-labelledby="production-pending-title" data-testid="production-pending-area">
       <div className="flex items-center justify-between gap-2">
@@ -150,7 +201,6 @@ function PrintQueue({ go, awaiting }: { go: Go; awaiting: number }) {
           {b.plural("awaitingBar", awaiting)}
         </p>
       ) : null}
-      {waiting ? <PrintComputerLine go={go} waiting={waiting} /> : null}
       <ToPrintList go={go} emptyHint={b("pendingEmptyHint")} />
     </aside>
   );
@@ -162,33 +212,6 @@ function SectionHeading({ id, title, intro }: { id: string; title: string; intro
       <h2 id={id} className="text-base font-semibold text-white">{title}</h2>
       {intro ? <p className="mt-0.5 text-sm text-white/55">{intro}</p> : null}
     </div>
-  );
-}
-
-/** Whether the print computer is making the files: one line per computer, amber only when something is waiting for it. */
-function PrintComputerLine({ go, waiting }: { go: Go; waiting: boolean }) {
-  const b = useT(productionBoardMessages);
-  const { loaded, computers } = usePrintComputers();
-  if (!loaded) return null;
-  if (!computers.length) {
-    return (
-      <p className="text-xs text-white/55" data-testid="production-computer-none">
-        {b("computerNone")}{" "}
-        <button type="button" onClick={() => go("/provisioners")} className="underline underline-offset-2 hover:text-white">{b("computerPair")}</button>
-      </p>
-    );
-  }
-  return (
-    <ul className="space-y-1" data-testid="production-computers">
-      {computers.map((computer) => (
-        <li key={computer.name} className={`flex items-center gap-2 text-xs ${computer.on ? "text-white/60" : waiting ? "text-amber-200" : "text-white/50"}`}>
-          <span className={`h-2 w-2 shrink-0 rounded-full ${computer.on ? "bg-emerald-400" : waiting ? "bg-amber-400" : "bg-white/30"}`} aria-hidden="true" />
-          {computer.on
-            ? b("computerOn", { name: computer.name })
-            : computer.lastSeenAt ? b(waiting ? "computerOffWaiting" : "computerOff", { name: computer.name, time: relativeTime(computer.lastSeenAt, Date.now(), b.lang) }) : b("computerNever", { name: computer.name })}
-        </li>
-      ))}
-    </ul>
   );
 }
 

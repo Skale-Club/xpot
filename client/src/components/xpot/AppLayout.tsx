@@ -49,6 +49,7 @@ import {
 import { XpotLogo } from "./XpotLogo";
 import { useOnline } from "@/hooks/use-online";
 import { rememberPanelRoute } from "./panelRoute";
+import { isWindows, useXpotDesktopStatus } from "@/lib/xpotDesktop";
 import { PanelTabBar } from "./PanelTabBar";
 import { AdminModeBar } from "./AdminMode";
 import { useCompanyGroups } from "./companyNav";
@@ -178,7 +179,29 @@ function ManagementBackground({ children }: { children: ReactNode }) {
   return <div className="min-h-screen text-white" style={{ background: "linear-gradient(150deg, #191810 0%, #101317 35%, #0c1015 100%)" }} data-testid="management-background">{children}</div>;
 }
 
-function SidebarLink({ item, collapsed, active, accent, warningLabel }: { item: NavItem; collapsed: boolean; active: boolean; accent: Accent; warningLabel?: string }) {
+/** A sidebar item's live state: a small dot (green all well, red not working, amber needs a look) and its sentence on hover. */
+type NavStatus = { tone: "green" | "red" | "amber"; label: string };
+const NAV_DOT: Record<NavStatus["tone"], string> = {
+  green: "bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.55)]",
+  red: "bg-red-400 shadow-[0_0_8px_rgba(248,113,113,0.55)]",
+  amber: "bg-amber-400 shadow-[0_0_10px_rgba(251,191,36,0.65)] ring-4 ring-amber-400/10",
+};
+
+/**
+ * "thisComputer": whether this computer generates print files, from Xpot Desktop on it (Windows only; elsewhere no
+ * dot). Asked only when a menu item wants it, calmly (every 30 s), from the same query as Make and Devices.
+ */
+function useNavStatus(wanted: boolean): NavStatus | undefined {
+  const t = useT(shellMessages);
+  const on = wanted && isWindows();
+  const { data, error, dataUpdatedAt, errorUpdatedAt } = useXpotDesktopStatus(30_000, on);
+  if (!on || (!dataUpdatedAt && !errorUpdatedAt)) return undefined;
+  if (data?.ready && !error) return { tone: "green", label: t("thisComputerReady") };
+  if (!data || error) return { tone: "red", label: t("thisComputerNoDesktop") };
+  return { tone: "red", label: t("thisComputerNotReady") };
+}
+
+function SidebarLink({ item, collapsed, active, accent, status }: { item: NavItem; collapsed: boolean; active: boolean; accent: Accent; status?: NavStatus }) {
   const Icon = item.icon;
   return (
     <Link
@@ -192,12 +215,14 @@ function SidebarLink({ item, collapsed, active, accent, warningLabel }: { item: 
       {active && <span className="absolute inset-0 rounded-xl" style={{ background: accent.soft }} />}
       <Icon className={`relative h-[18px] w-[18px] shrink-0 ${active ? accent.text : ""}`} />
       {!collapsed && <span className="relative truncate">{item.label}</span>}
-      {warningLabel ? (
+      {status ? (
         <span
-          className={`${collapsed ? "absolute right-2 top-2" : "relative ml-auto"} h-2.5 w-2.5 rounded-full bg-amber-400 shadow-[0_0_10px_rgba(251,191,36,0.65)] ring-4 ring-amber-400/10`}
-          title={warningLabel}
-          aria-label={warningLabel}
+          className={`${collapsed ? "absolute right-2 top-2" : "relative ml-auto"} h-2 w-2 shrink-0 rounded-full ${NAV_DOT[status.tone]}`}
+          title={status.label}
+          aria-label={status.label}
           role="img"
+          data-testid="nav-status-dot"
+          data-tone={status.tone}
         />
       ) : null}
       {item.adminOnly && (collapsed ? <AdminBadge dot className="absolute right-1.5 top-1.5" /> : <AdminBadge compact className="relative ml-auto" />)}
@@ -323,6 +348,7 @@ function DesktopSidebar({ collapsed, onToggle, pending }: { collapsed: boolean; 
   const t = useT(shellMessages);
   const [location] = useLocation();
   const { context, module, modules, groups, moduleLabel, me, panel, ownerCompany, panelName, accent, profile, currentPanel } = useShellNav();
+  const thisComputer = useNavStatus(groups.some((group) => group.items.some((item) => item.status === "thisComputer")));
   const avatar = useAvatarUpload();
   const online = useOnline();
   const [, navigate] = useLocation();
@@ -398,7 +424,7 @@ function DesktopSidebar({ collapsed, onToggle, pending }: { collapsed: boolean; 
 
       <ScrollingNav scrollKey={`sidebar.${me?.user.id ?? "guest"}.${panel ? `management-${currentPanel}` : module ?? "account"}.${collapsed ? "collapsed" : "expanded"}`} label={panel ? panelName : module ? moduleLabel(module) : t("navSettings")}>
         {groups.map((group, i) => {
-          const items = group.items.map((item) => <SidebarLink key={item.href} item={item} collapsed={collapsed} active={item.match(location)} accent={accent} />);
+          const items = group.items.map((item) => <SidebarLink key={item.href} item={item} collapsed={collapsed} active={item.match(location)} accent={accent} status={item.status === "thisComputer" ? thisComputer : undefined} />);
           if (group.collapsible && !collapsed) return <CollapsibleGroup key={group.label || i} group={group}>{items}</CollapsibleGroup>;
           return <div key={group.label || i} className="space-y-1">
             {group.label && !collapsed ? <div className="flex items-center gap-2 px-3 pb-1 text-[10px] font-semibold uppercase tracking-widest text-white/35"><span className="truncate">{group.label}</span>{group.adminOnly && <AdminBadge className="ml-auto" />}</div> : null}
