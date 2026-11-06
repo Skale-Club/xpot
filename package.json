@@ -19,6 +19,7 @@
     "migrate:dev": "cross-env NODE_ENV=development tsx scripts/migrate.ts",
     "migrate:dev:plan": "cross-env NODE_ENV=development tsx scripts/migrate.ts --plan",
     "db:pull": "tsx scripts/db-pull.ts",
+    "desktop:installer": "tsx scripts/desktop-installer.ts",
     "files:migrate": "tsx scripts/migrate-private-files.ts",
     "files:shrink": "tsx scripts/shrink-lead-photos.ts",
     "test": "vitest run",

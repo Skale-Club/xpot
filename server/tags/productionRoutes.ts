@@ -22,6 +22,7 @@ import { actorOf, productionScopeOf, requireProductionUser, requireTagAdmin, req
 import { TagError } from "./errors.js";
 import * as production from "./production.js";
 import { companyOrganizationId } from "../organizations/service.js";
+import { ensureDevBenchBundle } from "../desktopRoutes.js";
 
 // Tags › Production HTTP API (docs/PRINT_EXECUTION_PLAN.md). Two audiences:
 //   /api/xpot/admin/print-*        — the global admin (catalog, versions, requests and their plates, files), and the
@@ -474,6 +475,7 @@ export function registerProductionRoutes(app: Express, deps: { device: readonly 
 
   // The print code itself, for Xpot Desktop on a computer that was just connected (scripts/build.ts packs it).
   app.get("/api/provisioner/bench-bundle", ...bench, (_req, res) => {
+    ensureDevBenchBundle();
     res.set("Cache-Control", "no-store");
     res.sendFile(resolve(process.cwd(), "dist/bench/print-pipeline.tgz"), (err) => {
       if (err && !res.headersSent) res.status(404).json({ message: "This server has no print code to send", code: "bench_bundle_missing" });

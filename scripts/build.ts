@@ -91,8 +91,9 @@ function buildClient() {
 }
 
 /**
- * What Xpot Desktop needs from the server: the program and its setup file are public (dist/public/desktop), the print code
- * goes only to a connected computer (dist/bench, GET /api/provisioner/bench-bundle).
+ * What Xpot Desktop needs from the server: the program is public (dist/public/desktop; its installer, XpotDesktopSetup.exe,
+ * comes from client/public/desktop with the client), the print code goes only to a connected computer (dist/bench,
+ * GET /api/provisioner/bench-bundle).
  */
 function buildBench() {
   console.log("→ Packing the print code ...");
@@ -101,7 +102,6 @@ function buildBench() {
   if (result.status !== 0) process.exit(result.status ?? 1);
   mkdirSync(resolve(ROOT, "dist/public/desktop"), { recursive: true });
   copyFileSync(resolve(ROOT, "print-pipeline/desktop.py"), resolve(ROOT, "dist/public/desktop/desktop.py"));
-  copyFileSync(resolve(ROOT, "print-pipeline/setup/XpotDesktopSetup.cmd"), resolve(ROOT, "dist/public/desktop/XpotDesktopSetup.cmd"));
 }
 
 async function main() {

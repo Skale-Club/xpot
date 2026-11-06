@@ -24,3 +24,6 @@ __pycache__/
 
 /.codex-local/
 /.audit-*.json
+
+# Xpot Desktop launcher, compiled by npm run desktop:installer
+print-pipeline/setup/build/
