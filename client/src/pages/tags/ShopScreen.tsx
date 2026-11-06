@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { ChevronLeft, ChevronRight, ExternalLink, ImageOff, Minus, Plus, ShoppingBag, ShoppingCart } from "lucide-react";
+import { ExternalLink, ImageOff, Minus, Plus, ShoppingBag, ShoppingCart } from "lucide-react";
 import {
   TAG_SHOWCASE_MAX_QUANTITY,
   shopLinkWithQuantity,
@@ -36,8 +36,6 @@ import { partnerLine, useWholesale, WholesaleCard } from "./WholesaleCard";
 // page. The price that counts is Stuscle's. A reseller whose partner handles its own distribution does not buy here
 // at all: the screen says whose pieces they are and to ask them (no catalogue, no price, no code).
 
-const CARD_WIDTH = "w-[82%] shrink-0 snap-start sm:w-[300px]";
-
 function Picture({ src, title }: { src: string | null; title: string }) {
   const t = useT(tagsMessages);
   return (
@@ -51,8 +49,42 @@ function Picture({ src, title }: { src: string | null; title: string }) {
   );
 }
 
-/** A Stuscle product: pick the variant and the bulk pack, see the pack's price against retail, Add to cart. */
-function ProductCard({ product, currency }: { product: TagShopProduct; currency: string }) {
+/** The big picture with a strip of thumbnails under it, like the product page on Stuscle. It starts again when the variant changes. */
+function Gallery({ images, title }: { images: string[]; title: string }) {
+  const t = useT(tagsMessages);
+  const [index, setIndex] = useState(0);
+  const current = images[Math.min(index, images.length - 1)] ?? null;
+  return (
+    <div className="space-y-3 lg:sticky lg:top-4 lg:self-start" data-testid="shop-gallery">
+      <div className="flex aspect-square items-center justify-center overflow-hidden rounded-2xl bg-black/20">
+        {current ? <img src={current} alt={t("shopPictureAlt", { title })} className="h-full w-full object-cover" /> : <ImageOff className="h-10 w-10 text-white/20" aria-hidden="true" />}
+      </div>
+      {images.length > 1 && (
+        <ul className="grid grid-cols-4 gap-2 sm:grid-cols-5">
+          {images.map((src, i) => (
+            <li key={src}>
+              <button
+                type="button"
+                onClick={() => setIndex(i)}
+                aria-label={t("shopPictureN", { number: i + 1 })}
+                aria-pressed={i === index}
+                className={`block aspect-square w-full overflow-hidden rounded-lg border bg-black/20 transition-colors ${i === index ? "border-violet-300/70" : "border-white/10 opacity-70 hover:opacity-100"}`}
+              >
+                <img src={src} alt="" loading="lazy" className="h-full w-full object-cover" />
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
+/**
+ * The product in view, laid out like Stuscle's product page: pictures on the left, details on the right (one column on a
+ * phone). Pick the variant and the bulk pack, see the pack's price against retail, Add to cart.
+ */
+function ProductDetail({ product, currency }: { product: TagShopProduct; currency: string }) {
   const t = useT(tagsMessages);
   const [variantId, setVariantId] = useState(product.variants[0].id);
   const [quantity, setQuantity] = useState(shopStartQuantity(product.variants[0]));
@@ -60,6 +92,8 @@ function ProductCard({ product, currency }: { product: TagShopProduct; currency:
   const sold = variant.packs.length > 0;
   const totals = shopTotals(variant, quantity);
   const retailUnit = totals.retailCents !== null ? totals.retailCents / totals.quantity : null;
+  const shown = shopPictureFor(product, variant);
+  const pictures = variant.images.length > 0 ? variant.images : product.images.length > 0 ? product.images : shown ? [shown] : [];
   const setQty = (value: number) => setQuantity(Math.min(TAG_SHOWCASE_MAX_QUANTITY, Math.max(1, Math.floor(value) || 1)));
   // A variant sold in packs only takes a pack's size: changing variant keeps the pack when it has one like it, else its smallest.
   const pick = (id: string) => {
@@ -68,10 +102,11 @@ function ProductCard({ product, currency }: { product: TagShopProduct; currency:
     setQuantity((current) => (next.packs.length > 0 && !next.packs.some((p) => p.quantity === current) ? shopStartQuantity(next) : current));
   };
   return (
-    <li className={`${CARD} ${CARD_WIDTH} flex flex-col overflow-hidden`} data-testid="shop-product">
-      <Picture src={shopPictureFor(product, variant)} title={product.title} />
-      <div className="flex flex-1 flex-col gap-3 p-4">
-        <h2 className="text-base font-bold leading-snug text-white">{product.title}</h2>
+    <section className={`${CARD} p-4 md:p-6`} data-testid="shop-product">
+      <div className="grid gap-5 md:grid-cols-2 md:gap-8 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)]">
+        <Gallery key={variant.id} images={pictures} title={product.title} />
+        <div className="flex min-w-0 flex-col gap-4">
+        <h2 className="text-xl font-bold leading-snug text-white md:text-2xl">{product.title}</h2>
         {product.variants.length > 1 && (
           <Select
             aria-label={t("shopVariant")}
@@ -81,10 +116,10 @@ function ProductCard({ product, currency }: { product: TagShopProduct; currency:
             data-testid="shop-variant"
           />
         )}
-        <div className="mt-auto space-y-3 pt-1">
+        <div className="space-y-4">
           <div>
             <p className="flex flex-wrap items-baseline gap-x-2">
-              <span className="text-xl font-bold text-white" data-testid="shop-wholesale-price">{formatMoney(totals.unitCents, currency)}</span>
+              <span className="text-2xl font-bold text-white" data-testid="shop-wholesale-price">{formatMoney(totals.unitCents, currency)}</span>
               <span className="text-xs text-white/45">{t("shopPerUnit")}</span>
             </p>
             {retailUnit !== null && totals.percentOff !== null && (
@@ -118,7 +153,7 @@ function ProductCard({ product, currency }: { product: TagShopProduct; currency:
                     aria-pressed={quantity === pack.quantity}
                     aria-label={t("shopPackLabel", { count: pack.quantity, price: formatMoney(pack.unitPriceCents, currency) })}
                     onClick={() => setQty(pack.quantity)}
-                    className={`flex h-12 min-w-0 flex-1 flex-col items-center justify-center rounded-lg border text-xs font-semibold transition-colors ${
+                    className={`flex h-14 min-w-0 flex-1 flex-col items-center justify-center rounded-lg border text-xs font-semibold transition-colors ${
                       quantity === pack.quantity ? "border-violet-300/60 bg-violet-400/20 text-white" : "border-white/10 bg-white/[0.04] text-white/60 hover:text-white"
                     }`}
                     data-testid="shop-pack"
@@ -168,7 +203,28 @@ function ProductCard({ product, currency }: { product: TagShopProduct; currency:
             </Button>
           </div>
         </div>
+        </div>
       </div>
+    </section>
+  );
+}
+
+/** Another Stuscle product, small: its picture, name and starting price. Tapping it brings it into view above. */
+function ProductTile({ product, currency, onOpen }: { product: TagShopProduct; currency: string; onOpen: () => void }) {
+  const t = useT(tagsMessages);
+  const first = product.variants[0];
+  const picture = shopPictureFor(product, first);
+  return (
+    <li>
+      <button type="button" onClick={onOpen} className={`${CARD} block w-full overflow-hidden text-left transition-colors hover:border-violet-300/40`} data-testid="shop-tile">
+        <div className="flex aspect-square items-center justify-center bg-black/20">
+          {picture ? <img src={picture} alt="" loading="lazy" className="h-full w-full object-cover" /> : <ImageOff className="h-8 w-8 text-white/20" aria-hidden="true" />}
+        </div>
+        <div className="space-y-0.5 p-3">
+          <p className="text-sm font-semibold leading-snug text-white">{product.title}</p>
+          <p className="text-xs text-white/55">{t("shopFrom", { price: formatMoney(first.wholesalePriceCents, currency) })}</p>
+        </div>
+      </button>
     </li>
   );
 }
@@ -178,7 +234,7 @@ function ShopCard({ item }: { item: TagShowcaseView }) {
   const kit = item.kind === "kit";
   const addsToCart = showcaseAddsToCart(item);
   return (
-    <li className={`${CARD} ${CARD_WIDTH} flex flex-col overflow-hidden`} data-testid="shop-item" data-kind={item.kind}>
+    <li className={`${CARD} flex flex-col overflow-hidden`} data-testid="shop-item" data-kind={item.kind}>
       <Picture src={item.imageUrl} title={item.title} />
       <div className="flex flex-1 flex-col gap-3 p-4">
         <div className="flex items-start justify-between gap-2">
@@ -218,54 +274,9 @@ function ShopCard({ item }: { item: TagShowcaseView }) {
   );
 }
 
-/** A row of cards that scrolls sideways (swipe on a phone, arrows on a computer), each card snapping into place. */
-function ShopCarousel({ count, children }: { count: number; children: ReactNode }) {
-  const t = useT(tagsMessages);
-  const track = useRef<HTMLUListElement>(null);
-  const [edges, setEdges] = useState({ start: true, end: true });
-  const measure = useCallback(() => {
-    const el = track.current;
-    if (!el) return;
-    setEdges({ start: el.scrollLeft <= 4, end: el.scrollLeft + el.clientWidth >= el.scrollWidth - 4 });
-  }, []);
-  useEffect(() => {
-    measure();
-    window.addEventListener("resize", measure);
-    return () => window.removeEventListener("resize", measure);
-  }, [measure, count]);
-  const step = (direction: 1 | -1) => {
-    const el = track.current;
-    const card = el?.querySelector("li");
-    if (!el || !card) return;
-    const smooth = !window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-    el.scrollBy({ left: direction * (card.getBoundingClientRect().width + 16), behavior: smooth ? "smooth" : "auto" });
-  };
-  const scrolls = !(edges.start && edges.end);
-  return (
-    <div className="relative" data-testid="shop-carousel">
-      <ul
-        ref={track}
-        onScroll={measure}
-        className="-mx-4 flex snap-x snap-mandatory gap-4 overflow-x-auto scroll-px-4 px-4 pb-2 [scrollbar-width:none] sm:mx-0 sm:scroll-px-0 sm:px-0 [&::-webkit-scrollbar]:hidden"
-      >
-        {children}
-      </ul>
-      {scrolls && (
-        <div className="mt-3 hidden justify-end gap-2 sm:flex">
-          <Button type="button" variant="secondary" size="icon" aria-label={t("shopPrev")} disabled={edges.start} onClick={() => step(-1)}>
-            <ChevronLeft />
-          </Button>
-          <Button type="button" variant="secondary" size="icon" aria-label={t("shopNext")} disabled={edges.end} onClick={() => step(1)}>
-            <ChevronRight />
-          </Button>
-        </div>
-      )}
-    </div>
-  );
-}
-
 export default function ShopScreen() {
   const t = useT(tagsMessages);
+  const [featuredId, setFeaturedId] = useState<string | null>(null);
   const tc = useT(commonMessages);
   const { data: me } = useQuery<XpotMeResponse>({ queryKey: ["/api/xpot/me"], retry: false });
   // A partner makes its own pieces: no buying for it (shared/profiles.ts, "buyPieces"). Until /me loads, the shop stays.
@@ -301,6 +312,8 @@ export default function ShopScreen() {
   }
   if (!storeKnown) return <div className="space-y-5" data-testid="tags-shop"><div className="lg:hidden"><TopBar title={t("navShop")} /></div><ListSkeleton rows={3} /></div>;
   const products = catalog.data?.products ?? [];
+  const featured = products.find((p) => p.id === featuredId) ?? products[0];
+  const others = products.filter((p) => p !== featured);
   const kits = entries.data ?? [];
   const count = products.length + kits.length;
   const failed = catalog.error && entries.error;
@@ -318,14 +331,34 @@ export default function ShopScreen() {
       ) : (catalog.isLoading || entries.isLoading) && !count ? (
         <ListSkeleton rows={3} />
       ) : count > 0 ? (
-        <ShopCarousel count={count}>
-          {products.map((product) => (
-            <ProductCard key={product.id} product={product} currency={catalog.data?.currency ?? "USD"} />
-          ))}
-          {kits.map((item) => (
-            <ShopCard key={item.id} item={item} />
-          ))}
-        </ShopCarousel>
+        <div className="space-y-6">
+          {featured && <ProductDetail key={featured.id} product={featured} currency={catalog.data?.currency ?? "USD"} />}
+          {others.length > 0 && (
+            <section className="space-y-3">
+              <h2 className="text-lg font-bold text-white">{t("shopMoreProducts")}</h2>
+              <ul className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-4">
+                {others.map((product) => (
+                  <ProductTile
+                    key={product.id}
+                    product={product}
+                    currency={catalog.data?.currency ?? "USD"}
+                    onOpen={() => {
+                      setFeaturedId(product.id);
+                      window.scrollTo({ top: 0, behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" });
+                    }}
+                  />
+                ))}
+              </ul>
+            </section>
+          )}
+          {kits.length > 0 && (
+            <ul className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              {kits.map((item) => (
+                <ShopCard key={item.id} item={item} />
+              ))}
+            </ul>
+          )}
+        </div>
       ) : (
         <EmptyState
           tone="tags"
