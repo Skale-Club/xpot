@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { ExternalLink, ImageOff, Minus, Plus, ShoppingBag, ShoppingCart } from "lucide-react";
+import { ArrowLeft, ExternalLink, ImageOff, Minus, Plus, ShoppingBag, ShoppingCart } from "lucide-react";
 import {
   TAG_SHOWCASE_MAX_QUANTITY,
   shopLinkWithQuantity,
@@ -312,9 +312,14 @@ export default function ShopScreen() {
   }
   if (!storeKnown) return <div className="space-y-5" data-testid="tags-shop"><div className="lg:hidden"><TopBar title={t("navShop")} /></div><ListSkeleton rows={3} /></div>;
   const products = catalog.data?.products ?? [];
-  const featured = products.find((p) => p.id === featuredId) ?? products[0];
-  const others = products.filter((p) => p !== featured);
   const kits = entries.data ?? [];
+  // All products first; one opens in full, with the others to pick from below. A lone product with nothing beside it opens straight away.
+  const featured = products.find((p) => p.id === featuredId) ?? (products.length === 1 && kits.length === 0 ? products[0] : null);
+  const others = products.filter((p) => p !== featured);
+  const open = (id: string | null) => {
+    setFeaturedId(id);
+    window.scrollTo({ top: 0, behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" });
+  };
   const count = products.length + kits.length;
   const failed = catalog.error && entries.error;
 
@@ -331,34 +336,44 @@ export default function ShopScreen() {
       ) : (catalog.isLoading || entries.isLoading) && !count ? (
         <ListSkeleton rows={3} />
       ) : count > 0 ? (
-        <div className="space-y-6">
-          {featured && <ProductDetail key={featured.id} product={featured} currency={catalog.data?.currency ?? "USD"} />}
-          {others.length > 0 && (
-            <section className="space-y-3">
-              <h2 className="text-lg font-bold text-white">{t("shopMoreProducts")}</h2>
+        featured ? (
+          <div className="space-y-6">
+            {products.length > 1 && (
+              <button type="button" onClick={() => open(null)} className="inline-flex items-center gap-1.5 text-sm font-medium text-white/60 transition-colors hover:text-white" data-testid="shop-back">
+                <ArrowLeft className="h-4 w-4" aria-hidden="true" />
+                {t("shopAllProducts")}
+              </button>
+            )}
+            <ProductDetail key={featured.id} product={featured} currency={catalog.data?.currency ?? "USD"} />
+            {others.length > 0 && (
+              <section className="space-y-3">
+                <h2 className="text-lg font-bold text-white">{t("shopMoreProducts")}</h2>
+                <ul className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-4">
+                  {others.map((product) => (
+                    <ProductTile key={product.id} product={product} currency={catalog.data?.currency ?? "USD"} onOpen={() => open(product.id)} />
+                  ))}
+                </ul>
+              </section>
+            )}
+          </div>
+        ) : (
+          <div className="space-y-6" data-testid="shop-all">
+            {products.length > 0 && (
               <ul className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-4">
-                {others.map((product) => (
-                  <ProductTile
-                    key={product.id}
-                    product={product}
-                    currency={catalog.data?.currency ?? "USD"}
-                    onOpen={() => {
-                      setFeaturedId(product.id);
-                      window.scrollTo({ top: 0, behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" });
-                    }}
-                  />
+                {products.map((product) => (
+                  <ProductTile key={product.id} product={product} currency={catalog.data?.currency ?? "USD"} onOpen={() => open(product.id)} />
                 ))}
               </ul>
-            </section>
-          )}
-          {kits.length > 0 && (
-            <ul className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-              {kits.map((item) => (
-                <ShopCard key={item.id} item={item} />
-              ))}
-            </ul>
-          )}
-        </div>
+            )}
+            {kits.length > 0 && (
+              <ul className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                {kits.map((item) => (
+                  <ShopCard key={item.id} item={item} />
+                ))}
+              </ul>
+            )}
+          </div>
+        )
       ) : (
         <EmptyState
           tone="tags"
