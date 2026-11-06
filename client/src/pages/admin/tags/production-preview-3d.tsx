@@ -57,6 +57,8 @@ export default function Preview3D({ url, frameMetres, resetLabel, onState }: {
     const controls = new OrbitControls(camera, renderer.domElement);
     controls.enableDamping = false;
     controls.screenSpacePanning = true;
+    // The mouse wheel scrolls the page, not the piece: with zoom off, OrbitControls leaves the wheel event alone.
+    controls.enableZoom = false;
     const draw = () => renderer.render(scene, camera);
     controls.addEventListener("change", draw);
 
