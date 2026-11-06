@@ -35,9 +35,6 @@ const en = {
 
   // Team
   repsLoadFailed: "Failed to load reps.",
-  waitingForApproval: "Waiting for approval",
-  activeCount: "Active ({count})",
-  blockedCount: "Blocked ({count})",
   noSignInPhone: "no sign-in phone",
   signedUpOn: "Signed up on {date}",
   applicationEmail: "Contact email",
@@ -121,7 +118,6 @@ const en = {
   roleAdminOnly: "Only the platform can change roles.",
   costPolicyNotSet: "Not set: choose one",
   chooseModules: "Choose at least one module.",
-  refusedCount: "Refused ({count})",
   refusedOn: "Refused on {date}",
   searchPeople: "Search by name, phone or email",
   filterStatus: "Status",
@@ -251,9 +247,6 @@ export const manageMessages: Dictionary<typeof en> = {
     syncStatus_needs_review: "Precisa de revisão",
 
     repsLoadFailed: "Não foi possível carregar os vendedores.",
-    waitingForApproval: "Aguardando aprovação",
-    activeCount: "Ativos ({count})",
-    blockedCount: "Bloqueados ({count})",
     noSignInPhone: "sem telefone de acesso",
     signedUpOn: "Cadastro em {date}",
     applicationEmail: "E-mail de contato",
@@ -336,7 +329,6 @@ export const manageMessages: Dictionary<typeof en> = {
     roleAdminOnly: "Só a plataforma pode mudar papéis.",
     costPolicyNotSet: "Não definido: escolha um",
     chooseModules: "Escolha pelo menos um módulo.",
-    refusedCount: "Recusados ({count})",
     refusedOn: "Recusado em {date}",
     searchPeople: "Buscar por nome, telefone ou e-mail",
     filterStatus: "Status",
@@ -458,9 +450,6 @@ export const manageMessages: Dictionary<typeof en> = {
     syncStatus_needs_review: "Requiere revisión",
 
     repsLoadFailed: "No se pudieron cargar los vendedores.",
-    waitingForApproval: "Esperando aprobación",
-    activeCount: "Activos ({count})",
-    blockedCount: "Bloqueados ({count})",
     noSignInPhone: "sin teléfono de acceso",
     signedUpOn: "Registro el {date}",
     applicationEmail: "Correo de contacto",
@@ -543,7 +532,6 @@ export const manageMessages: Dictionary<typeof en> = {
     roleAdminOnly: "Solo la plataforma puede cambiar roles.",
     costPolicyNotSet: "Sin definir: elige uno",
     chooseModules: "Elige al menos un módulo.",
-    refusedCount: "Rechazados ({count})",
     refusedOn: "Rechazado el {date}",
     searchPeople: "Buscar por nombre, teléfono o correo",
     filterStatus: "Estado",

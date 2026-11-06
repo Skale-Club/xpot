@@ -151,12 +151,33 @@ export function Setting({ label, hint, children }: { label: string; hint?: strin
  * refused has no place and no modules yet: those are chosen when it is approved.
  */
 export function PersonPills({ rep, showStatus = true }: { rep: Rep; showStatus?: boolean }) {
+  const undecided = isUndecided(rep);
+  return (
+    <>
+      {showStatus && <PersonStatusPill rep={rep} />}
+      {!undecided && <PersonPlacePill rep={rep} />}
+      {!undecided && <PersonModules rep={rep} />}
+    </>
+  );
+}
+
+/** A sign-up still waiting or refused: no place and no modules yet. */
+export const isUndecided = (rep: Rep) => {
+  const status = personStatus(rep);
+  return status === "pending" || status === "refused";
+};
+
+/** Where they stand: waiting, active, blocked or refused. */
+export function PersonStatusPill({ rep }: { rep: Rep }) {
   const t = useT(manageMessages);
-  const tc = useT(commonMessages);
+  const status = personStatus(rep);
+  return <Pill tone={STATUS_TONE[status]}>{t(`status_${status}`)}</Pill>;
+}
+
+/** Platform administrator, or their role in their organization ("Owner at Skale Club", "2 organizations"). */
+export function PersonPlacePill({ rep }: { rep: Rep }) {
   const tse = useT(settingsMessages);
   const tw = useT(peopleWorkspaceMessages);
-  const status = personStatus(rep);
-  const undecided = status === "pending" || status === "refused";
   const platform = rep.role === "admin";
   const roleKey = ROLE_KEYS[rep.role as (typeof ROLES)[number]];
   const first = rep.teams[0];
@@ -167,13 +188,13 @@ export function PersonPills({ rep, showStatus = true }: { rep: Rep; showStatus?:
       : first
         ? tw("personOrgLine", { role: tw(first.role === "admin" ? "orgRoleAdmin" : "orgRoleMember"), org: first.name })
         : tw("personNoOrg");
-  return (
-    <>
-      {showStatus && <Pill tone={STATUS_TONE[status]}>{t(`status_${status}`)}</Pill>}
-      {!undecided && <Pill tone={platform ? toneOf(ROLE_TONE, rep.role) : "slate"} className="max-w-full">{place}</Pill>}
-      {!undecided && <span className="text-xs text-white/45">{repModules({ role: rep.role, modules: rep.modules }).map((m) => tc(MODULE_KEYS[m])).join(" · ")}</span>}
-    </>
-  );
+  return <Pill tone={platform ? toneOf(ROLE_TONE, rep.role) : "slate"} className="max-w-full">{place}</Pill>;
+}
+
+/** "Visits · Tags": the modules they use. */
+export function PersonModules({ rep }: { rep: Rep }) {
+  const tc = useT(commonMessages);
+  return <span className="text-xs text-white/45">{repModules({ role: rep.role, modules: rep.modules }).map((m) => tc(MODULE_KEYS[m])).join(" · ")}</span>;
 }
 
 export function Section({ title, icon: Icon, children, testId }: { title: string; icon: LucideIcon; children: ReactNode; testId?: string }) {

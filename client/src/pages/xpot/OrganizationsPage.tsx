@@ -10,7 +10,9 @@ import { AppLayout } from "@/components/xpot/AppLayout";
 import { ConfirmDialog } from "@/components/xpot/ConfirmDialog";
 import { EmptyState, ErrorState } from "@/components/xpot/EmptyState";
 import { Field, Input, Select } from "@/components/xpot/Field";
-import { FilterToggle } from "@/components/xpot/filters";
+import { CompactDataTable, type CompactDataColumn } from "@/components/xpot/CompactDataTable";
+import { FilterBar, FilterSearch, FilterSelect, FilterToggle } from "@/components/xpot/filters";
+import { ListPager, usePagedList } from "@/components/xpot/pagination";
 import { InlineAlert } from "@/components/xpot/InlineAlert";
 import { ListSkeleton } from "@/components/xpot/ListSkeleton";
 import { BackLink, PageHeader } from "@/components/xpot/PageHeader";
@@ -71,6 +73,7 @@ type Organization = {
   memberCount?: number;
   personal?: boolean;
   counts?: { members: number; pieces: number; kits: number; customers: number };
+  createdAt?: string;
 };
 
 type Member = {
@@ -134,25 +137,40 @@ function OrganizationsEntry() {
   return only ? <Redirect to={`/organizations/${only}`} /> : <OrganizationsList />;
 }
 
+/**
+ * The organizations as one table (the app's CompactDataTable, as in Tags › Customers), so thirty of them still read
+ * at a glance: name, type (platform) or your role, members, status and created date, each row opening its workspace.
+ * The shared filter bar searches by name and narrows by type and status; on a phone the rows become a compact list.
+ */
 function OrganizationsList() {
   const [, navigate] = useLocation();
   const qc = useQueryClient();
   const t = useT(organizationsMessages);
   const tw = useT(peopleWorkspaceMessages);
+  const isDesktop = useIsDesktop();
   const { data: me } = useQuery<XpotMeResponse>({ queryKey: ["/api/xpot/me"] });
-  const { data: organizations = [], isLoading } = useQuery<Organization[]>({ queryKey: ["/api/xpot/organizations"] });
+  const { data: organizations = [], isLoading, error, refetch } = useQuery<Organization[]>({ queryKey: ["/api/xpot/organizations"] });
   const mayCreate = isPlatformManager(me);
   const { data: reps = [] } = useQuery<Person[]>({ queryKey: ["/api/xpot/admin/reps"], enabled: mayCreate });
   const [name, setName] = useState("");
   const [repAdminId, setRepAdminId] = useState("");
   const [creating, setCreating] = useState(false);
-  const filters = useUrlFilters({ personal: "", type: "all" });
+  // On a phone the filters wait behind one button, so the first organization is not a screen away (as in People).
+  const [filtersOpen, setFiltersOpen] = useState(false);
+  const filters = useUrlFilters({ q: "", personal: "", type: "", status: "" });
+  const query = filters.values.q.trim().toLocaleLowerCase();
   const showPersonal = filters.values.personal === "1";
-  const setShowPersonal = (shown: boolean) => filters.set({ personal: shown ? "1" : "" });
-  const type = filters.values.type === "producer" || filters.values.type === "seller" ? filters.values.type : "all";
-  const setType = (type: "all" | "producer" | "seller") => filters.set({ type });
+  const type = filters.values.type === "producer" || filters.values.type === "seller" ? filters.values.type : "";
+  const status = filters.values.status === "active" || filters.values.status === "inactive" ? filters.values.status : "";
   const personalCount = organizations.filter((o) => o.personal).length;
-  const shown = (showPersonal ? organizations : organizations.filter((o) => !o.personal)).filter((o) => type === "all" || (type === "producer") === isProducer(o));
+  const listed = showPersonal ? organizations : organizations.filter((o) => !o.personal);
+  const shown = listed.filter((o) =>
+    (!type || (type === "producer") === isProducer(o))
+    && (!status || (status === "active") === o.isActive)
+    && (!query || o.name.toLocaleLowerCase().includes(query)));
+  const narrowed = Boolean(query || type || status);
+  const paged = usePagedList(shown, { resetKey: `${query}|${type}|${status}|${showPersonal}` });
+  const showControls = isDesktop || filtersOpen || narrowed || showPersonal;
   const create = useMutation({
     mutationFn: () => json<Organization>("POST", "/api/xpot/organizations", { name, repAdminId: Number(repAdminId) }),
     onSuccess: (organization) => {
@@ -161,17 +179,72 @@ function OrganizationsList() {
     },
   });
 
+  const open = (organization: Organization) => navigate(`/organizations/${organization.id}${currentSearch()}`);
+  const typeLabel = (organization: Organization) => (isProducer(organization) ? t("typeProducer") : t("typeSeller"));
+  const roleLabel = (organization: Organization) => (organization.membershipRole === "admin" ? t("roleRepAdmin") : t("roleRep"));
+
+  const columns: CompactDataColumn<Organization>[] = [
+    {
+      key: "organization",
+      label: t("columnOrganization"),
+      render: (organization) => (
+        <div className="flex min-w-0 items-center gap-3">
+          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-white/[0.06] text-white/60">
+            <Building2 className="h-4 w-4" aria-hidden="true" />
+          </span>
+          <span className="min-w-0">
+            <strong className="block truncate text-sm font-semibold text-white/90">{organization.name}</strong>
+            {organization.personal && <span className="mt-0.5 block truncate text-[11px] text-white/35">{tw("personalWorkspace")}</span>}
+          </span>
+        </div>
+      ),
+    },
+    mayCreate
+      ? { key: "type", label: t("typeFilter"), width: 170, render: (organization) => <Pill tone={isProducer(organization) ? "violet" : "blue"}>{typeLabel(organization)}</Pill> }
+      : { key: "role", label: t("columnRole"), width: 150, render: (organization) => (organization.membershipRole ? <Pill tone="slate">{roleLabel(organization)}</Pill> : null) },
+    {
+      key: "members",
+      label: t("columnMembers"),
+      width: 110,
+      align: "right",
+      render: (organization) => <span className="font-semibold text-white/75">{organization.memberCount ?? 0}</span>,
+    },
+    {
+      key: "status",
+      label: t("columnStatus"),
+      width: 130,
+      render: (organization) => <Pill tone={organization.isActive ? "green" : "slate"} dot>{organization.isActive ? t("active") : t("inactive")}</Pill>,
+    },
+    {
+      key: "created",
+      label: t("columnCreated"),
+      width: 140,
+      render: (organization) => <span className="text-white/55">{formatDate(organization.createdAt)}</span>,
+    },
+    {
+      key: "open",
+      label: <span className="sr-only">{t("columnOrganization")}</span>,
+      width: 48,
+      align: "right",
+      render: () => <ChevronRight className="ml-auto h-4 w-4 text-white/20" aria-hidden="true" />,
+    },
+  ];
+
   return (
     <AppLayout title={t("title")} size="wide">
-      <div className="space-y-6">
-        <PageHeader backHref={mayCreate ? "/admin" : undefined} title={t("title")} description={t("intro")} className="mb-0" />
-
-        {mayCreate && (
-          <div className="flex flex-wrap gap-2">
-            <Button type="button" variant="secondary" size="sm" onClick={() => setCreating((open) => !open)} aria-expanded={creating} data-testid="new-organization-open"><Plus />{t("newOrganization")}</Button>
-            <NewPartnerDialog />
-          </div>
-        )}
+      <div className="space-y-4">
+        <PageHeader
+          backHref={mayCreate ? "/admin" : undefined}
+          title={t("title")}
+          description={t("intro")}
+          className="mb-2"
+          actions={mayCreate ? (
+            <div className="flex flex-wrap gap-2">
+              <Button type="button" variant="secondary" size="sm" onClick={() => setCreating((open) => !open)} aria-expanded={creating} data-testid="new-organization-open"><Plus />{t("newOrganization")}</Button>
+              <NewPartnerDialog />
+            </div>
+          ) : undefined}
+        />
 
         {mayCreate && creating && (
           <form
@@ -187,47 +260,78 @@ function OrganizationsList() {
           </form>
         )}
 
-        {(personalCount > 0 || mayCreate) && (
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <p className="text-xs text-white/45">{personalCount > 0 && !showPersonal ? tw.plural("personalHidden", personalCount) : ""}</p>
-            <div className="flex flex-wrap items-center gap-3">
-              {mayCreate && <Select value={type} onChange={(event) => setType(event.target.value as typeof type)} aria-label={t("typeFilter")} data-testid="organizations-type-filter"
-                options={[{ value: "all", label: t("typeAll") }, { value: "producer", label: t("typeProducer") }, { value: "seller", label: t("typeSeller") }]} />}
-              {personalCount > 0 && <FilterToggle pressed={showPersonal} onChange={setShowPersonal} label={tw("showPersonal")} testId="organizations-show-personal" />}
-            </div>
-          </div>
-        )}
-
-        {isLoading ? <ListSkeleton rows={3} className="grid gap-3 md:grid-cols-2 xl:grid-cols-3" rowClassName="h-32 rounded-2xl" /> : !organizations.length ? (
+        {isLoading ? <ListSkeleton rows={5} /> : error ? (
+          <ErrorState message={describeApiError(error)} onRetry={() => void refetch()} />
+        ) : !organizations.length ? (
           <EmptyState icon={Building2} title={t("emptyList")} />
-        ) : !shown.length ? (
-          <EmptyState compact icon={Building2} title={tw("onlyPersonal")} />
         ) : (
-          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3" data-testid="organizations-list">
-            {shown.map((organization) => (
-              <button
-                key={organization.id}
-                onClick={() => navigate(`/organizations/${organization.id}${currentSearch()}`)}
-                className={`rounded-2xl ${GLASS_CLASS} p-5 text-left transition-colors hover:border-white/20 hover:bg-white/[0.06]`}
-              >
-                <div className="flex items-start justify-between gap-3">
-                  <Building2 className="h-6 w-6 text-slate-200" />
-                  <div className="flex flex-wrap justify-end gap-1.5">
-                    {mayCreate && <Pill tone={isProducer(organization) ? "violet" : "blue"}>{isProducer(organization) ? t("typeProducer") : t("typeSeller")}</Pill>}
-                    {organization.personal && <Pill tone="slate">{tw("personalWorkspace")}</Pill>}
-                    {organization.membershipRole && (
-                      <Pill tone="slate">{organization.membershipRole === "admin" ? t("roleRepAdmin") : t("roleRep")}</Pill>
-                    )}
-                  </div>
+          <>
+            <FilterBar
+              testId="organizations-filters"
+              search={<FilterSearch value={filters.values.q} onChange={(q) => filters.set({ q })} placeholder={t("searchOrganizations")} testId="organizations-search" />}
+              actions={isDesktop ? undefined : <FilterToggle pressed={showControls} onChange={setFiltersOpen} label={tw("filters")} testId="organizations-filters-toggle" />}
+              controls={!showControls ? undefined : (
+                <>
+                  {mayCreate && (
+                    <FilterSelect value={type} onChange={(next) => filters.set({ type: next })} placeholder={t("typeAll")} testId="organizations-type-filter"
+                      options={[{ value: "producer", label: t("typeProducer") }, { value: "seller", label: t("typeSeller") }]} />
+                  )}
+                  <FilterSelect value={status} onChange={(next) => filters.set({ status: next })} placeholder={t("statusAll")} testId="organizations-status-filter"
+                    options={[{ value: "active", label: t("active") }, { value: "inactive", label: t("inactive") }]} />
+                  {personalCount > 0 && <FilterToggle pressed={showPersonal} onChange={(on) => filters.set({ personal: on ? "1" : "" })} label={tw("showPersonal")} testId="organizations-show-personal" />}
+                </>
+              )}
+              summary={{ shown: shown.length, total: listed.length, active: narrowed, onClear: () => filters.set({ q: "", type: "", status: "" }) }}
+            />
+
+            {!shown.length ? (
+              <EmptyState compact icon={Building2} title={narrowed ? t("noMatch") : tw("onlyPersonal")} />
+            ) : (
+              <div>
+                <CompactDataTable
+                  columns={columns}
+                  rows={paged.visible}
+                  getRowKey={(organization) => organization.id}
+                  onRowClick={open}
+                  getRowAriaLabel={(organization) => t("openOrganization", { name: organization.name })}
+                  getRowClassName={(organization) => (organization.isActive ? "" : "opacity-60")}
+                  className="hidden sm:block"
+                  testId="organizations-list"
+                  getRowTestId={(organization) => `organization-row-${organization.id}`}
+                />
+
+                <div className={`divide-y divide-white/[0.055] overflow-hidden rounded-2xl sm:hidden ${GLASS_SUBTLE_CLASS}`}>
+                  {paged.visible.map((organization) => (
+                    <button
+                      key={organization.id}
+                      type="button"
+                      onClick={() => open(organization)}
+                      className={`group flex w-full items-center gap-3 px-3.5 py-3 text-left transition-colors active:bg-white/[0.05] ${organization.isActive ? "" : "opacity-60"}`}
+                      aria-label={t("openOrganization", { name: organization.name })}
+                      data-testid={`organization-card-${organization.id}`}
+                    >
+                      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-white/[0.06] text-white/60">
+                        <Building2 className="h-4 w-4" aria-hidden="true" />
+                      </span>
+                      <span className="min-w-0 flex-1">
+                        <strong className="block truncate text-sm font-semibold text-white/90">{organization.name}</strong>
+                        <span className="mt-1 block truncate text-[11px] text-white/40">
+                          {[
+                            mayCreate ? typeLabel(organization) : organization.membershipRole ? roleLabel(organization) : null,
+                            tw.plural("membersCount", organization.memberCount ?? 0),
+                            organization.isActive ? t("active") : t("inactive"),
+                            organization.personal ? tw("personalWorkspace") : null,
+                          ].filter(Boolean).join(" · ")}
+                        </span>
+                      </span>
+                      <ChevronRight className="h-4 w-4 shrink-0 text-white/20 transition-transform group-active:translate-x-0.5" aria-hidden="true" />
+                    </button>
+                  ))}
                 </div>
-                <h2 className="mt-4 font-semibold text-white">{organization.name}</h2>
-                <p className="mt-1 text-xs text-white/35">
-                  {organization.isActive ? t("active") : t("inactive")}
-                  {organization.memberCount != null ? ` · ${tw.plural("membersCount", organization.memberCount)}` : ""}
-                </p>
-              </button>
-            ))}
-          </div>
+                <ListPager shown={paged.shown} total={paged.total} hasMore={paged.hasMore} onMore={paged.showMore} />
+              </div>
+            )}
+          </>
         )}
       </div>
     </AppLayout>
