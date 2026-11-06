@@ -529,6 +529,7 @@ export function AppLayout({
   wide = false,
   size,
   mobileColumnClassName = "pb-28 pt-5",
+  desktopColumnClassName = "lg:px-8 lg:pb-12 lg:pt-6",
   mobileMaxWidth = "max-w-md",
   mobileColumnStyle,
   pending = false,
@@ -544,11 +545,13 @@ export function AppLayout({
   /** Let the content use the full desktop width (redesigned screens). */
   wide?: boolean;
   /** Desktop content width; overrides `wide`. "medium" suits forms. */
-  size?: "narrow" | "medium" | "wide";
+  size?: "narrow" | "medium" | "wide" | "full";
   /** Width cap below `lg` (admin tables need more than a phone column on a tablet). */
   mobileMaxWidth?: string;
-  /** Padding of the phone column; desktop padding is fixed. */
+  /** Padding of the phone column. */
   mobileColumnClassName?: string;
+  /** Desktop column spacing; use with `size="full"` for layouts with a submenu. */
+  desktopColumnClassName?: string;
   mobileColumnStyle?: CSSProperties;
   /** Loading a route or changing data scope: render chrome without scoped requests. */
   pending?: boolean;
@@ -618,8 +621,8 @@ export function AppLayout({
         />
         <ActiveVisitBanner />
         <div
-          className={`relative mx-auto flex min-h-screen w-full ${mobileMaxWidth} flex-col px-4 ${ownerCompany ? MODULE_COLUMN : mobileColumnClassName} lg:min-h-0 lg:px-8 lg:pb-12 lg:pt-6 ${
-            { narrow: "lg:max-w-2xl", medium: "lg:max-w-5xl", wide: "lg:max-w-[1400px]" }[size ?? (wide ? "wide" : "narrow")]
+          className={`relative mx-auto flex min-h-screen w-full ${mobileMaxWidth} flex-col px-4 ${ownerCompany ? MODULE_COLUMN : mobileColumnClassName} lg:min-h-0 ${desktopColumnClassName} ${
+            { narrow: "lg:max-w-2xl", medium: "lg:max-w-5xl", wide: "lg:max-w-[1400px]", full: "lg:max-w-none" }[size ?? (wide ? "wide" : "narrow")]
           }`}
           style={mobileColumnStyle}
         >
