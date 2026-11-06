@@ -78,9 +78,13 @@ npm run migrate      # Apply pending SQL migrations to the database
 
 **Integration tests** need a real Postgres, so they skip unless
 `TAGS_INTEGRATION=1` is set. Point `DATABASE_URL` at a **disposable** database:
-the tests write to it. This is what CI does (`.github/workflows/ci.yml`):
+the tests write to it. This is what CI does (`.github/workflows/ci.yml`). On a machine whose `.env` says
+`NODE_ENV=development`, set `NODE_ENV=test` too: development always migrates `DEV_DATABASE_URL`, and
+`npm run migrate` refuses a `DATABASE_URL` typed in the shell that it would ignore. Every run prints the
+database it migrates.
 
 ```bash
+export NODE_ENV=test
 export DATABASE_URL="postgresql://postgres@localhost:5432/xpot_ci?sslmode=disable"
 export TAGS_INTEGRATION=1
 npm run migrate

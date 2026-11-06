@@ -27,3 +27,29 @@ export function resolveDatabaseUrl(env: NodeJS.ProcessEnv = process.env): string
   }
   return url;
 }
+
+/** Where a URL points, for a log line: host, port and database, never the user or the password. */
+export function describeDatabaseTarget(url: string, env: NodeJS.ProcessEnv = process.env): string {
+  let parsed: URL;
+  try { parsed = new URL(url); }
+  catch { return "an unreadable database URL"; }
+  const where = `${parsed.hostname}${parsed.port ? `:${parsed.port}` : ""}${parsed.pathname || ""}`;
+  return env.NODE_ENV === "development"
+    ? `the Supabase development database, project ${env.DEV_SUPABASE_PROJECT_REF} (${where})`
+    : where;
+}
+
+/**
+ * A database URL typed in the shell for this run that development would silently ignore. With NODE_ENV=development
+ * (from .env) every command uses DEV_DATABASE_URL, so `DATABASE_URL=<disposable db> npm run migrate` would migrate the
+ * development database instead. Returns the variable's name, or null. `shellEnv` is the environment before .env loaded:
+ * the aliases written in .env itself stay ignored, as resolveDatabaseUrl intends.
+ */
+export function ignoredDatabaseOverride(shellEnv: NodeJS.ProcessEnv, env: NodeJS.ProcessEnv = process.env): string | null {
+  if (env.NODE_ENV !== "development") return null;
+  for (const name of ["DATABASE_URL", "POSTGRES_URL"] as const) {
+    const value = shellEnv[name];
+    if (value && value !== env.DEV_DATABASE_URL) return name;
+  }
+  return null;
+}
