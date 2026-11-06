@@ -333,8 +333,13 @@ export async function putPublicFile(key: string, body: Uint8Array, contentType: 
   return getSupabaseAdmin().storage.from(PUBLIC_BUCKET).getPublicUrl(key).data.publicUrl;
 }
 
-/** Where new private uploads go: R2 when configured, else the private Supabase bucket. */
+/**
+ * Where new private uploads go: R2 when configured, else the private Supabase bucket.
+ * R2_READ_ONLY=true (development with a read-only key to production's bucket):
+ * R2 files still open, new uploads stay in Supabase and never reach production.
+ */
 export function activeStore(): FileStore | null {
+  if (process.env.R2_READ_ONLY === "true") return storeFor("supabase");
   return storeFor("r2") ?? storeFor("supabase");
 }
 
