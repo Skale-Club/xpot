@@ -30,7 +30,7 @@ describe("wholesale codes", () => {
   });
 
   it("builds the store link", () => {
-    expect(wholesaleUrl("https://stuscle.com/", "XPABCD1234")).toBe("https://stuscle.com/wholesale?code=XP-ABCD-1234");
+    expect(wholesaleUrl("https://stuscle.com/", "XPABCD1234")).toBe("https://stuscle.com/wholesale/kit?code=XP-ABCD-1234");
   });
 });
 
@@ -43,6 +43,10 @@ describe("wholesaleStoreUrl", () => {
     expect(url.searchParams.get("code")).toBe("XP-ABCD-1234");
     expect(url.searchParams.get("lang")).toBe("pt-BR");
     expect(url.searchParams.has("items")).toBe(false);
+  });
+
+  it("does not double the kit path on a link that already uses it", () => {
+    expect(new URL(wholesaleStoreUrl(plain, "en")).pathname).toBe("/wholesale/kit");
   });
 
   it("leaves the plain link alone when there is no language or no code", () => {
