@@ -1308,7 +1308,7 @@ export async function redoJob(id: string, userId: string | null, scope: Producti
   const codes = job.batchId
     ? planRedoCodes({
       errorCode: job.errorCode,
-      anyReceived: Number((await rows<{ n: number }>(sql`SELECT count(*)::int AS n FROM tags WHERE batch_id = ${job.batchId} AND stock_status <> 'pending'`))[0]?.n ?? 0) > 0,
+      anyReceived: Number((await rows<{ n: number }>(RECEIVED_TAG_SQL(job.batchId)))[0]?.n ?? 0) > 0,
     })
     : "fresh";
   const freshCodes = model.kind === "serialized" && codes !== "same";
@@ -1351,6 +1351,8 @@ export async function redoJob(id: string, userId: string | null, scope: Producti
     }
     // A part's plate: the bed's file on the version it printed (a file a plate took is never replaced).
     if (model.kind === "part") return createPartPlate(model, { id: job.versionId }, bed!, ctx);
+    // The same codes: the ones its cancel retired come back.
+    if (job.batchId) await restoreCancelledPlateCodes(tx, job.batchId, userId);
     const [next] = await tx.insert(printJobs).values({
       organizationId: job.organizationId,
       requestId: job.requestId,
@@ -1435,6 +1437,98 @@ export interface TransitionInput {
   pieceProblems?: Readonly<Record<string, PrintPieceProblem>>;
   userId: string | null;
   source?: JourneySource;
+}
+
+/** The reason on the `retire` movement of a code whose plate was cancelled before anything of its batch was received. */
+export const CANCELLED_PLATE_RETIRE_REASON = "Never printed: the plate was cancelled";
+
+/**
+ * A plate cancelled before any piece of its batch was received: the batch's codes never become pieces, so they are
+ * retired (one `retire` movement each, CANCELLED_PLATE_RETIRE_REASON) and the batch is cancelled, which takes them
+ * out of every stock number ("not received" above all). Only while this plate is the batch's plate and nothing was
+ * received; printing the plate again (redoJob) brings the same codes back (restoreCancelledPlateCodes).
+ */
+async function retireCancelledPlateCodes(tx: Tx, job: PrintJobRow, userId: string | null, source: JourneySource): Promise<() => Promise<void>> {
+  const none = async () => {};
+  if (!job.batchId) return none;
+  const [batch] = await tx.select().from(tagBatches).where(eq(tagBatches.id, job.batchId)).for("update");
+  if (!batch || batch.status === "cancelled" || (batch.printJobId && batch.printJobId !== job.id)) return none;
+  const list = await tx.select().from(tags).where(eq(tags.batchId, batch.id)).for("update");
+  if (list.some((t) => t.stockStatus !== "pending")) return none;
+  const now = new Date();
+  if (list.length) {
+    await tx.update(tags).set({ status: "retired", stockStatus: "retired", disabledAt: now, stockUpdatedAt: now, updatedAt: now })
+      .where(inArray(tags.id, list.map((t) => t.id)));
+    await tx.insert(tagStockMovements).values(list.map((t) => ({
+      tagId: t.id,
+      movementType: "retire",
+      fromStockStatus: "pending",
+      toStockStatus: "retired",
+      fromOwnershipType: t.ownershipType,
+      toOwnershipType: t.ownershipType,
+      fromCustodianRepId: t.custodianRepId,
+      toCustodianRepId: t.custodianRepId,
+      actorUserId: userId,
+      referenceType: "batch",
+      referenceId: batch.id,
+      reason: CANCELLED_PLATE_RETIRE_REASON,
+    })));
+  }
+  await tx.update(tagBatches).set({ status: "cancelled", updatedAt: now }).where(eq(tagBatches.id, batch.id));
+  return () => recordJourney({
+    kind: "execution",
+    action: "batch_status_changed",
+    title: `Batch ${batch.batchCode} cancelled: ${list.length} codes never printed retired`,
+    content: `${CANCELLED_PLATE_RETIRE_REASON}.`,
+    batchId: batch.id,
+    beforeValue: batch.status,
+    afterValue: "cancelled",
+    metadata: { printJobId: job.id, retired: list.length },
+  }, journeyContext(userId, source));
+}
+
+/** A tag counts as received unless it is still pending or was retired only because its plate was cancelled. */
+const RECEIVED_TAG_SQL = (batchId: string) => sql`
+  SELECT count(*)::int AS n FROM tags t
+  WHERE t.batch_id = ${batchId} AND t.stock_status <> 'pending'
+    AND NOT (t.stock_status = 'retired' AND (
+      SELECT m.reason FROM tag_stock_movements m WHERE m.tag_id = t.id ORDER BY m.created_at DESC LIMIT 1
+    ) = ${CANCELLED_PLATE_RETIRE_REASON})`;
+
+/**
+ * The cancelled plate is printed again with the same codes: the codes its cancel retired go back to pending (one
+ * `adjustment` movement each) and the batch opens again. Codes retired for any other reason stay retired.
+ */
+async function restoreCancelledPlateCodes(tx: Tx, batchId: string, userId: string | null): Promise<number> {
+  const [batch] = await tx.select().from(tagBatches).where(eq(tagBatches.id, batchId)).for("update");
+  if (!batch || batch.status !== "cancelled") return 0;
+  const back = await rows<{ id: string; ownership_type: string; custodian_rep_id: number | null }>(sql`
+    SELECT t.id, t.ownership_type, t.custodian_rep_id FROM tags t
+    WHERE t.batch_id = ${batchId} AND t.stock_status = 'retired' AND (
+      SELECT m.reason FROM tag_stock_movements m WHERE m.tag_id = t.id ORDER BY m.created_at DESC LIMIT 1
+    ) = ${CANCELLED_PLATE_RETIRE_REASON}
+    FOR UPDATE OF t`, tx);
+  const now = new Date();
+  if (back.length) {
+    await tx.update(tags).set({ status: "inventory", stockStatus: "pending", disabledAt: null, stockUpdatedAt: now, updatedAt: now })
+      .where(inArray(tags.id, back.map((t) => t.id)));
+    await tx.insert(tagStockMovements).values(back.map((t) => ({
+      tagId: t.id,
+      movementType: "adjustment",
+      fromStockStatus: "retired",
+      toStockStatus: "pending",
+      fromOwnershipType: t.ownership_type,
+      toOwnershipType: t.ownership_type,
+      fromCustodianRepId: t.custodian_rep_id,
+      toCustodianRepId: t.custodian_rep_id,
+      actorUserId: userId,
+      referenceType: "batch",
+      referenceId: batchId,
+      reason: "The cancelled plate is printed again with the same codes",
+    })));
+  }
+  await tx.update(tagBatches).set({ status: "open", updatedAt: now }).where(eq(tagBatches.id, batchId));
+  return back.length;
 }
 
 interface StockedPieces { stocked: Array<{ id: string; publicCode: string }>; damaged: Array<{ id: string; publicCode: string; reason: string }> }
@@ -1554,6 +1648,7 @@ export async function transitionJob(id: string, input: TransitionInput, scope: P
     }
   }
   const [model] = await db.select().from(printModels).where(eq(printModels.id, job.modelId)).limit(1);
+  const afterCommit: Array<() => Promise<void>> = [];
   const stocked = await db.transaction(async (tx) => {
     const updated = await tx.update(printJobs).set({
       status: plan.status,
@@ -1568,6 +1663,10 @@ export async function transitionJob(id: string, input: TransitionInput, scope: P
       await tx.insert(printPartMovements).values({ modelId: model.id, delta: job.quantity, reason: "printed", jobId: job.id, actorUserId: input.userId });
       await tx.update(printModels).set({ partOnHand: sql`${printModels.partOnHand} + ${job.quantity}`, updatedAt: now }).where(eq(printModels.id, model.id));
     }
+    // Cancelled before anything was received: its codes never become pieces and leave the stock numbers.
+    if (input.action === "cancel" && job.batchId && model.kind === "serialized") {
+      afterCommit.push(await retireCancelledPlateCodes(tx, job, input.userId, input.source ?? "admin"));
+    }
     // Printed by hand and checked by eye: the good pieces are stock now, without scanning each QR.
     return input.action === "printed" && job.batchId ? stockPrintedPieces(tx, job.batchId, input.badPieces ?? [], input.pieceProblems, input.userId) : null;
   });
@@ -1581,6 +1680,7 @@ export async function transitionJob(id: string, input: TransitionInput, scope: P
       metadata: { printJobId: job.id, bed: job.bedLabel, plate: job.plateNumber ?? 1, pieces: job.quantity },
     }, journeyContext(input.userId, input.source));
   }
+  await runAfterCommit(afterCommit);
   if (input.action === "fail") await recordPrintFailed(job, input.reason ?? null, "failed", input.userId, input.source ?? "admin");
   if (stocked && job.batchId) await recordStocked(job.batchId, stocked, input.userId, input.source ?? "admin");
   return getJob(job.id, scope);
