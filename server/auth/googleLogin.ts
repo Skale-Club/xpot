@@ -5,11 +5,9 @@ import { users } from '#shared/schema.js';
 import { normalizeIpKey, rateLimit } from '../tags/rateLimit.js';
 import { googleAuthConfig, verifyGoogleIdentity } from './googleIdentity.js';
 import { bindGoogleIdentities, userIdForGoogleIdentity, type IdentityBinding } from './googleIdentityStore.js';
-import { accessOf, findUserByPhone, rememberVerifiedPhone, startSession } from './phoneAuth.js';
+import { accessOf, findUserByPhone, rememberApplicant, startSession } from './phoneAuth.js';
 import { isSameAuthOrigin } from './sameOrigin.js';
 
-type PendingGoogle = IdentityBinding & { at: number };
-function sessionSave(req: Request) { return new Promise<void>((resolve, reject) => req.session.save(error => error ? reject(error) : resolve())); }
 function newSession(req: Request) { return new Promise<void>((resolve, reject) => req.session.regenerate(error => error ? reject(error) : resolve())); }
 
 async function findAccount(binding: IdentityBinding, phone?: string) {
@@ -21,6 +19,10 @@ async function findAccount(binding: IdentityBinding, phone?: string) {
   return phone ? findUserByPhone(phone) : null;
 }
 
+// Phone and Google are two separate ways in. Each finds only the account it is
+// already linked to: a Google account is never matched to an app account by
+// its email, and never needs a phone. Linking one to the other happens inside
+// the app, in Settings → Sign-in (server/auth/accountLinks.ts).
 export function registerGoogleLoginRoutes(app: Express) {
   app.post('/api/auth/identity', async (req, res) => {
     try {
@@ -33,29 +35,19 @@ export function registerGoogleLoginRoutes(app: Express) {
       let identity;
       try { identity = await verifyGoogleIdentity(token); }
       catch { return res.status(401).json({ code: 'invalid_token' }); }
-      const binding = { projectId: config.projectId!, uid: identity.uid };
+      const binding: IdentityBinding = { projectId: config.projectId!, uid: identity.uid, provider: identity.provider, email: identity.email };
       const user = await findAccount(binding, identity.phone);
-      const pending = (req.session as any).pendingGoogle as PendingGoogle | undefined;
-      const bindings = [binding];
-      if (identity.provider === 'phone' && pending && Date.now() - pending.at < 10 * 60_000) {
-        bindings.push({ projectId: pending.projectId, uid: pending.uid });
-      }
-      if (!user && !identity.phone) {
-        // Never claim an existing app account merely by matching its email.
-        (req.session as any).pendingGoogle = { ...binding, at: Date.now() };
-        await sessionSave(req);
-        return res.json({ status: 'phone_required' });
-      }
       if (!user) {
+        // A new person: phone or Google alone opens the application.
         await newSession(req);
-        await rememberVerifiedPhone(req, identity.phone!, bindings);
+        await rememberApplicant(req, { phone: identity.phone, email: identity.email, name: identity.name }, [binding]);
         return res.json({ status: 'new' });
       }
-      await bindGoogleIdentities(bindings, user.id);
+      await bindGoogleIdentities([binding], user.id);
       const status = await accessOf(user);
       await newSession(req);
       if (status === 'active') await startSession(req, user);
-      if (status === 'new' && user.phone) await rememberVerifiedPhone(req, user.phone, bindings);
+      if (status === 'new') await rememberApplicant(req, { phone: user.phone ?? identity.phone, email: identity.email, name: identity.name }, [binding]);
       // Pending/blocked users do not receive an authenticated application session.
       res.json({ status });
     } catch {

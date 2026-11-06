@@ -80,6 +80,8 @@ export async function createApp(): Promise<{ app: express.Express; httpServer: S
   registerPhoneAuthRoutes(app);
   const { registerGoogleLoginRoutes } = await import("./auth/googleLogin.js");
   registerGoogleLoginRoutes(app);
+  const { registerAccountLinkRoutes } = await import("./auth/accountLinks.js");
+  registerAccountLinkRoutes(app);
 
   const httpServer = createServer(app);
   await registerRoutes(app);

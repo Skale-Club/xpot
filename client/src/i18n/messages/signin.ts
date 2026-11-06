@@ -6,7 +6,6 @@ const en = {
   title: "Sign in to Xpot",
   or: 'or',
   continueGoogle: 'Continue with Google',
-  googleNeedsPhone: 'Confirm your phone once to connect Google to your Xpot account.',
 
   country: "Country",
   phoneLabel: "Phone number",
@@ -63,7 +62,7 @@ const en = {
   err_wrong_code: "Wrong code. Check the SMS and try again.",
   err_too_many_attempts: "Too many wrong tries. Ask for a new code.",
   err_rate_limited: "Too many sign-in attempts. Wait {seconds}s and try again.",
-  err_not_verified: "Confirm your phone number first.",
+  err_not_verified: "Sign in with your phone or Google first.",
   err_generic: "Something went wrong. Try again.",
 };
 
@@ -71,7 +70,7 @@ export const signinMessages: Dictionary<typeof en> = {
   en,
   pt: {
     title: "Entrar no Xpot",
-    or: 'ou', continueGoogle: 'Continuar com Google', googleNeedsPhone: 'Confirme seu telefone uma vez para conectar o Google à sua conta Xpot.',
+    or: 'ou', continueGoogle: 'Continuar com Google',
     country: "País",
     phoneLabel: "Número de celular",
     sendCode: "Enviar código",
@@ -127,12 +126,12 @@ export const signinMessages: Dictionary<typeof en> = {
     err_wrong_code: "Código errado. Confira o SMS e tente de novo.",
     err_too_many_attempts: "Muitas tentativas erradas. Peça um novo código.",
     err_rate_limited: "Muitas tentativas de acesso. Espere {seconds}s e tente novamente.",
-    err_not_verified: "Confirme o seu número primeiro.",
+    err_not_verified: "Entre com seu telefone ou Google primeiro.",
     err_generic: "Algo deu errado. Tente de novo.",
   },
   es: {
     title: "Entrar a Xpot",
-    or: 'o', continueGoogle: 'Continuar con Google', googleNeedsPhone: 'Confirma tu teléfono una vez para conectar Google a tu cuenta Xpot.',
+    or: 'o', continueGoogle: 'Continuar con Google',
     country: "País",
     phoneLabel: "Número de celular",
     sendCode: "Enviar código",
@@ -188,7 +187,7 @@ export const signinMessages: Dictionary<typeof en> = {
     err_wrong_code: "Código incorrecto. Revisa el SMS e inténtalo de nuevo.",
     err_too_many_attempts: "Demasiados intentos incorrectos. Pide un código nuevo.",
     err_rate_limited: "Demasiados intentos de acceso. Espera {seconds}s e inténtalo de nuevo.",
-    err_not_verified: "Confirma tu número primero.",
+    err_not_verified: "Entra con tu teléfono o Google primero.",
     err_generic: "Algo salió mal. Inténtalo de nuevo.",
   },
 };

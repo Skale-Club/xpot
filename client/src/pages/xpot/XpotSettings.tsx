@@ -29,7 +29,6 @@ import { ACCENT_SELECTED, BRAND_GRADIENT, EYEBROW, GLASS_CLASS, SURFACE_MODAL_CL
 import { CountryFlag } from "@/components/CountryFlag";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import { useViewerAccess } from "@/lib/adminMode";
 import { formatPhone } from "@/lib/format";
 import { LanguageList } from "@/components/LanguagePicker";
 import { LANG_LABELS, useI18n, useT } from "@/i18n";
@@ -46,6 +45,7 @@ import { AddPersonForm } from "./components/AddPersonForm";
 import { AppLayout } from "@/components/xpot/AppLayout";
 import { homeForModules, useXpotModules } from "@/components/ModuleSwitch";
 import { InstallAppHeaderButton } from "@/components/xpot/InstallApp";
+import { SignInMethods } from "@/components/xpot/SignInMethods";
 
 const COUNTRIES = [
   { code: "BR", dial: "+55", name: "Brazil" },
@@ -291,7 +291,6 @@ export function XpotSettings() {
   const tn = useT(navIaMessages);
   const ts = useT(shellMessages);
   const tp = useT(addPersonMessages);
-  const access = useViewerAccess();
   const [signingOut, setSigningOut] = useState(false);
   const avatar = useAvatarUpload();
   const [initialized, setInitialized] = useState(false);
@@ -365,9 +364,6 @@ export function XpotSettings() {
 
   const name = me ? me.rep.displayName || [me.user.firstName, me.user.lastName].filter(Boolean).join(" ").trim() : "";
   const initials = name.split(" ").map((n) => n[0]).slice(0, 2).join("").toUpperCase();
-  // Contact email is informational; sign-in uses Google or a verified phone.
-  const hasEmail = Boolean(me?.user.email);
-  const signInPhone = me?.user.phone ? formatPhone(me.user.phone) : null;
   // My company: the ones the person works in (a team before their own one-person workspace), each with their role in it.
   const myOrganizations = (me?.organizations ?? [])
     .map((organization) => ({ organization, membership: me?.organizationMemberships?.find((item) => item.organizationId === organization.id && item.isActive && !item.blockedAt) }))
@@ -471,18 +467,7 @@ export function XpotSettings() {
         return (
           <div key={id} className="space-y-8">
             <Section id={id} title={tn("tabSignIn")} titled={titled}>
-              <div>
-                <p className={EYEBROW}>{tn("signInPhone")}</p>
-                <p className="mt-1.5 text-base font-semibold text-white" data-testid="settings-sign-in-phone">{signInPhone ?? tn("signInPhoneNone")}</p>
-                <p className="mt-1 text-xs text-white/45">
-                  {access.profile === "platform" ? <Link href="/admin/reps" className="underline underline-offset-2">{tn("signInPhoneAdminHint")}</Link> : tn("signInPhoneHint")}
-                </p>
-              </div>
-              {hasEmail && (
-                <Field label={tn("signInEmail")}>
-                  <Input value={me?.user.email ?? ""} readOnly disabled />
-                </Field>
-              )}
+              <SignInMethods />
             </Section>
           </div>
         );
@@ -509,9 +494,10 @@ export function XpotSettings() {
   if (isDesktop) {
     const open = openSection ?? "profile";
     return (
-      <AppLayout title={t("title")} size="wide" topBarActions={<InstallAppHeaderButton />}>
-        <div className="mx-auto grid w-full max-w-4xl grid-cols-[13rem_minmax(0,1fr)] items-start gap-8">
-          <nav aria-label={t("title")} className="sticky top-24 space-y-6" data-testid="settings-menu">
+      <AppLayout title={t("title")} size="full" desktopColumnClassName="lg:px-0 lg:pb-12 lg:pt-6" topBarActions={<InstallAppHeaderButton />}>
+        <div className="grid w-full grid-cols-[15rem_minmax(0,1fr)] items-start gap-8">
+          <nav aria-label={t("title")} className="sticky top-24 space-y-6 px-3" data-testid="settings-menu">
+
             {menu.map((group) => (
               <div key={group.title}>
                 <p className={`${EYEBROW} mb-2 px-3`}>{group.title}</p>
@@ -533,7 +519,7 @@ export function XpotSettings() {
               </div>
             ))}
           </nav>
-          <div className="min-w-0">{renderSection(open, true)}</div>
+          <div className="min-w-0 pr-8">{renderSection(open, true)}</div>
         </div>
       </AppLayout>
     );
@@ -557,7 +543,7 @@ export function XpotSettings() {
 
   // Phone: the list, like a phone's own settings. Each row says where it stands.
   const rowValue: Partial<Record<SettingsSection, string>> = {
-    signin: signInPhone ?? undefined,
+    signin: me.user.phone ? formatPhone(me.user.phone) : me.user.email ?? undefined,
     language: LANG_LABELS[lang],
     company: namedCompanies ? tp.plural("companiesCount", companies.length) : companies[0]?.organization.name,
   };

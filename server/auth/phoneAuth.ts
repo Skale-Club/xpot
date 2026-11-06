@@ -1,5 +1,5 @@
 import { googleAuthConfig } from './googleIdentity.js';
-import { bindGoogleIdentities, type IdentityBinding } from './googleIdentityStore.js';
+import { bindGoogleIdentities, userIdForGoogleIdentity, type IdentityBinding } from './googleIdentityStore.js';
 import { createHash, randomInt, timingSafeEqual } from "crypto";
 import type { Express, Request, Response } from "express";
 import { and, desc, eq, gt, sql } from "drizzle-orm";
@@ -16,10 +16,10 @@ import { defaultSmsSender, SmsError, type SmsSender } from "./sms.js";
 import { loadTwilioConfigFromDb } from "./smsConfigDb.js";
 import { formatSignupLeadTelegram, sendSignupTelegram } from "./telegram.js";
 
-// Sign-in by phone: a 6-digit code goes out by SMS, the person types it back.
-// No email, no password. What happens next depends on the person:
+// Sign-in by phone (a 6-digit code by SMS) or by Google, each on its own.
+// No password. What happens next depends on the person:
 //   active rep          → signed in
-//   unknown number      → completes a saved application, then waits for review
+//   unknown number or Google → completes a saved application, then waits for review
 //   pending (not yet approved by Xpot) → told to wait / get in touch
 //   blocked             → told their access is off
 // Only active reps ever get a signed-in session.
@@ -257,31 +257,62 @@ export async function startSession(req: Request, user: User) {
   sess.firstName = user.firstName;
   sess.lastName = user.lastName;
   delete sess.verifiedPhone;
+  delete sess.applicant;
   // Saved before answering: the client calls /api/xpot/me right after.
   await new Promise<void>((resolve, reject) => req.session.save((err) => (err ? reject(err) : resolve())));
 }
 
-export async function rememberVerifiedPhone(req: Request, phone: string, identities: IdentityBinding[] = []) {
+/**
+ * Someone who proved a phone or a Google account but has no access yet: they
+ * fill in the application. Either one alone is enough; neither needs the other.
+ */
+export interface Applicant { phone?: string; email?: string; name?: string; identities: IdentityBinding[]; at: number }
+
+export async function rememberApplicant(req: Request, proof: { phone?: string; email?: string; name?: string }, identities: IdentityBinding[] = []) {
+  if (!proof.phone && !identities.length) throw new Error('An applicant needs a phone or a Google account');
   const sess = req.session as any;
-  for (const key of ["userId", "email", "phone", "isAdmin", "firstName", "lastName"]) delete sess[key];
-  sess.verifiedPhone = { phone, at: Date.now(), identities };
+  for (const key of ["userId", "email", "phone", "isAdmin", "firstName", "lastName", "verifiedPhone"]) delete sess[key];
+  sess.applicant = { ...proof, identities, at: Date.now() } satisfies Applicant;
   await new Promise<void>((resolve, reject) => req.session.save((err) => (err ? reject(err) : resolve())));
 }
 
-function verifiedPhone(req: Request): string {
-  const verified = (req.session as any)?.verifiedPhone as { phone: string; at: number } | undefined;
-  if (!verified || Date.now() - verified.at > VERIFIED_PHONE_TTL_MS) {
-    throw new PhoneAuthError("not_verified", 401, "Confirm your phone number first.");
+function applicantOf(req: Request): Applicant {
+  const applicant = (req.session as any)?.applicant as Applicant | undefined;
+  if (!applicant || Date.now() - applicant.at > VERIFIED_PHONE_TTL_MS) {
+    throw new PhoneAuthError("not_verified", 401, "Confirm your phone number or Google account first.");
   }
-  return verified.phone;
+  return applicant;
 }
 
-async function ensureDraftUser(req: Request, phone: string, displayName?: string) {
-  const existing = await findUserByPhone(phone);
+/** The account this applicant already has: by phone, else by the Google account. */
+async function applicantUser(applicant: Applicant): Promise<User | null> {
+  if (applicant.phone) return findUserByPhone(applicant.phone);
+  for (const identity of applicant.identities) {
+    const id = await userIdForGoogleIdentity(identity);
+    if (!id) continue;
+    const [user] = await db.select().from(users).where(eq(users.id, id)).limit(1);
+    if (user) return user;
+  }
+  return null;
+}
+
+/** users.email is unique: a Google email already on another account stays off this one. */
+async function unclaimedEmail(email?: string): Promise<string | null> {
+  if (!email) return null;
+  const [taken] = await db.select({ id: users.id }).from(users).where(eq(users.email, email)).limit(1);
+  return taken ? null : email;
+}
+
+async function createApplicantUser(applicant: Applicant, firstName: string, lastName: string | null, tx: Pick<typeof db, "insert"> = db) {
+  const email = applicant.phone ? null : await unclaimedEmail(applicant.email);
+  return (await tx.insert(users).values({ phone: applicant.phone ?? null, email, firstName, lastName, isAdmin: false }).returning())[0];
+}
+
+async function ensureDraftUser(applicant: Applicant, displayName?: string) {
+  const existing = await applicantUser(applicant);
   const { firstName, lastName } = splitName(displayName?.trim() || "Xpot applicant");
-  const user = existing ?? (await db.insert(users).values({ phone, firstName, lastName, isAdmin: false }).returning())[0];
-  const identities = (req.session as any).verifiedPhone?.identities ?? [];
-  if (identities.length) await bindGoogleIdentities(identities, user.id);
+  const user = existing ?? await createApplicantUser(applicant, firstName, lastName);
+  if (applicant.identities.length) await bindGoogleIdentities(applicant.identities, user.id);
   return user;
 }
 
@@ -333,12 +364,12 @@ export function registerPhoneAuthRoutes(app: Express, sms: SmsSender = defaultSm
         complete: async () => {
           const user = await findUserByPhone(phone);
           if (!user) {
-            await rememberVerifiedPhone(req, phone);
+            await rememberApplicant(req, { phone });
             return { status: "new" satisfies PhoneAuthStatus };
           }
           const status = await accessOf(user);
           if (status === "active") await startSession(req, user);
-          if (status === "new") await rememberVerifiedPhone(req, phone);
+          if (status === "new") await rememberApplicant(req, { phone });
           return { status };
         },
         consume: () => consumeCodes(phone),
@@ -353,13 +384,16 @@ export function registerPhoneAuthRoutes(app: Express, sms: SmsSender = defaultSm
   // verified phone resumes this draft; no access request is pending yet.
   app.get("/api/auth/phone/application-draft", async (req, res) => {
     try {
-      const phone = verifiedPhone(req);
-      const user = await findUserByPhone(phone);
-      if (!user) return res.json({ draft: null });
+      const applicant = applicantOf(req);
+      // What Google already told us about a new applicant fills the first answers.
+      const suggested = { displayName: applicant.name ?? "", email: applicant.email ?? "" };
+      const user = await applicantUser(applicant);
+      if (!user) return res.json({ draft: null, suggested });
       const [draft] = await db.select().from(authAccessRequests)
         .where(and(eq(authAccessRequests.userId, user.id), eq(authAccessRequests.status, "draft")))
         .limit(1);
       res.json({
+        suggested,
         draft: draft ? {
           ...draft,
           displayName: [user.firstName, user.lastName].filter(Boolean).join(" ").replace(/^Xpot applicant$/, ""),
@@ -373,9 +407,9 @@ export function registerPhoneAuthRoutes(app: Express, sms: SmsSender = defaultSm
   app.put("/api/auth/phone/application-draft", async (req, res) => {
     try {
       const input = draftSchema.parse(req.body);
-      const phone = verifiedPhone(req);
-      enforceDraftLimit(phone);
-      const user = await ensureDraftUser(req, phone, input.displayName);
+      const applicant = applicantOf(req);
+      enforceDraftLimit(applicant.phone ?? applicant.identities.map((identity) => identity.uid).join(","));
+      const user = await ensureDraftUser(applicant, input.displayName);
       const { step, displayName, ...fields } = input;
       if (displayName?.trim().length && displayName.trim().length >= 2) {
         const { firstName, lastName } = splitName(displayName);
@@ -407,8 +441,9 @@ export function registerPhoneAuthRoutes(app: Express, sms: SmsSender = defaultSm
     try {
       enforceRouteLimit(req, "register", 5, 900);
       const input = registerSchema.parse(req.body);
-      const phone = verifiedPhone(req);
-      const existing = await findUserByPhone(phone);
+      const applicant = applicantOf(req);
+      const phone = applicant.phone ?? null;
+      const existing = await applicantUser(applicant);
       const { firstName, lastName } = splitName(input.displayName);
       if (existing) {
         const status = await accessOf(existing);
@@ -422,14 +457,14 @@ export function registerPhoneAuthRoutes(app: Express, sms: SmsSender = defaultSm
       const registeredAccount = await db.transaction(async (tx) => {
         const account = existing
           ? (await tx.update(users).set({ firstName, lastName, updatedAt: new Date() }).where(eq(users.id, existing.id)).returning())[0]
-          : (await tx.insert(users).values({ phone, firstName, lastName, isAdmin: false }).returning())[0];
+          : await createApplicantUser(applicant, firstName, lastName, tx);
 
         const [rep] = await tx.select().from(salesReps).where(eq(salesReps.userId, account.id)).limit(1);
         if (rep) {
           await tx.update(salesReps).set({
             displayName: input.displayName,
             email: input.email,
-            phone,
+            ...(phone ? { phone } : {}),
             updatedAt: new Date(),
           }).where(eq(salesReps.id, rep.id));
         } else {
@@ -478,11 +513,10 @@ export function registerPhoneAuthRoutes(app: Express, sms: SmsSender = defaultSm
         return account;
       });
 
-      const identities = (req.session as any).verifiedPhone?.identities ?? [];
-      if (identities.length) await bindGoogleIdentities(identities, registeredAccount.id);
-      delete (req.session as any).verifiedPhone;
+      if (applicant.identities.length) await bindGoogleIdentities(applicant.identities, registeredAccount.id);
+      delete (req.session as any).applicant;
       await new Promise<void>((resolve) => req.session.save(() => resolve()));
-      console.log(`[phone-auth] new sign-up pending approval: ${input.displayName} ${phone}`);
+      console.log(`[phone-auth] new sign-up pending approval: ${input.displayName} ${phone ?? input.email}`);
       void sendSignupTelegram(formatSignupLeadTelegram({
         name: input.displayName,
         phone,

@@ -14,8 +14,9 @@ import { signinMessages } from "@/i18n/messages/signin";
 import { StateSelect } from "@/components/StateSelect";
 import { phoneCountryCodeFromIso, phoneCountryCodeFromLocales } from "@shared/phoneCountry";
 
-// Sign in (or sign up) with a code texted to the phone. Only an approved rep
-// gets in; a new number completes a saved, one-question-at-a-time application.
+// Sign in (or sign up) with a code texted to the phone, or with Google: each
+// works on its own. Only an approved rep gets in; a new number or Google
+// account completes a saved, one-question-at-a-time application.
 
 type Step = "phone" | "code" | "application" | "pending" | "blocked";
 // name, email, location, vehicle, kit, active seller
@@ -103,8 +104,14 @@ export function PhoneSignIn({ onSignedIn }: { onSignedIn: () => void | Promise<u
     setDraftLoading(true);
     fetch("/api/auth/phone/application-draft", { credentials: "include" })
       .then((response) => response.json())
-      .then(({ draft }) => {
-        if (cancelled || !draft) return;
+      .then(({ draft, suggested }) => {
+        if (cancelled) return;
+        // A new Google applicant: what Google knows fills the first answers.
+        if (!draft) {
+          if (suggested?.displayName) setName(suggested.displayName);
+          if (suggested?.email) setEmail(suggested.email);
+          return;
+        }
         const saved: Answers = {
           name: draft.displayName ?? "",
           email: draft.email ?? "",
@@ -199,10 +206,9 @@ export function PhoneSignIn({ onSignedIn }: { onSignedIn: () => void | Promise<u
     pending.current = true; setBusy(true); setError('');
     try {
       const idToken = await signInGoogleAlternative(config.google);
-      const { ok, data } = await post<{ status: 'active' | 'pending' | 'blocked' | 'new' | 'phone_required' }>('/api/auth/identity', { idToken });
+      const { ok, data } = await post<{ status: 'active' | 'pending' | 'blocked' | 'new' }>('/api/auth/identity', { idToken });
       if (!ok) return showError(data);
       if (data.status === 'active') return void (await onSignedIn());
-      if (data.status === 'phone_required') { setStep('phone'); setError(t('googleNeedsPhone')); return; }
       setStep(data.status === 'new' ? 'application' : data.status);
     } catch { setError(t('err_generic')); }
     finally { pending.current = false; setBusy(false); }
