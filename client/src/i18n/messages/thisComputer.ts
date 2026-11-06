@@ -23,6 +23,8 @@ const en = {
   installAll: "Install everything",
   installingAll: "Installing…",
   autoSetupHint: "Xpot Desktop installs these by itself. You can follow it here or by its icon near the Windows clock.",
+  accessPrompt: "If Chrome asks whether xpot.place may access apps and services on this device, choose Allow: that is how this page sees Xpot Desktop.",
+  accessDenied: "Chrome is blocking this page from reaching Xpot Desktop. Click the icon left of the address, allow apps and services on this device, then reload the page.",
 };
 
 export const thisComputerMessages: Dictionary<typeof en> = {
@@ -48,6 +50,8 @@ export const thisComputerMessages: Dictionary<typeof en> = {
     installAll: "Instalar tudo",
     installingAll: "Instalando…",
     autoSetupHint: "O Xpot Desktop instala isso sozinho. Dá para acompanhar aqui ou pelo ícone perto do relógio do Windows.",
+    accessPrompt: "Se o Chrome perguntar se o xpot.place pode acessar apps e serviços neste dispositivo, escolha Permitir: é assim que esta página enxerga o Xpot Desktop.",
+    accessDenied: "O Chrome está impedindo esta página de falar com o Xpot Desktop. Clique no ícone à esquerda do endereço, permita apps e serviços neste dispositivo e recarregue a página.",
   },
   es: {
     setupTitle: "Prepara esta computadora para generar archivos de impresión",
@@ -70,5 +74,7 @@ export const thisComputerMessages: Dictionary<typeof en> = {
     installAll: "Instalar todo",
     installingAll: "Instalando…",
     autoSetupHint: "Xpot Desktop instala esto solo. Puedes seguirlo aquí o en su ícono junto al reloj de Windows.",
+    accessPrompt: "Si Chrome pregunta si xpot.place puede acceder a apps y servicios en este dispositivo, elige Permitir: así esta página ve Xpot Desktop.",
+    accessDenied: "Chrome está impidiendo que esta página hable con Xpot Desktop. Haz clic en el ícono a la izquierda de la dirección, permite apps y servicios en este dispositivo y recarga la página.",
   },
 };

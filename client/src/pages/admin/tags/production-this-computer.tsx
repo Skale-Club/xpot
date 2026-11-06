@@ -5,7 +5,7 @@ import { useT } from "@/i18n";
 import { thisComputerMessages } from "@/i18n/messages/thisComputer";
 import { sendJson } from "./api";
 import { readPreview, writePreview } from "@/lib/xpotDesktopPreview";
-import { askDesktop, isWindows, useXpotDesktopStatus, type ItemId } from "@/lib/xpotDesktop";
+import { askDesktop, isWindows, useLocalAccess, useXpotDesktopStatus, type ItemId } from "@/lib/xpotDesktop";
 
 export { isWindows, useXpotDesktopStatus };
 
@@ -25,6 +25,7 @@ const SETUP_FILE = "/desktop/XpotDesktopSetup.exe";
 export function ThisComputerSteps({ readyLine = true }: { readyLine?: boolean }) {
   const t = useT(thisComputerMessages);
   const { data, isLoading, refetch } = useXpotDesktopStatus(4000);
+  const access = useLocalAccess();
   const [connectError, setConnectError] = useState<string | null>(null);
   const [installingAll, setInstallingAll] = useState(false);
   const asked = useRef(false);
@@ -92,6 +93,11 @@ export function ThisComputerSteps({ readyLine = true }: { readyLine?: boolean })
 
   const download = (
     <>
+      {access === "denied" ? (
+        <p className="rounded-lg border border-red-400/25 bg-red-500/[0.06] px-3 py-2 text-xs text-red-100" data-testid="this-computer-access-denied">{t("accessDenied")}</p>
+      ) : access === "prompt" ? (
+        <p className="rounded-lg border border-amber-400/25 bg-amber-400/[0.06] px-3 py-2 text-xs text-amber-100" data-testid="this-computer-access-prompt">{t("accessPrompt")}</p>
+      ) : null}
       <p className="text-xs text-white/55">{t("setupHint")}</p>
       <Button asChild variant="brand" accent="tags" size="sm">
         <a

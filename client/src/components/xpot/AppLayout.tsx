@@ -49,7 +49,7 @@ import {
 import { XpotLogo } from "./XpotLogo";
 import { useOnline } from "@/hooks/use-online";
 import { rememberPanelRoute } from "./panelRoute";
-import { isWindows, useXpotDesktopStatus } from "@/lib/xpotDesktop";
+import { isWindows, useLocalAccess, useXpotDesktopStatus } from "@/lib/xpotDesktop";
 import { PanelTabBar } from "./PanelTabBar";
 import { AdminModeBar } from "./AdminMode";
 import { useCompanyGroups } from "./companyNav";
@@ -189,11 +189,13 @@ const NAV_DOT: Record<NavStatus["tone"], string> = {
 
 /**
  * "thisComputer": whether this computer generates print files, from Xpot Desktop on it (Windows only; elsewhere no
- * dot). Asked only when a menu item wants it, calmly (every 30 s), from the same query as Make and Devices.
+ * dot). Asked only when a menu item wants it, calmly (every 30 s), from the same query as Make and Devices, and only
+ * once Chrome lets this site reach this computer: the menu never makes Chrome ask (Make and Devices do, where it matters).
  */
 function useNavStatus(wanted: boolean): NavStatus | undefined {
   const t = useT(shellMessages);
-  const on = wanted && isWindows();
+  const access = useLocalAccess();
+  const on = wanted && isWindows() && access === "granted";
   const { data, error, dataUpdatedAt, errorUpdatedAt } = useXpotDesktopStatus(30_000, on);
   if (!on || (!dataUpdatedAt && !errorUpdatedAt)) return undefined;
   if (data?.ready && !error) return { tone: "green", label: t("thisComputerReady") };
