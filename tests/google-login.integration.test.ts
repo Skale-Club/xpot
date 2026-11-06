@@ -39,12 +39,18 @@ test.skipIf(process.env.TAGS_INTEGRATION !== '1')('phone and Google sign in on t
    expect((await call('GET','/session')).body.userId).toBe(status==='active'?'google-auth-test-active':null);
   }
 
-  // Google on its own: never matched by email, never asked for a phone.
-  const stranger=browser();verify.mockResolvedValue({uid:'google-owner',email:'owner@google-auth.test',name:'Owner Google',provider:'google.com'});
+  // Google on its own, never asked for a phone: a Google-verified email opens
+  // the one account that carries it.
+  const byEmail=browser();verify.mockResolvedValue({uid:'google-owner-email',email:'OWNER@google-auth.test',provider:'google.com'});
+  expect((await signIn(byEmail)).body.status).toBe('active');
+  expect((await byEmail('GET','/session')).body.userId).toBe('google-auth-test-active');
+  await db.execute(sql`DELETE FROM auth_google_identities WHERE subject='google-owner-email'`);
+  // An unknown email is a new person, with Google's name and email suggested.
+  const stranger=browser();verify.mockResolvedValue({uid:'google-stranger',email:'stranger@google-auth.test',name:'Some Stranger',provider:'google.com'});
   expect((await signIn(stranger)).body.status).toBe('new');
-  expect((await stranger('GET','/session')).body).toEqual({userId:null,applicant:{phone:null,email:'owner@google-auth.test'}});
+  expect((await stranger('GET','/session')).body).toEqual({userId:null,applicant:{phone:null,email:'stranger@google-auth.test'}});
   const draft=await stranger('GET','/api/auth/phone/application-draft');
-  expect(draft.body).toMatchObject({draft:null,suggested:{displayName:'Owner Google',email:'owner@google-auth.test'}});
+  expect(draft.body).toMatchObject({draft:null,suggested:{displayName:'Some Stranger',email:'stranger@google-auth.test'}});
 
   // A brand-new Google person applies without any phone.
   const newcomer=browser();verify.mockResolvedValue({uid:'google-newcomer',email:'newcomer@google-auth.test',name:'New Comer',provider:'google.com'});
@@ -62,8 +68,8 @@ test.skipIf(process.env.TAGS_INTEGRATION !== '1')('phone and Google sign in on t
   const owner=browser();verify.mockResolvedValue({uid:'phone-active',phone:'+15550150001',provider:'phone'});
   expect((await signIn(owner)).body.status).toBe('active');
   expect((await owner('GET','/api/auth/sign-in-methods')).body).toEqual({phone:'+15550150001',google:[],canLink:true});
-  verify.mockResolvedValue({uid:'google-owner',email:'owner@google-auth.test',provider:'google.com'});
-  expect((await owner('POST','/api/auth/sign-in-methods',{idToken:'t'})).body.google).toEqual([{email:'owner@google-auth.test'}]);
+  verify.mockResolvedValue({uid:'google-owner',email:'other-inbox@google-auth.test',provider:'google.com'});
+  expect((await owner('POST','/api/auth/sign-in-methods',{idToken:'t'})).body.google).toEqual([{email:'other-inbox@google-auth.test'}]);
   // Now that Google alone opens the account.
   expect((await signIn(browser())).body.status).toBe('active');
   // A Google account already on someone else's account is refused.
@@ -75,7 +81,7 @@ test.skipIf(process.env.TAGS_INTEGRATION !== '1')('phone and Google sign in on t
   expect((await owner('POST','/api/auth/sign-in-methods',{idToken:'t'},'https://other.test')).status).toBe(403);
   // Google can be removed while a phone still opens the account.
   expect((await owner('DELETE','/api/auth/sign-in-methods/google')).body.google).toEqual([]);
-  verify.mockResolvedValue({uid:'google-owner',email:'owner@google-auth.test',provider:'google.com'});
+  verify.mockResolvedValue({uid:'google-owner',email:'other-inbox@google-auth.test',provider:'google.com'});
   expect((await signIn(browser())).body.status).toBe('new');
 
   // A Google-only account links a phone, which then signs in on its own.
