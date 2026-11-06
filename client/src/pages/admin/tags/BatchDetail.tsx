@@ -56,6 +56,8 @@ interface BatchDetailData {
   tagCount: number;
   pendingCount: number;
   receivedCount: number;
+  /** Codes retired before they became pieces (shared/tagsApi.ts TagBatchItem). */
+  retiredCount: number;
   notes: string | null;
   createdAt: string;
   updatedAt?: string;
@@ -313,7 +315,7 @@ export function BatchDetail({ id, go }: { id: string; go: (path: string) => void
   const batchTheme = fromPrint && (PRINT_THEMES as readonly string[]).includes(colour) ? colour : null;
   const title = fromPrint ? nameOf({ title: parsed.title, productType: batch.productType, face, theme: batchTheme }) : batch.name;
   const good = Math.max(batch.receivedCount - damaged, 0);
-  const receivedDetail = !total ? t("noPiecesYet") : batch.pendingCount ? tf.plural("stillToReceive", batch.pendingCount) : damaged ? tf.plural("goodAndDamaged", damaged) : tf("allReceived");
+  const receivedDetail = !total ? t("noPiecesYet") : !batch.receivedCount && batch.retiredCount ? tf.plural("neverPrinted", batch.retiredCount) : batch.pendingCount ? tf.plural("stillToReceive", batch.pendingCount) : damaged ? tf.plural("goodAndDamaged", damaged) : tf("allReceived");
   const needsReceiving = !fromPrint && batch.status === "open" && (batch.pendingCount > 0 || total === 0);
 
   const closing = batch.status === "open";

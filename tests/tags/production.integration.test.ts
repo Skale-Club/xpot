@@ -455,6 +455,9 @@ describe("serialized print orders", () => {
     expect(await q("SELECT status, stock_status FROM tags WHERE batch_id = $1", [order.batchId])).toEqual(Array(4).fill({ status: "retired", stock_status: "retired" }));
     expect((await q("SELECT status FROM tag_batches WHERE id = $1", [order.batchId]))[0].status).toBe("cancelled");
     expect(await notReceived()).toBe(0);
+    // The batch shows them as never printed, not received.
+    const listed = (await request(app, "GET", "/api/xpot/admin/tag-batches")).body.find((b: any) => b.id === order.batchId);
+    expect(listed).toMatchObject({ tagCount: 4, pendingCount: 0, receivedCount: 0, retiredCount: 4 });
     const [entry] = await q("SELECT after_value, metadata FROM tag_journey_entries WHERE batch_id = $1 AND action = 'batch_status_changed'", [order.batchId]);
     expect(entry).toMatchObject({ after_value: "cancelled", metadata: { printJobId: order.id, retired: 4 } });
 
