@@ -210,7 +210,13 @@ export function PhoneSignIn({ onSignedIn }: { onSignedIn: () => void | Promise<u
       if (!ok) return showError(data);
       if (data.status === 'active') return void (await onSignedIn());
       setStep(data.status === 'new' ? 'application' : data.status);
-    } catch { setError(t('err_generic')); }
+    } catch (error) {
+      const code = (error as { code?: string })?.code;
+      // Firebase's own code, for whoever looks into a failed Google sign-in.
+      console.warn('[signin] Google sign-in failed', code ?? error);
+      if (code === 'auth/popup-closed-by-user' || code === 'auth/cancelled-popup-request') return;
+      showError({ code: code === 'auth/popup-blocked' ? 'popup_blocked' : googlePhoneError(error) });
+    }
     finally { pending.current = false; setBusy(false); }
   };
 

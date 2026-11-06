@@ -1,5 +1,5 @@
 import type { Express, Request } from 'express';
-import { eq } from 'drizzle-orm';
+import { eq, sql } from 'drizzle-orm';
 import { db } from '../db.js';
 import { users } from '#shared/schema.js';
 import { normalizeIpKey, rateLimit } from '../tags/rateLimit.js';
@@ -16,12 +16,19 @@ async function findAccount(binding: IdentityBinding, phone?: string) {
     const user = (await db.select().from(users).where(eq(users.id, linkedId)).limit(1))[0];
     if (user) return user;
   }
-  return phone ? findUserByPhone(phone) : null;
+  if (phone) return findUserByPhone(phone);
+  // A Google account whose email Google verified opens the one account that
+  // already carries that email; never when two share it.
+  if (binding.provider === 'google.com' && binding.email) {
+    const matches = await db.select().from(users).where(sql`lower(${users.email}) = lower(${binding.email})`).limit(2);
+    if (matches.length === 1) return matches[0];
+  }
+  return null;
 }
 
-// Phone and Google are two separate ways in. Each finds only the account it is
-// already linked to: a Google account is never matched to an app account by
-// its email, and never needs a phone. Linking one to the other happens inside
+// Phone and Google are two separate ways in. Each finds the account it is
+// linked to; a Google account Google verified also opens the one account with
+// the same email. Neither needs the other. Linking one to the other happens inside
 // the app, in Settings → Sign-in (server/auth/accountLinks.ts).
 export function registerGoogleLoginRoutes(app: Express) {
   app.post('/api/auth/identity', async (req, res) => {

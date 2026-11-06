@@ -63,6 +63,7 @@ const en = {
   err_too_many_attempts: "Too many wrong tries. Ask for a new code.",
   err_rate_limited: "Too many sign-in attempts. Wait {seconds}s and try again.",
   err_not_verified: "Sign in with your phone or Google first.",
+  err_popup_blocked: "The browser blocked the Google window. Allow pop-ups for this site and try again.",
   err_generic: "Something went wrong. Try again.",
 };
 
@@ -127,6 +128,7 @@ export const signinMessages: Dictionary<typeof en> = {
     err_too_many_attempts: "Muitas tentativas erradas. Peça um novo código.",
     err_rate_limited: "Muitas tentativas de acesso. Espere {seconds}s e tente novamente.",
     err_not_verified: "Entre com seu telefone ou Google primeiro.",
+    err_popup_blocked: "O navegador bloqueou a janela do Google. Permita pop-ups para este site e tente de novo.",
     err_generic: "Algo deu errado. Tente de novo.",
   },
   es: {
@@ -188,6 +190,7 @@ export const signinMessages: Dictionary<typeof en> = {
     err_too_many_attempts: "Demasiados intentos incorrectos. Pide un código nuevo.",
     err_rate_limited: "Demasiados intentos de acceso. Espera {seconds}s e inténtalo de nuevo.",
     err_not_verified: "Entra con tu teléfono o Google primero.",
+    err_popup_blocked: "El navegador bloqueó la ventana de Google. Permite ventanas emergentes para este sitio e inténtalo de nuevo.",
     err_generic: "Algo salió mal. Inténtalo de nuevo.",
   },
 };
