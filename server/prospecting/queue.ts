@@ -28,6 +28,7 @@ import { earliestStartedAt } from "./job-status.js";
 import { sendPushNotification } from "../push-notifications.js";
 import { processNextAutomaticRoute } from "./auto-route.js";
 import { recordSystemEvent, reportSystemEvent } from "../observability/events.js";
+import { retryIfConnectionDropped } from "../lib/db-connection.js";
 
 const QUEUE_MAX_WAIT_MS = 24 * 60 * 60 * 1000;
 const STARTING_STALE_MS = START_TIMEOUT_MS + 2 * 60 * 1000;
@@ -348,7 +349,9 @@ export function tickProspectingQueueSafely() {
   const started = new Date();
   workerHealth.ticks += 1;
   workerHealth.lastTickStartedAt = started;
-  ticking = tick()
+  // A tick is safe to run twice (every step claims its work again), so a connection the database dropped while it sat
+  // idle gets one immediate retry instead of an error report; a real outage still fails the retry and is recorded.
+  ticking = retryIfConnectionDropped(tick)
     .then(() => { workerHealth.lastSuccessAt = new Date(); })
     .catch(async (error) => {
       workerHealth.lastError = { message: error instanceof Error ? error.message : String(error), at: new Date() };
