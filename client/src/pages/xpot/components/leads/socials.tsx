@@ -1,4 +1,5 @@
 import { Facebook, Instagram, Link2, Linkedin, Twitter, Youtube, type LucideIcon } from "lucide-react";
+import { externalLinkProps } from "@/lib/externalLinks";
 
 /**
  * The social networks a company can list, with one name and one icon each,
@@ -36,9 +37,7 @@ export function SocialLinks({ socials, otherLabel }: { socials: { platform: stri
         return (
           <a
             key={`${social.platform}-${i}`}
-            href={socialHref(social.url)}
-            target="_blank"
-            rel="noreferrer"
+            {...externalLinkProps(socialHref(social.url))}
             onClick={(e) => e.stopPropagation()}
             aria-label={name}
             title={name}

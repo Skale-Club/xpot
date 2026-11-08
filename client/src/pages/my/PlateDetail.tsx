@@ -11,6 +11,7 @@ import { ListSkeleton } from "@/components/xpot/ListSkeleton";
 import { Pill, PIECE_STATUS_TONE } from "@/components/xpot/StatusPill";
 import { TagFaceIcon } from "@/components/xpot/TagFaceIcon";
 import { useT } from "@/i18n";
+import { externalLinkProps } from "@/lib/externalLinks";
 import { myPlatesMessages } from "@/i18n/messages/myPlates";
 import { tagsMessages } from "@/i18n/messages/tags";
 import { EdgeTick } from "@/pages/tags/ChartTick";
@@ -121,7 +122,7 @@ export function PlateDetail({ code }: { code: string }) {
           <p className="mt-2 text-sm text-white/45">{t("opensNothing")}</p>
         )}
         {link && (
-          <a href={link} target="_blank" rel="noopener noreferrer" className="mt-2 inline-flex items-center gap-1.5 text-sm font-semibold text-violet-300 hover:text-violet-200">
+          <a {...externalLinkProps(link)} className="mt-2 inline-flex items-center gap-1.5 text-sm font-semibold text-violet-300 hover:text-violet-200">
             {t("openLink")} <ExternalLink className="h-3.5 w-3.5" />
           </a>
         )}

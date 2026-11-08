@@ -10,6 +10,7 @@ import { prospectingUiMessages } from "@/i18n/messages/prospectingUi";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { routePushSupported, subscribeToRoutePush } from "@/lib/pushNotifications";
 import { formatDistance, formatDuration, formatTime } from "@/lib/format";
+import { externalLinkProps } from "@/lib/externalLinks";
 import { Link, useLocation, useSearchParams } from "wouter";
 import { RoutePreviewMap, type RouteLandmark } from "./components/RoutePreviewMap";
 import { RouteStopPicker, type StopPickerTarget } from "./components/RouteStopPicker";
@@ -1906,7 +1907,7 @@ export function XpotProspecting() {
                     ) : null}
                     {selectedStop.website ? (
                       <Button asChild variant="secondary" size="sm">
-                        <a href={/^https?:\/\//i.test(selectedStop.website) ? selectedStop.website : `https://${selectedStop.website}`} target="_blank" rel="noreferrer"><ExternalLink />{t("website")}</a>
+                        <a {...externalLinkProps(/^https?:\/\//i.test(selectedStop.website) ? selectedStop.website : `https://${selectedStop.website}`)}><ExternalLink />{t("website")}</a>
                       </Button>
                     ) : null}
                   </div>
