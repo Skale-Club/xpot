@@ -65,6 +65,7 @@ import { CreateLeadDialog } from "./components/CreateLeadDialog";
 import { CheckInOverrideDialog } from "./components/CheckInOverrideDialog";
 import { placeUrl } from "./prospectingMaps";
 import { currentPlatform } from "@/lib/device";
+import { externalLinkProps } from "@/lib/externalLinks";
 import { VISIT_MAX_HOURS, VISIT_MAX_SECONDS, visitDeadline } from "@shared/visit-time-limit";
 
 const LOCATION_FIX = {
@@ -189,7 +190,7 @@ function ActiveLeadInfo({ lead, profile, profileLoading }: { lead: VisitLead; pr
             </a>
           )}
           {websiteHref && (
-            <a href={websiteHref} target="_blank" rel="noreferrer" className="col-span-2 flex min-h-10 min-w-0 items-center gap-2 rounded-xl bg-white/[0.035] px-3 py-2 text-white/75">
+            <a {...externalLinkProps(websiteHref)} className="col-span-2 flex min-h-10 min-w-0 items-center gap-2 rounded-xl bg-white/[0.035] px-3 py-2 text-white/75">
               <Globe className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
               <span className="truncate">{lead.website}</span>
             </a>
@@ -723,7 +724,7 @@ export function XpotCheckIn() {
                     </a>
                   )}
                   {selectedLead.website && (
-                    <a href={selectedLead.website.startsWith('http') ? selectedLead.website : `https://${selectedLead.website}`} target="_blank" rel="noreferrer" onClick={e => e.stopPropagation()} className="flex min-h-8 max-w-full items-center gap-1.5 text-xs text-white/70 transition-colors hover:text-white">
+                    <a {...externalLinkProps(selectedLead.website.startsWith('http') ? selectedLead.website : `https://${selectedLead.website}`)} onClick={e => e.stopPropagation()} className="flex min-h-8 max-w-full items-center gap-1.5 text-xs text-white/70 transition-colors hover:text-white">
                       <Globe className="h-3 w-3 shrink-0" aria-hidden="true" />
                       <span className="truncate">{selectedLead.website}</span>
                     </a>

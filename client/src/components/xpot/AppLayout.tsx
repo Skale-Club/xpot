@@ -76,8 +76,8 @@ import { usePageScroll } from "@/hooks/use-page-scroll";
 // sidebar and a top bar take over, and those mobile pieces are hidden. Three
 // panels, told apart by colour: Visits (the modules), Production and Admin (the
 // management surface, with its amber bar at the top); the way between them is the
-// rows at the foot of the sidebar, and on a phone a round button per panel on
-// the header (ShellHeader) and the amber bar. An owner has no panel: their team's
+// rows at the foot of the sidebar, and on a phone a row per panel in Settings
+// and a button on the amber bar. An owner has no panel: their team's
 // screens are the Company group of Visits and Tags, in that module's chrome.
 
 const COLLAPSED_KEY = "xpot.sidebar.collapsed";

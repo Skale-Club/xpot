@@ -9,6 +9,7 @@ import { contentKindOf, contentSummary, validateChipContent, type ChipContentKin
 import { normalizeUrlInput } from "@shared/tagApp";
 import type { DirectWriteItem } from "@shared/tagsApi";
 import { useT } from "@/i18n";
+import { externalLinkProps } from "@/lib/externalLinks";
 import { commonMessages } from "@/i18n/messages/common";
 import { tagsMessages } from "@/i18n/messages/tags";
 import LeadPicker, { leadPayload, type LeadChoice } from "./LeadPicker";
@@ -96,7 +97,7 @@ export default function DirectScreen() {
       url: target,
       label: label.trim() || undefined,
       method: result.method,
-      verified: result.verified,
+      verified: false,
       ...leadPayload(lead),
     }, signal);
     signal?.throwIfAborted();
@@ -129,7 +130,7 @@ export default function DirectScreen() {
                   {contentKindOf(current) === "vcard" ? (
                     <span className="min-w-0 flex-1 break-all text-sm font-semibold text-white">{t("contentKind_vcard")}: {contentSummary(current)}</span>
                   ) : (
-                    <a href={current} target="_blank" rel="noopener noreferrer" className="min-w-0 flex-1 break-all text-sm font-semibold text-white underline-offset-2 active:underline">
+                    <a {...externalLinkProps(current)} className="min-w-0 flex-1 break-all text-sm font-semibold text-white underline-offset-2 active:underline">
                       {contentKindOf(current) === "url" ? current : contentSummary(current)}
                     </a>
                   )}

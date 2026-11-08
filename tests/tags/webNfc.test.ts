@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { isWebNfcSupported, lockChip, NFC_TIMEOUT_MS, readBack, scanOnce, writeContent } from "../../client/src/pages/tags/webNfc";
+import { isWebNfcSupported, lockChip, NFC_TIMEOUT_MS, scanOnce, writeContent } from "../../client/src/pages/tags/webNfc";
 
 const URL = "https://xpot.place/n/A7K3P9X2";
 const pending = () => new Promise<void>(() => {});
@@ -121,35 +121,40 @@ describe("Android Web NFC sessions", () => {
     expect(vi.getTimerCount()).toBe(0);
   });
 
-  it("allows verification to be retried after a timeout without writing again", async () => {
+  it("resolves a write as soon as the chip holds the record, with no read of its own", async () => {
     class WritingReader extends FakeReader {
       override write = vi.fn(async () => {});
     }
     vi.stubGlobal("window", { NDEFReader: WritingReader, isSecureContext: true });
     const ctrl = new AbortController();
     await writeContent(URL, ctrl.signal);
-    const firstRead = readBack(ctrl.signal);
-    const rejected = expect(firstRead).rejects.toMatchObject({ code: "nfcTimeout" });
+    // One native session, released: nothing scans after the write.
+    expect(FakeReader.instances).toHaveLength(1);
+    expect(FakeReader.instances[0].scan).not.toHaveBeenCalled();
+    expect(FakeReader.instances[0].write.mock.calls[0][1].signal?.aborted).toBe(true);
+    expect(ctrl.signal.aborted).toBe(false);
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it("times out a write that never settles and frees the radio, so a retry starts clean", async () => {
+    const ctrl = new AbortController();
+    const first = writeContent(URL, ctrl.signal);
+    const rejected = expect(first).rejects.toMatchObject({ code: "nfcTimeout" });
     await vi.advanceTimersByTimeAsync(NFC_TIMEOUT_MS);
     await rejected;
     // Timeout cancels only that native session, not the caller's controller.
     expect(ctrl.signal.aborted).toBe(false);
-    const retry = readBack(ctrl.signal);
-    FakeReader.instances[2].read();
-    await expect(retry).resolves.toBe(URL);
-    expect(FakeReader.instances.flatMap((r) => r.write.mock.calls)).toHaveLength(1);
+    class WritingReader extends FakeReader {
+      override write = vi.fn(async () => {});
+    }
+    vi.stubGlobal("window", { NDEFReader: WritingReader, isSecureContext: true });
+    await expect(writeContent(URL, ctrl.signal)).resolves.toBeUndefined();
   });
 
-  it("returns the actual mismatched content for verification", async () => {
-    const result = readBack(new AbortController().signal);
-    FakeReader.instances[0].read("https://example.com/wrong-chip");
-    await expect(result).resolves.toBe("https://example.com/wrong-chip");
-  });
-
-  it("reads vCards back as text", async () => {
-    const result = readBack(new AbortController().signal);
+  it("reads a vCard on the chip as text", async () => {
+    const result = scanOnce(new AbortController().signal);
     FakeReader.instances[0].read("BEGIN:VCARD\r\nFN:José\r\nEND:VCARD", "mime", "text/vcard");
-    await expect(result).resolves.toBe("BEGIN:VCARD\r\nFN:José\r\nEND:VCARD");
+    await expect(result).resolves.toEqual({ kind: "text", text: "BEGIN:VCARD\r\nFN:José\r\nEND:VCARD", serialNumber: "01:02:03" });
   });
 
   it("bounds the wait for a lock as well", async () => {

@@ -14,7 +14,7 @@ import { MODULE_ACCENT } from "./surface";
 
 // The way between the person's panels (components/xpot/panels.ts). The app is the visits platform; going to Production or
 // Admin is a choice to change page, so it sits at the foot of the desktop sidebar, never as tabs at its top (those belong
-// to Visits | Tags). A phone, which has no sidebar, has a button per other panel in the shell header (Visits) and the
+// to Visits | Tags). A phone, which has no sidebar, has a row per other panel in Settings (from Visits) and a button on the
 // amber bar (the others).
 
 export type Accent = { solid: string; soft: string; strong: string; text: string };

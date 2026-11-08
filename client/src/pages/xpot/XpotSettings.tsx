@@ -49,6 +49,8 @@ import { InstallAppHeaderButton } from "@/components/xpot/InstallApp";
 import { useAcademyAvailable } from "@/components/academy/useAcademyAvailable";
 import { academyMessages } from "@/i18n/messages/academy";
 import { SignInMethods } from "@/components/xpot/SignInMethods";
+import { PANEL_ICON, usePanelSwitch } from "@/components/xpot/panelSwitch";
+import { workspacesMessages } from "@/i18n/messages/workspaces";
 
 const COUNTRIES = [
   { code: "BR", dial: "+55", name: "Brazil" },
@@ -296,6 +298,10 @@ export function XpotSettings() {
   const ta = useT(academyMessages);
   const { available: academy } = useAcademyAvailable();
   const tp = useT(addPersonMessages);
+  const tw = useT(workspacesMessages);
+  // On a phone the other panels (Production, Admin) are rows here, not buttons on the crowded header.
+  const panelSwitch = usePanelSwitch();
+  const otherPanels = panelSwitch.panels.filter((panel) => panel !== panelSwitch.current);
   const [signingOut, setSigningOut] = useState(false);
   const avatar = useAvatarUpload();
   const [initialized, setInitialized] = useState(false);
@@ -623,6 +629,32 @@ export function XpotSettings() {
               <ChevronRight className="h-4 w-4 shrink-0 text-white/30" />
             </button>
           </nav>
+        )}
+
+        {otherPanels.length > 0 && (
+          <div>
+            <p className={`${EYEBROW} mb-2 px-1`}>{tw("panelsHeading")}</p>
+            <nav aria-label={tw("switchPanel")} className={`divide-y divide-white/[0.06] overflow-hidden rounded-2xl ${GLASS_CLASS}`} data-testid="settings-panels">
+              {otherPanels.map((panel) => {
+                const Icon = PANEL_ICON[panel];
+                return (
+                  <button
+                    key={panel}
+                    type="button"
+                    onClick={() => panelSwitch.go(panel)}
+                    className="flex min-h-14 w-full items-center gap-3 px-4 py-3 text-left transition-colors active:bg-white/[0.06]"
+                    data-testid={`settings-panel-${panel}`}
+                  >
+                    <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-white/[0.06] text-white/70">
+                      <Icon className="h-4 w-4" />
+                    </span>
+                    <span className="min-w-0 flex-1 truncate text-[15px] font-medium text-white">{panelSwitch.label(panel)}</span>
+                    <ChevronRight className="h-4 w-4 shrink-0 text-white/30" />
+                  </button>
+                );
+              })}
+            </nav>
+          </div>
         )}
 
         <button

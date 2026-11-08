@@ -15,6 +15,7 @@ import { InlineAlert } from "@/components/xpot/InlineAlert";
 import { SwitchRow } from "@/components/xpot/SwitchRow";
 import { ApiError, apiRequest } from "@/lib/queryClient";
 import { useT } from "@/i18n";
+import { externalLinkProps } from "@/lib/externalLinks";
 import { commonMessages } from "@/i18n/messages/common";
 import { tagsMessages } from "@/i18n/messages/tags";
 import { pieceScreenMessages } from "@/i18n/messages/pieceScreen";
@@ -314,7 +315,7 @@ export function CustomerDestinationSection({ commands }: {
             {destKind === "vcard" ? (
               <p className="truncate text-lg font-bold text-white">{destDisplay}</p>
             ) : (
-              <a href={dest} target="_blank" rel="noopener noreferrer" className={`flex min-w-0 items-center gap-1.5 font-bold text-white underline-offset-2 hover:underline active:underline ${account ? "text-base" : "text-lg"}`} data-testid="link-destination">
+              <a {...externalLinkProps(dest)} className={`flex min-w-0 items-center gap-1.5 font-bold text-white underline-offset-2 hover:underline active:underline ${account ? "text-base" : "text-lg"}`} data-testid="link-destination">
                 <span className="line-clamp-2 min-w-0 break-all" data-testid="destination-name">{account ? account.label : destDisplay}</span>
                 <ExternalLink className="h-4 w-4 shrink-0 text-violet-300" />
               </a>
