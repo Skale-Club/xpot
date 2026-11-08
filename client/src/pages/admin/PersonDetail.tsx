@@ -1,7 +1,7 @@
 import { useState, type ReactNode } from "react";
 import { Link } from "wouter";
 import {
-  Building2, CalendarDays, Check, ChevronRight, KeyRound, LayoutGrid, Nfc, PackageOpen, Phone, RotateCcw,
+  Building2, CalendarDays, GraduationCap, Check, ChevronRight, KeyRound, LayoutGrid, Nfc, PackageOpen, Phone, RotateCcw,
   ShieldCheck, Tag, Webhook, X, type LucideIcon,
 } from "lucide-react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -30,6 +30,8 @@ import { DangerZone } from "./PersonDanger";
 import { Memberships } from "./PersonOrganizations";
 import { PersonTagsSales } from "./PersonTagsSales";
 import { XphereConnection } from "./PersonXphere";
+import { PersonAcademy } from "./PersonAcademy";
+import { academyMessages } from "@/i18n/messages/academy";
 
 // One person in Account › People (/admin/reps/:repId): every decision about
 // them in one pane, by section. Access (approve, refuse, block, unblock,
@@ -213,6 +215,7 @@ export function Section({ title, icon: Icon, children, testId }: { title: string
 export function PersonDetail({ rep, onClose, onGone }: { rep: Rep; onClose?: () => void; onGone: () => void }) {
   const tc = useT(commonMessages);
   const tw = useT(peopleWorkspaceMessages);
+  const ta = useT(academyMessages);
   const t = useT(manageMessages);
   const isSuperAdmin = useIsSuperAdmin();
   const status = personStatus(rep);
@@ -268,6 +271,13 @@ export function PersonDetail({ rep, onClose, onGone }: { rep: Rep; onClose?: () 
       {isSuperAdmin && status === "active" && modules.includes("visits") && rep.userId && (
         <Section title={tw("sectionVisits")} icon={Webhook} testId="person-xphere">
           <XphereConnection key={rep.id} rep={rep} userId={rep.userId} />
+        </Section>
+      )}
+
+      {/* What they watched in the Academy and for how long; the global admin's. */}
+      {isSuperAdmin && status === "active" && (
+        <Section title={ta("personSection")} icon={GraduationCap} testId="person-academy">
+          <PersonAcademy key={rep.id} repId={rep.id} />
         </Section>
       )}
 

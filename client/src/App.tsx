@@ -30,7 +30,7 @@ import { WorkspaceBoundary } from "@/components/xpot/WorkspaceBoundary";
 const {
   leads: XpotLeads, sales: XpotSales, dashboard: XpotDashboard,
   route: XpotProspecting, tasks: XpotTasks, checkIn: XpotCheckIn,
-  settings: XpotSettings, organizations: OrganizationsPage, organizationPerson: OrganizationPerson,
+  settings: XpotSettings, academy: AcademyApp, organizations: OrganizationsPage, organizationPerson: OrganizationPerson,
 } = screens;
 const Login = lazy(() => import("./pages/Login"));
 const MyApp = lazy(() => import("./pages/my/MyApp"));
@@ -226,6 +226,7 @@ export default function App() {
         </Route>
         <Route path="/my/*?" component={MyApp} />
         <Route path="/settings" component={XpotSettings} />
+        <Route path="/academy/*?" component={AcademyApp} />
         <Route path="/tags/*?" component={TagsApp} />
         <Route>{() => <VisitsOrNotFound />}</Route>
         </Switch>

@@ -12,6 +12,8 @@ export const screens = {
   settings: lazyScreen(() => import("@/pages/xpot/XpotSettings").then((m) => ({ default: m.XpotSettings }))),
   organizations: lazyScreen(() => import("@/pages/xpot/OrganizationsPage").then((m) => ({ default: m.OrganizationsPage }))),
   organizationPerson: lazyScreen(() => import("@/pages/xpot/OrganizationPerson").then((m) => ({ default: m.OrganizationPerson }))),
+  academy: lazyScreen(() => import("@/pages/academy/AcademyApp").then((m) => ({ default: m.AcademyApp }))),
+  adminAcademy: lazyScreen(() => import("@/pages/admin/AdminAcademy").then((m) => ({ default: m.AdminAcademy }))),
   tagsHome: lazyScreen(() => import("@/pages/tags/HomeScreen")),
   tagsPieces: lazyScreen(() => import("@/pages/tags/PiecesScreen")),
   tagsPiece: lazyScreen(() => import("@/pages/tags/TagScreen")),

@@ -69,7 +69,7 @@ describe("the menu of each panel", () => {
       ["/admin/work/sales", "Team sales"],
     ]);
     const all = hrefs(groups);
-    for (const href of ["/admin/tags/production", "/admin/tags/provisioners", "/admin/tags/journey", "/admin/tags/shop", "/admin/reps", "/admin/products", "/admin/settings", "/admin/integrations", "/admin/branding", "/admin/health", "/organizations/7?tab=settings"]) expect(all).not.toContain(href);
+    for (const href of ["/admin/tags/production", "/admin/tags/provisioners", "/admin/tags/journey", "/admin/tags/shop", "/admin/reps", "/admin/products", "/admin/settings", "/admin/integrations", "/admin/branding", "/admin/health", "/admin/academy", "/organizations/7?tab=settings"]) expect(all).not.toContain(href);
     expect(groups.some((g) => g.adminOnly)).toBe(false);
     expect(groups.flatMap((g) => g.items).some((i) => i.adminOnly)).toBe(false);
     // The owner has no panel of their own: whatever panel the shell passes, the group is the same.
@@ -105,7 +105,7 @@ describe("the menu of each panel", () => {
     expect(itemHrefs(groups, "")).toEqual(["/admin"]);
     expect(itemHrefs(groups, "Companies")).toEqual(["/organizations", "/admin/reps", "/admin/work/leads", "/admin/overview"]);
     expect(itemHrefs(groups, "Platform")).toEqual([
-      "/admin/products", "/admin/tags/shop", "/admin/integrations", "/admin/branding", "/admin/health", "/admin/settings", "/admin/tags/journey",
+      "/admin/products", "/admin/tags/shop", "/admin/integrations", "/admin/branding", "/admin/health", "/admin/academy", "/admin/settings", "/admin/tags/journey",
     ]);
     const all = hrefs(groups);
     for (const href of ["/admin/work/tasks", "/admin/work/sales", "/admin/tags/production", "/admin/tags/pieces", "/admin/tags/provisioners", "/admin/tags/kits", "/admin/tags/kits?view=orders"]) expect(all).not.toContain(href);
@@ -144,8 +144,8 @@ describe("the menu of each panel", () => {
 
   it("follows the modules: no Visits items without Visits, no Tags items without Tags", () => {
     const admin = (modules: readonly ("visits" | "tags")[]) => hrefs(groupsOf("platform", "admin", modules));
-    expect(admin(["tags"])).toEqual(["/admin", "/organizations", "/admin/reps", "/admin/tags/shop", "/admin/integrations", "/admin/branding", "/admin/health", "/admin/tags/journey"]);
-    expect(admin(["visits"])).toEqual(["/admin", "/organizations", "/admin/reps", "/admin/work/leads", "/admin/overview", "/admin/products", "/admin/integrations", "/admin/branding", "/admin/health", "/admin/settings"]);
+    expect(admin(["tags"])).toEqual(["/admin", "/organizations", "/admin/reps", "/admin/tags/shop", "/admin/integrations", "/admin/branding", "/admin/health", "/admin/academy", "/admin/tags/journey"]);
+    expect(admin(["visits"])).toEqual(["/admin", "/organizations", "/admin/reps", "/admin/work/leads", "/admin/overview", "/admin/products", "/admin/integrations", "/admin/branding", "/admin/health", "/admin/academy", "/admin/settings"]);
     expect(groupsOf("platform", "production", ["visits"])).toEqual([]);
     expect(hrefs(groupsOf("partner", "production", ["tags"]))).toContain("/admin/tags/production");
     const owner = (modules: readonly ("visits" | "tags")[]) => hrefs(groupsOf("owner", "visits", modules));
@@ -354,7 +354,7 @@ describe("contextOfPath", () => {
   });
   it("puts settings and the platform's own screens in the account", () => {
     // Xphere is an account integration; its old URL opens Integrations.
-    for (const p of ["/settings", "/organizations", "/organizations/4", "/admin/reps", "/admin/integrations", "/admin/branding", "/admin/landing", "/admin/xphere", "/admin/health"]) expect(contextOfPath(p)).toBe("account");
+    for (const p of ["/settings", "/organizations", "/organizations/4", "/admin/reps", "/admin/integrations", "/admin/branding", "/admin/landing", "/admin/xphere", "/admin/health", "/admin/academy", "/academy", "/academy/abc"]) expect(contextOfPath(p)).toBe("account");
   });
   it("does not mistake a prefix for a section", () => {
     expect(contextOfPath("/tagsx")).toBe("visits");

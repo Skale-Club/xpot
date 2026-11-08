@@ -62,6 +62,7 @@ const DESCRIPTION_KEYS: Record<string, IntKey> = {
   gemini: "descGemini",
   gohighlevel: "descGohighlevel",
   twilio: "descTwilio",
+  notion: "descNotion",
 };
 const FIELD_LABEL_KEYS: Record<string, IntKey> = {
   "API Key": "fieldApiKey",
@@ -72,6 +73,9 @@ const FIELD_LABEL_KEYS: Record<string, IntKey> = {
   "Account SID": "fieldAccountSid",
   "Auth Token": "fieldAuthToken",
   "Messaging Service SID": "fieldMessagingServiceSid",
+  "Integration token": "fieldIntegrationToken",
+  "Courses database ID": "fieldCoursesDatabaseId",
+  "Lessons database ID": "fieldLessonsDatabaseId",
 };
 
 function providerDescription(t: IntT, def: IntegrationProviderDef) {

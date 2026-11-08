@@ -1,4 +1,5 @@
 import {
+  GraduationCap,
   Activity,
   BarChart3,
   Boxes,
@@ -68,12 +69,12 @@ export const starts = (prefix: string) => (path: string) => path === prefix || p
 
 /** Admin sections that are really Visits management, and the ones that belong to the account. */
 const VISITS_ADMIN = ["overview", "products", "settings"] as const;
-export const ORGANIZATION_SECTIONS = ["reps", "integrations", "branding", "landing", "xphere", "health"] as const;
+export const ORGANIZATION_SECTIONS = ["reps", "integrations", "branding", "landing", "xphere", "health", "academy"] as const;
 
 /** Which part of the app a path belongs to. */
 export function contextOfPath(path: string): ShellContext {
   if (starts("/tags")(path) || starts("/admin/tags")(path)) return "tags";
-  if (starts("/settings")(path) || starts("/organizations")(path)) return "account";
+  if (starts("/settings")(path) || starts("/organizations")(path) || starts("/academy")(path)) return "account";
   const admin = /^\/admin(?:\/([^/]+))?/.exec(path);
   if (admin) return (ORGANIZATION_SECTIONS as readonly string[]).includes(admin[1] ?? "") ? "account" : "visits";
   return "visits";
@@ -154,7 +155,8 @@ type ShellKey =
   | "orgIntegrations"
   | "orgBranding"
   | "orgLanding"
-  | "orgSystemHealth";
+  | "orgSystemHealth"
+  | "orgAcademy";
 
 export type Viewer = {
   /** In the panel: sees each module's Manage group. */
@@ -245,6 +247,8 @@ export function platformItems(l: Labels): NavItem[] {
     // The landing page editor is part of the brand and public site.
     { href: "/admin/branding", label: l.shell("orgBranding"), icon: Palette, match: (p) => section("branding")(p) || section("landing")(p) },
     { href: "/admin/health", label: l.shell("orgSystemHealth"), icon: HeartPulse, match: section("health") },
+    // An admin tool, so always listed for the Xpot admin (a calm empty state when there are no courses).
+    { href: "/admin/academy", label: l.shell("orgAcademy"), icon: GraduationCap, match: section("academy") },
   ];
 }
 

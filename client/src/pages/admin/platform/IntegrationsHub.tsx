@@ -1,7 +1,7 @@
 import { useEffect, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "wouter";
-import { Bot, ChevronRight, Map, MessageSquareText, Mic, Plug, Server, Smartphone, Webhook, type LucideIcon } from "lucide-react";
+import { BookOpen, Bot, ChevronRight, Map, MessageSquareText, Mic, Plug, Server, Smartphone, Webhook, type LucideIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { SectionCard } from "@/components/xpot/DashboardKit";
 import { ErrorState } from "@/components/xpot/EmptyState";
@@ -79,6 +79,7 @@ const JOB_ICONS: Record<ServiceJob, LucideIcon> = {
   voice: Mic,
   ai: MessageSquareText,
   crm: Webhook,
+  content: BookOpen,
   assistants: Bot,
   infra: Server,
 };
@@ -280,6 +281,8 @@ export function IntegrationsHub() {
           <div className="border-t border-white/[0.07] p-3">{card("gohighlevel")}</div>
         </details>
       </JobSection>
+
+      <JobSection job="content">{card("notion")}</JobSection>
 
       <JobSection job="assistants">
         <SummaryRow

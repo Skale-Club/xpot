@@ -11,6 +11,7 @@ import {
   PanelLeftClose,
   PanelLeftOpen,
   Search,
+  GraduationCap,
   Settings,
   type LucideIcon,
 } from "lucide-react";
@@ -46,6 +47,7 @@ import {
   type NavItem,
   type ShellContext,
 } from "./moduleNav";
+import { useAcademyAvailable } from "@/components/academy/useAcademyAvailable";
 import { XpotLogo } from "./XpotLogo";
 import { useOnline } from "@/hooks/use-online";
 import { rememberPanelRoute } from "./panelRoute";
@@ -361,6 +363,7 @@ function DesktopSidebar({ collapsed, onToggle, pending }: { collapsed: boolean; 
   const initials = name.split(" ").map((n) => n[0]).slice(0, 2).join("").toUpperCase();
   const firstName = name.split(" ")[0] ?? "";
   const PanelIcon = PANEL_ICON[currentPanel];
+  const { available: academy } = useAcademyAvailable();
 
   return (
     <aside
@@ -440,6 +443,7 @@ function DesktopSidebar({ collapsed, onToggle, pending }: { collapsed: boolean; 
         {panel && !collapsed ? <p className="truncate px-3 pb-2 text-xs text-white/35">{name}</p> : null}
         {/* Going to another panel is changing page: down here, never as tabs above the menu. */}
         <SidebarPanelRows collapsed={collapsed} />
+        {!panel && academy ? <SidebarLink item={{ href: "/academy", label: t("navAcademy"), icon: GraduationCap, match: starts("/academy") }} collapsed={collapsed} active={starts("/academy")(location)} accent={MODULE_ACCENT.visits} /> : null}
         {!panel ? <SidebarLink item={{ href: "/settings", label: t("navSettings"), icon: Settings, match: starts("/settings") }} collapsed={collapsed} active={starts("/settings")(location)} accent={MODULE_ACCENT.visits} /> : null}
         <button
           type="button"

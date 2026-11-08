@@ -26,6 +26,9 @@ export function envProvides(provider: string, env: Env): boolean {
       return has("GEMINI_API_KEY");
     case "google_places":
       return has("GOOGLE_PLACES_API_KEY", "GOOGLE_MAPS_API_KEY");
+    case "notion":
+      // Development only: production reads Notion from the panel.
+      return env.NODE_ENV !== "production" && has("NOTION_TOKEN") && has("NOTION_ACADEMY_COURSES_DB") && has("NOTION_ACADEMY_LESSONS_DB");
     case "twilio":
       return envTwilioConfig(env as NodeJS.ProcessEnv) !== null;
     default:

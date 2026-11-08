@@ -7,6 +7,7 @@ export function routeScreens(url: string): ScreenName[] {
   if (/^\/organizations\/[^/]+\/people\//.test(path)) return ["organizationPerson"];
   if (/^\/organizations(?:\/|$)/.test(path)) return ["organizations"];
   if (path === "/settings") return ["settings"];
+  if (/^\/academy(?:\/|$)/.test(path)) return ["academy"];
   if (/^\/admin\/tags(?:\/|$)/.test(path)) {
     const [, , , tab, id] = path.split("/");
     const screen: ScreenName = tab === "pieces" ? (id ? "tagDetail" : "tagPieces")
@@ -20,7 +21,7 @@ export function routeScreens(url: string): ScreenName[] {
   }
   if (/^\/admin(?:\/|$)/.test(path)) {
     const section = path.split("/")[2] ?? "";
-    const sections: Record<string, ScreenName> = { work: "adminWork", overview: "adminOverview", reps: "adminReps", integrations: "adminIntegrations", xphere: "adminIntegrations", branding: "adminBrandSite", landing: "adminBrandSite", products: "adminProducts", settings: "adminSettings", health: "adminHealth" };
+    const sections: Record<string, ScreenName> = { work: "adminWork", overview: "adminOverview", reps: "adminReps", integrations: "adminIntegrations", xphere: "adminIntegrations", branding: "adminBrandSite", landing: "adminBrandSite", products: "adminProducts", settings: "adminSettings", health: "adminHealth", academy: "adminAcademy" };
     return [sections[section] ?? "adminHome"];
   }
   if (/^\/tags(?:\/|$)/.test(path)) {

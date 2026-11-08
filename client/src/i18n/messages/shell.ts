@@ -20,6 +20,7 @@ const en = {
 
   // Desktop sidebar and top bar
   navSettings: "Settings",
+  navAcademy: "Academy",
   // Module shell: management inside each module, the account outside them
   navManage: "Manage",
   superAdminTag: "Platform",
@@ -45,6 +46,7 @@ const en = {
   orgBranding: "Brand & public site",
   orgLanding: "Landing page",
   orgSystemHealth: "Status",
+  orgAcademy: "Academy",
   signOut: "Sign out",
   collapseSidebar: "Collapse sidebar",
   expandSidebar: "Expand sidebar",
@@ -97,6 +99,8 @@ export const shellMessages: Dictionary<typeof en> = {
     durationHours: "{hours}h {minutes}min",
 
     navSettings: "Configurações",
+
+    navAcademy: "Academy",
     navManage: "Gestão",
     superAdminTag: "Plataforma",
     superAdminHint: "Só a plataforma vê isto",
@@ -120,6 +124,7 @@ export const shellMessages: Dictionary<typeof en> = {
     orgBranding: "Marca e site público",
     orgLanding: "Landing page",
     orgSystemHealth: "Status",
+    orgAcademy: "Academy",
     signOut: "Sair",
     collapseSidebar: "Recolher menu",
     expandSidebar: "Expandir menu",
@@ -166,6 +171,8 @@ export const shellMessages: Dictionary<typeof en> = {
     durationHours: "{hours} h {minutes} min",
 
     navSettings: "Ajustes",
+
+    navAcademy: "Academy",
     navManage: "Gestión",
     superAdminTag: "Plataforma",
     superAdminHint: "Solo la plataforma ve esto",
@@ -189,6 +196,7 @@ export const shellMessages: Dictionary<typeof en> = {
     orgBranding: "Marca y sitio público",
     orgLanding: "Landing page",
     orgSystemHealth: "Estado",
+    orgAcademy: "Academy",
     signOut: "Cerrar sesión",
     collapseSidebar: "Contraer menú",
     expandSidebar: "Expandir menú",

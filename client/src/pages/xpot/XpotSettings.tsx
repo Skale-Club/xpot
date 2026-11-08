@@ -5,6 +5,7 @@ import { phonePlaceholderFor } from "@shared/phone";
 import {
   Building2,
   Camera,
+  GraduationCap,
   ChevronDown,
   ChevronRight,
   KeyRound,
@@ -45,6 +46,8 @@ import { AddPersonForm } from "./components/AddPersonForm";
 import { AppLayout } from "@/components/xpot/AppLayout";
 import { homeForModules, useXpotModules } from "@/components/ModuleSwitch";
 import { InstallAppHeaderButton } from "@/components/xpot/InstallApp";
+import { useAcademyAvailable } from "@/components/academy/useAcademyAvailable";
+import { academyMessages } from "@/i18n/messages/academy";
 import { SignInMethods } from "@/components/xpot/SignInMethods";
 
 const COUNTRIES = [
@@ -290,6 +293,8 @@ export function XpotSettings() {
   const tc = useT(commonMessages);
   const tn = useT(navIaMessages);
   const ts = useT(shellMessages);
+  const ta = useT(academyMessages);
+  const { available: academy } = useAcademyAvailable();
   const tp = useT(addPersonMessages);
   const [signingOut, setSigningOut] = useState(false);
   const avatar = useAvatarUpload();
@@ -602,6 +607,23 @@ export function XpotSettings() {
             </nav>
           </div>
         ))}
+
+        {academy && (
+          <nav aria-label={ta("title")} className={`overflow-hidden rounded-2xl ${GLASS_CLASS}`}>
+            <button
+              type="button"
+              onClick={() => setLocation("/academy")}
+              className="flex min-h-14 w-full items-center gap-3 px-4 py-3 text-left transition-colors active:bg-white/[0.06]"
+              data-testid="settings-open-academy"
+            >
+              <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-white/[0.06] text-white/70">
+                <GraduationCap className="h-4 w-4" />
+              </span>
+              <span className="min-w-0 flex-1 truncate text-[15px] font-medium text-white">{ta("title")}</span>
+              <ChevronRight className="h-4 w-4 shrink-0 text-white/30" />
+            </button>
+          </nav>
+        )}
 
         <button
           type="button"

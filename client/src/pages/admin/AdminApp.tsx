@@ -29,9 +29,9 @@ import { manageMessages } from "@/i18n/messages/manage";
 import { workspacesMessages } from "@/i18n/messages/workspaces";
 import { useXpotModules, homeForModules } from "@/components/ModuleSwitch";
 
-const { adminTags: AdminTags, adminOverview: AdminOverview, adminReps: AdminReps, adminIntegrations: AdminIntegrations, adminBrandSite: AdminBrandSite, adminProducts: AdminProducts, adminSettings: AdminSettings, adminHealth: AdminSystemHealth, adminHome: AdminHome, adminWork: AdminWork } = screens;
+const { adminTags: AdminTags, adminOverview: AdminOverview, adminReps: AdminReps, adminIntegrations: AdminIntegrations, adminBrandSite: AdminBrandSite, adminProducts: AdminProducts, adminSettings: AdminSettings, adminHealth: AdminSystemHealth, adminHome: AdminHome, adminWork: AdminWork, adminAcademy: AdminAcademy } = screens;
 
-const SECTIONS = ["home", "work", "overview", "tags", "products", "integrations", "branding", "landing", "xphere", "reps", "settings", "health"] as const;
+const SECTIONS = ["home", "work", "overview", "tags", "products", "integrations", "branding", "landing", "xphere", "reps", "settings", "health", "academy"] as const;
 /** What an owner's or a partner's panel reaches; the rest of /admin is the platform's. (Tags narrows itself by tab: AdminTags.) */
 const ORGANIZATION_SECTIONS = ["home", "work", "tags"];
 /**
@@ -112,6 +112,7 @@ export function AdminApp({ section }: { section: string }) {
     {(active === "integrations" || active === "xphere") && <AdminIntegrations />}
     {(active === "branding" || active === "landing") && <AdminBrandSite />}
     {active === "health" && <AdminSystemHealth />}
+    {active === "academy" && <AdminAcademy />}
     {active === "reps" && <AdminReps />}
     {active === "tags" && <AdminTags />}
     {active === "settings" && <AdminSettings />}

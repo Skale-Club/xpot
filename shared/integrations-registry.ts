@@ -12,7 +12,7 @@
 export type IntegrationTable = "chat" | "settings";
 
 /** Field keys stored in the `config` jsonb column of integration_settings (no dedicated column). */
-export const CONFIG_FIELD_KEYS = ["accountSid", "fromNumber", "messagingServiceSid"] as const;
+export const CONFIG_FIELD_KEYS = ["accountSid", "fromNumber", "messagingServiceSid", "coursesDatabaseId", "lessonsDatabaseId"] as const;
 export type ConfigFieldKey = (typeof CONFIG_FIELD_KEYS)[number];
 
 export function isConfigFieldKey(key: string): key is ConfigFieldKey {
@@ -37,7 +37,7 @@ export interface IntegrationProviderDef {
   description: string;
   table: IntegrationTable;
   /** "Used for" badge in the UI. */
-  category: "Maps" | "Voice" | "AI" | "Pipeline" | "Messaging";
+  category: "Maps" | "Voice" | "AI" | "Pipeline" | "Messaging" | "Content";
   fields: IntegrationFieldDef[];
   /** Primary or fallback for its job (voice transcription, AI text): shown as a hint on the card. */
   role?: "primary" | "fallback";
@@ -167,6 +167,19 @@ export const INTEGRATION_PROVIDERS: IntegrationProviderDef[] = [
       { key: "messagingServiceSid", label: "Messaging Service SID", placeholder: "MG...", optional: true },
     ],
   },
+  {
+    provider: "notion",
+    label: "Notion (Academy)",
+    description: "Courses and lessons of the in-app Academy. Needs an integration token and the ids of the Courses and Lessons databases.",
+    table: "settings",
+    category: "Content",
+    envMode: "fallback",
+    fields: [
+      { key: "apiKey", label: "Integration token", secret: true, placeholder: "ntn_..." },
+      { key: "coursesDatabaseId", label: "Courses database ID" },
+      { key: "lessonsDatabaseId", label: "Lessons database ID" },
+    ],
+  },
 ];
 
 export function getProviderDef(provider: string): IntegrationProviderDef | undefined {
@@ -205,7 +218,8 @@ export type IntegrationProblemCode =
   | "missing_location_id"
   | "missing_account_sid"
   | "missing_auth_token"
-  | "missing_sender";
+  | "missing_sender"
+  | "missing_database";
 
 const PROBLEM_MESSAGES: Record<IntegrationProblemCode, string> = {
   missing_api_key: "No API key on file, so calls will fail. Paste a key and click Save.",
@@ -213,6 +227,7 @@ const PROBLEM_MESSAGES: Record<IntegrationProblemCode, string> = {
   missing_account_sid: "Account SID is missing.",
   missing_auth_token: "Auth Token is missing.",
   missing_sender: "Set a From number or a Messaging Service SID.",
+  missing_database: "Set both database IDs (Courses and Lessons).",
 };
 
 type ProblemState = { hasApiKey: boolean; config: Partial<Record<ConfigFieldKey, string>>; locationId?: string | null };
@@ -226,6 +241,7 @@ export function integrationProblemCode(provider: string, state: ProblemState): I
     return null;
   }
   if (!state.hasApiKey) return "missing_api_key";
+  if (provider === "notion" && (!state.config.coursesDatabaseId || !state.config.lessonsDatabaseId)) return "missing_database";
   if (provider === "gohighlevel" && !state.locationId?.trim()) return "missing_location_id";
   return null;
 }
@@ -262,7 +278,7 @@ export function integrationStatusKey(s: Pick<IntegrationStatus, "enabled" | "pro
 // (server/observability/services.ts), so the two screens never disagree.
 
 /** The job a service does, in the order the Integrations page shows them. */
-export const SERVICE_JOBS = ["signIn", "maps", "voice", "ai", "crm", "assistants", "infra"] as const;
+export const SERVICE_JOBS = ["signIn", "maps", "voice", "ai", "crm", "content", "assistants", "infra"] as const;
 export type ServiceJob = (typeof SERVICE_JOBS)[number];
 
 /** Services that live only in the server environment: shown, never edited, values never sent. */
@@ -279,6 +295,7 @@ export const SERVICES_BY_JOB: Record<ServiceJob, readonly string[]> = {
   voice: ["groq", "openai"],
   ai: ["openrouter", "gemini"],
   crm: ["xphere", "gohighlevel"],
+  content: ["notion"],
   assistants: ["mcp"],
   infra: INFRA_SERVICES,
 };
