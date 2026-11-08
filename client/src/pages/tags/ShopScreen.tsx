@@ -38,10 +38,10 @@ import { partnerLine, useWholesale, WholesaleCard } from "./WholesaleCard";
 //
 // The product views copy Stuscle's wholesale pages (apps/storefront/src/app/(main)/wholesale): the same arrangement, the
 // same sizes and spacing, at the same breakpoints (768 and 1024, which are Tailwind's md and lg), inside Xpot's dark
-// look. Product photos sit on Stuscle's light image field.
+// look. Product photos sit on Stuscle's image field (its dark theme, the one visitors see).
 
-/** Stuscle's image field (--image-field) and the 29:34 shape every product photo is shown in. */
-const FIELD = "bg-[#f5f5f5]";
+/** Stuscle's image field (--image-field, dark theme) and the 29:34 shape every product photo is shown in. */
+const FIELD = "bg-[#27272a]";
 const PHOTO = `relative aspect-[29/34] overflow-hidden ${FIELD}`;
 /** The main photo is never taller than the screen: width from the height left under the header, as on Stuscle. */
 const MAIN_MAX_WIDTH = "calc((100svh - 9rem) * 29 / 34)";
