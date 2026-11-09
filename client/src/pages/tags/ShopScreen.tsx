@@ -45,6 +45,8 @@ const FIELD = "bg-[#27272a]";
 const PHOTO = `relative aspect-[29/34] overflow-hidden ${FIELD}`;
 /** The main photo is never taller than the screen: width from the height left under the header, as on Stuscle. */
 const MAIN_MAX_WIDTH = "calc((100svh - 9rem) * 29 / 34)";
+/** On a phone the photo is shorter, so the price is never more than a swipe away. */
+const PHONE_MAX_WIDTH = "calc((100svh - 17rem) * 29 / 34)";
 /** How far the photo is magnified while the cursor is over it. */
 const ZOOM = 2.2;
 
@@ -141,7 +143,8 @@ function Gallery({ images, title }: { images: string[]; title: string }) {
         </div>
         <div
           ref={track}
-          className="flex snap-x snap-mandatory overflow-x-auto [scrollbar-width:none] md:hidden [&::-webkit-scrollbar]:hidden"
+          className="mx-auto flex snap-x snap-mandatory overflow-x-auto [scrollbar-width:none] md:hidden [&::-webkit-scrollbar]:hidden"
+          style={{ maxWidth: PHONE_MAX_WIDTH }}
           onScroll={(e) => setIndex(Math.round(e.currentTarget.scrollLeft / e.currentTarget.clientWidth))}
         >
           {images.map((src, i) => (
@@ -150,7 +153,7 @@ function Gallery({ images, title }: { images: string[]; title: string }) {
             </div>
           ))}
         </div>
-        {images.length > 1 && <p className="absolute bottom-3 right-3 rounded-full bg-black/60 px-3 py-1 text-xs text-white md:hidden">{active + 1} / {images.length}</p>}
+        {images.length > 1 && <p className="absolute bottom-3 right-3 rounded-full bg-black/60 px-3 py-1 text-xs text-white md:hidden" style={{ right: `max(0.75rem, calc((100% - ${PHONE_MAX_WIDTH}) / 2 + 0.75rem))` }}>{active + 1} / {images.length}</p>}
       </div>
     </div>
   );
@@ -309,21 +312,27 @@ function ProductDetail({ product, currency }: { product: TagShopProduct; currenc
         </div>
       </div>
       <div
-        className={`fixed inset-x-0 bottom-[4.5rem] z-40 transition-opacity duration-300 lg:hidden ${priceInView ? "pointer-events-none opacity-0" : "opacity-100"}`}
+        className={`fixed inset-x-0 bottom-[calc(env(safe-area-inset-bottom)+4.25rem)] z-40 transition-opacity duration-300 lg:hidden ${priceInView ? "pointer-events-none opacity-0" : "opacity-100"}`}
         aria-hidden={priceInView}
         data-testid="shop-mobile-actions"
       >
-        <div className="flex w-full flex-col items-center gap-y-3 border-t border-white/10 bg-[#0a0e1a] p-4">
-          <div className="flex flex-wrap items-baseline justify-center gap-x-2 text-white">
-            <span>{t("shopPieces", { count: totals.quantity })}</span>
-            <span>—</span>
-            {totals.retailCents !== null && <span className="text-xs text-white/55 line-through">{money(totals.retailCents)}</span>}
-            <span className="font-medium">{money(totals.wholesaleCents)}</span>
+        <div className="flex w-full items-center justify-between gap-x-3 border-t border-white/10 bg-[#0a0e1a] px-4 py-2.5">
+          <div className="flex min-w-0 flex-col text-white">
+            <span className="text-xs text-white/55">{t("shopPieces", { count: totals.quantity })}</span>
+            <span className="flex items-baseline gap-x-2">
+              <span className="font-semibold">{money(totals.wholesaleCents)}</span>
+              {totals.retailCents !== null && <span className="text-xs text-white/55 line-through">{money(totals.retailCents)}</span>}
+            </span>
           </div>
-          {addButton("")}
+          <Button asChild variant="brand" accent="tags" size="default" className="h-11 shrink-0 rounded-full px-5">
+            <a href={link} target="_blank" rel="noopener noreferrer" data-testid="shop-add-bar">
+              <ShoppingCart />
+              {t("shopAddToCart")}
+            </a>
+          </Button>
         </div>
       </div>
-    </section>
+      </section>
   );
 }
 
