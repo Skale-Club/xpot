@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { ExternalLink, ImageOff, ShoppingBag, ShoppingCart } from "lucide-react";
 import {
@@ -162,15 +162,13 @@ function Gallery({ images, title }: { images: string[]; title: string }) {
 /**
  * The product in view, laid out like Stuscle's wholesale product page: the gallery on the left and the buying column on
  * the right (a single column on a phone). Pick the version and the bulk pack, see the pack's price against retail, Add to
- * cart. On a phone a bar carries the pack and the button once the price section has scrolled away.
+ * cart.
  */
 function ProductDetail({ product, currency }: { product: TagShopProduct; currency: string }) {
   const t = useT(tagsMessages);
   const [variantId, setVariantId] = useState(product.variants[0].id);
   const [quantity, setQuantity] = useState(shopStartQuantity(product.variants[0]));
   const [quantityText, setQuantityText] = useState(String(shopStartQuantity(product.variants[0])));
-  const priceSection = useRef<HTMLDivElement>(null);
-  const [priceInView, setPriceInView] = useState(true);
   const variant = product.variants.find((v) => v.id === variantId) ?? product.variants[0];
   const sold = variant.packs.length > 0;
   const totals = shopTotals(variant, quantity);
@@ -184,14 +182,6 @@ function ProductDetail({ product, currency }: { product: TagShopProduct; currenc
     setQuantity(next);
     setQuantityText(String(next));
   };
-
-  useEffect(() => {
-    const el = priceSection.current;
-    if (!el || typeof IntersectionObserver === "undefined") return;
-    const watcher = new IntersectionObserver(([entry]) => setPriceInView(entry.isIntersecting));
-    watcher.observe(el);
-    return () => watcher.disconnect();
-  }, []);
 
   // A variant sold in packs only takes a pack's size: changing variant keeps the pack when it has one like it, else its smallest.
   const pick = (id: string) => {
@@ -234,7 +224,7 @@ function ProductDetail({ product, currency }: { product: TagShopProduct; currenc
             </div>
           )}
 
-          <div className="flex flex-col gap-y-4" ref={priceSection}>
+          <div className="flex flex-col gap-y-4">
             {sold ? (
               <>
                 <div className="flex flex-col gap-y-3">
@@ -311,28 +301,7 @@ function ProductDetail({ product, currency }: { product: TagShopProduct; currenc
           </div>
         </div>
       </div>
-      <div
-        className={`fixed inset-x-0 bottom-[calc(env(safe-area-inset-bottom)+4.25rem)] z-40 transition-opacity duration-300 lg:hidden ${priceInView ? "pointer-events-none opacity-0" : "opacity-100"}`}
-        aria-hidden={priceInView}
-        data-testid="shop-mobile-actions"
-      >
-        <div className="flex w-full items-center justify-between gap-x-3 border-t border-white/10 bg-[#0a0e1a] px-4 py-2.5">
-          <div className="flex min-w-0 flex-col text-white">
-            <span className="text-xs text-white/55">{t("shopPieces", { count: totals.quantity })}</span>
-            <span className="flex items-baseline gap-x-2">
-              <span className="font-semibold">{money(totals.wholesaleCents)}</span>
-              {totals.retailCents !== null && <span className="text-xs text-white/55 line-through">{money(totals.retailCents)}</span>}
-            </span>
-          </div>
-          <Button asChild variant="brand" accent="tags" size="default" className="h-11 shrink-0 rounded-full px-5">
-            <a href={link} target="_blank" rel="noopener noreferrer" data-testid="shop-add-bar">
-              <ShoppingCart />
-              {t("shopAddToCart")}
-            </a>
-          </Button>
-        </div>
-      </div>
-      </section>
+    </section>
   );
 }
 
@@ -472,7 +441,7 @@ export default function ShopScreen() {
         <ListSkeleton rows={3} />
       ) : count > 0 ? (
         featured ? (
-          <div className="mx-auto flex w-full max-w-[1080px] flex-col gap-y-4 pb-28 lg:pb-0">
+          <div className="mx-auto flex w-full max-w-[1080px] flex-col gap-y-4">
             {products.length > 1 && (
               <button type="button" onClick={() => open(null)} className="w-fit text-sm text-white/55 underline-offset-4 transition-colors hover:text-white hover:underline" data-testid="shop-back">
                 ← {t("shopAllProducts")}
