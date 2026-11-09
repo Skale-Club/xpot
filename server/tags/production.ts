@@ -910,9 +910,15 @@ function fileItem(f: typeof printJobFiles.$inferSelect): PrintJobFileItem {
   return { id: f.id, kind: f.kind as PrintFileKind, filename: f.filename, bytes: f.bytes, sha256: f.sha256, createdAt: f.createdAt.toISOString() };
 }
 
+/** A Menu drawn by a shared face builder (`plate.service`/`stand.service`, and the face v3 `plate.face`/`stand.face`):
+ * its title font is the `style` param, one of the six approved fonts. */
+function isStyledMenu(version: VersionRow): boolean {
+  return version.params?.face === "menu" && !!version.builder && /\.(service|face)$/.test(version.builder);
+}
+
 /** A version's params, recipe, beds and parts as the plate's NFC type prints them (shared withNfcVariant). */
 function printedVersion(version: VersionRow, mount: string | null, menuFont: string | null) {
-  const serviceMenu = version.params?.face === "menu" && version.builder?.endsWith(".service");
+  const serviceMenu = isStyledMenu(version);
   const fontIndex = PRINT_MENU_FONTS.findIndex((font) => font === menuFont);
   const params = menuFont ? {
     ...version.params, font: menuFont,
@@ -926,7 +932,7 @@ function printedVersion(version: VersionRow, mount: string | null, menuFont: str
 
 /** The title font of a new print: only a Menu piece has one to choose; unsaid, the version's own. */
 function pickMenuFont(version: VersionRow, requested: PrintMenuFont | undefined): PrintMenuFont | null {
-  const fonts = version.params?.face === "menu" && version.builder?.endsWith(".service") ? PRINT_MENU_FONTS : menuFontsOf(version.builder);
+  const fonts = isStyledMenu(version) ? PRINT_MENU_FONTS : menuFontsOf(version.builder);
   if (requested && !fonts.includes(requested)) throw new TagError("Only a Menu piece has a title font to choose", 409, "print_font_unavailable");
   return requested ?? null;
 }
