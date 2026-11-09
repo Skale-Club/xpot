@@ -290,7 +290,7 @@ async function seed(db: Db) {
     ["Demo Closed Diner", "restaurant", "inactive"],
   ];
   const leads: Row[] = [];
-  for (const [i, [name, industry, status]] of LEADS.entries()) {
+  for (const [i, [name, industry, status]] of Array.from(LEADS.entries())) {
     const org = i >= 15 ? orgClosed : i % 5 === 4 ? orgResale : org1;
     const owner = org === orgResale ? (i % 2 ? carla : diego) : org === orgClosed ? rep["demo-inactive-iris"] : i % 2 ? ana : bruno;
     const slug = name.toLowerCase().replace(/[^a-z]+/g, "-").replace(/^-|-$/g, "");
@@ -324,7 +324,7 @@ async function seed(db: Db) {
   const VISIT_STATUSES = ["planned", "in_progress", "completed", "cancelled", "invalid", "no_answer", "came_back_later", "not_interested", "follow_up", "sale_made"] as const;
   const VALIDATION = ["valid", "outside_geofence", "gps_unavailable", "manual_override"] as const;
   const visits: Record<string, Row> = {};
-  for (const [i, status] of VISIT_STATUSES.entries()) {
+  for (const [i, status] of Array.from(VISIT_STATUSES.entries())) {
     const leadIdx = [1, 2, 0, 3, 6, 7, 8, 11, 10, 12][i];
     const who = i % 2 ? ana : bruno;
     const loc = await locationOf(lead(leadIdx));
@@ -358,7 +358,7 @@ async function seed(db: Db) {
   }
   const ACTION_TYPES = ["deposit", "settlement", "sale", "follow_up"] as const;
   const ACTION_STATUSES = ["proposed", "applied", "dismissed", "failed"] as const;
-  for (const [i, type] of ACTION_TYPES.entries()) {
+  for (const [i, type] of Array.from(ACTION_TYPES.entries())) {
     const v = visits[i % 2 ? "sale_made" : "completed"];
     await db.insert("sales_visit_actions", {
       visit_id: v.id, lead_id: v.lead_id, rep_id: v.rep_id, type, status: ACTION_STATUSES[i], payload: { demo: true, quantity: i + 1 },
@@ -367,7 +367,7 @@ async function seed(db: Db) {
     });
   }
   const OPP: Array<[string, string]> = [["open", "pending"], ["won", "synced"], ["lost", "failed"], ["archived", "needs_review"]];
-  for (const [i, [status, sync]] of OPP.entries()) {
+  for (const [i, [status, sync]] of Array.from(OPP.entries())) {
     await db.insert("sales_opportunities_local", {
       lead_id: lead(i), rep_id: i % 2 ? ana : bruno, visit_id: i === 1 ? visits.sale_made.id : null, title: `Demo opportunity: ${status}`,
       value: [499, 1299, 149, 399][i], currency: "USD", status, sync_status: sync, loss_reason: status === "lost" ? "Demo: chose a competitor" : null,
@@ -378,7 +378,7 @@ async function seed(db: Db) {
   const TASK_STATUS = ["pending", "in_progress", "completed", "cancelled"] as const;
   const PRIORITY = ["low", "medium", "high", "urgent"] as const;
   const SOURCE = ["manual", "voice", "mcp", "automation", "integration"] as const;
-  for (const [i, type] of TASK_TYPES.entries()) {
+  for (const [i, type] of Array.from(TASK_TYPES.entries())) {
     const status = TASK_STATUS[i % 4];
     await db.insert("sales_tasks", {
       organization_id: org1, rep_id: i % 2 ? ana : bruno, lead_id: lead(i), type, title: `Demo task: ${type.replace("_", " ")}`,
@@ -395,7 +395,7 @@ async function seed(db: Db) {
     ["draft", null], ["queued", null], ["running", null], ["completed", "ready"], ["completed", "failed"], ["failed", null], ["cancelled", null],
   ];
   const jobs: Row[] = [];
-  for (const [i, [status, planning]] of JOBS.entries()) {
+  for (const [i, [status, planning]] of Array.from(JOBS.entries())) {
     const job = await db.insert("prospecting_jobs", {
       rep_id: i % 2 ? ana : bruno, status, location: "Boston, MA", searches: [{ niche: "restaurant" }, { niche: "beauty_salon" }],
       hypothesis: "Demo: small restaurants want more Google reviews", result_count: status === "completed" ? 5 : 0,
@@ -408,7 +408,7 @@ async function seed(db: Db) {
   // Only one run may be starting/running at a time in the whole database (prospecting_runs_single_active_unique).
   const RUN_STATUS = ["queued", "running", "completed", "failed", "cancelled"] as const;
   const runs: Row[] = [];
-  for (const [i, status] of RUN_STATUS.entries()) {
+  for (const [i, status] of Array.from(RUN_STATUS.entries())) {
     const job = jobs[[1, 2, 3, 5, 6][i]];
     runs.push(await db.insert("prospecting_runs", {
       job_id: job.id, rep_id: job.rep_id, status, niche: i % 2 ? "beauty_salon" : "restaurant", query: `demo ${i}`, location: `Boston, MA #${i}`,
@@ -419,7 +419,7 @@ async function seed(db: Db) {
   const doneJob = jobs[3], doneRun = runs[2];
   const CANDIDATE_STATUS = ["discovered", "shortlisted", "scheduled", "visited", "discarded"] as const;
   const candidates: Row[] = [];
-  for (const [i, status] of CANDIDATE_STATUS.entries()) {
+  for (const [i, status] of Array.from(CANDIDATE_STATUS.entries())) {
     const p = point(30 + i);
     candidates.push(await db.insert("prospecting_candidates", {
       job_id: doneJob.id, run_id: doneRun.id, rep_id: doneJob.rep_id, status, source_id: `demo-src-${i}`, google_place_id: `demo-cand-${i}`,
@@ -448,7 +448,7 @@ async function seed(db: Db) {
     ["published", "planned", "planned"], ["published", "planned", "planned"],
   ];
   const position: Record<string, number> = {};
-  for (const [i, [route, status, origin]] of STOPS.entries()) {
+  for (const [i, [route, status, origin]] of Array.from(STOPS.entries())) {
     const r = routes[route];
     position[route] = (position[route] ?? 0) + 1;
     const p = point(40 + i);
@@ -508,7 +508,7 @@ async function seed(db: Db) {
     [orgResale, "large_stand", "open", "scanned", "yelp"], [orgPrint, "small_plate", "open", "issued", "menu"], [org1, "custom", "closed", "scanned", "custom"],
   ];
   const batches: Row[] = [];
-  for (const [i, [org, type, status, source, face]] of BATCHES.entries()) {
+  for (const [i, [org, type, status, source, face]] of Array.from(BATCHES.entries())) {
     batches.push(await db.insert("tag_batches", {
       organization_id: org, batch_code: `DEMO-B${i + 1}`, name: `Demo batch ${i + 1} (${type}, ${status})`, product_type: type, face, status, code_source: source,
       vendor: source === "scanned" ? "Demo Vendor" : null, quantity: 10, sales_product_id: productFor(type)?.id ?? null, created_by_user_id: "demo-admin",
@@ -560,7 +560,7 @@ async function seed(db: Db) {
   }
   // Kit items: still in the kit, returned, moved to another kit.
   const anaKitTags = tags.filter((t) => t.kit_id === kitAna.id);
-  for (const [i, t] of anaKitTags.entries()) {
+  for (const [i, t] of Array.from(anaKitTags.entries())) {
     await db.insert("tag_kit_items", { kit_id: kitAna.id, tag_id: t.id, public_code: t.public_code, batch_id: t.batch_id, handed_out_at: days(-20) });
     if (i === 0) {
       const back = tags.find((x) => x.stock_status === "available" && x.ownership_type === "company")!;
@@ -575,7 +575,7 @@ async function seed(db: Db) {
 
   // Stock movements: the movement that put each piece where it is, then one of every other kind on a sample piece.
   const lastMove: Record<string, string> = { pending: "intake", available: "issue", reserved: "reserve", sold: "sale", internal_use: "internal_use", damaged: "damage", lost: "loss", retired: "retire" };
-  for (const [i, t] of tags.entries()) {
+  for (const [i, t] of Array.from(tags.entries())) {
     await db.insert("tag_stock_movements", {
       tag_id: t.id, movement_type: i === 0 ? "migration" : lastMove[t.stock_status as string], from_stock_status: i === 0 ? null : "available",
       to_stock_status: t.stock_status, from_ownership_type: "company", to_ownership_type: t.ownership_type, to_custodian_rep_id: t.custodian_rep_id,
@@ -583,14 +583,14 @@ async function seed(db: Db) {
     });
   }
   const sample = tags[2];
-  for (const [i, type] of ["transfer", "return", "release", "restore", "adjustment"].entries()) {
+  for (const [i, type] of Array.from(["transfer", "return", "release", "restore", "adjustment"].entries())) {
     await db.insert("tag_stock_movements", {
       tag_id: sample.id, movement_type: type, from_stock_status: "available", to_stock_status: "available", from_ownership_type: "rep",
       to_ownership_type: "rep", from_custodian_rep_id: ana, to_custodian_rep_id: ana, actor_user_id: "demo-admin", reason: `Demo ${type}`, idempotency_key: `demo-move-extra-${i}`,
     });
   }
   // Scans: redirects (QR and NFC), plus the three problem scans.
-  for (const [i, t] of tags.filter((x) => x.status === "active").entries()) {
+  for (const [i, t] of Array.from(tags.filter((x) => x.status === "active").entries())) {
     for (let n = 0; n < (i % 4) + 1; n++) {
       await db.insert("tag_events", {
         tag_id: t.id, lead_id: t.lead_id, rep_id: t.rep_id, access_method: n % 2 ? "nfc" : "qr", event_type: "redirect", occurred_at: hours(-(i * 7 + n * 3)),
@@ -613,7 +613,7 @@ async function seed(db: Db) {
   const resaleTags = tags.filter((t) => t.organization_id === orgResale);
   const ACQ: Array<[string, string, string | null]> = [["stuscle", "fulfilled", "DEMO-STU-1001"], ["manual", "pending", null], ["house", "fulfilled", null], ["migration", "cancelled", null]];
   const units: Row[] = [];
-  for (const [i, [source, status, ref]] of ACQ.entries()) {
+  for (const [i, [source, status, ref]] of Array.from(ACQ.entries())) {
     const acq = await db.insert("tag_acquisitions", {
       rep_id: carla, organization_id: orgResale, kit_id: i === 0 ? kitCarla.id : null, source, external_ref: ref, currency: "USD", status,
       purchased_at: days(-15 + i), created_by_user_id: "demo-reseller-carla", fulfilled_from_organization_id: source === "house" ? org1 : null,
@@ -638,7 +638,7 @@ async function seed(db: Db) {
   // Pieces sold through sales, with every cost source and status.
   const soldTags = tags.filter((t) => t.stock_status === "sold");
   const COST: Array<[string, string]> = [["policy_zero", "active"], ["manual_override", "active"], ["acquisition", "active"], ["sale_item", "cancelled"], ["policy_zero", "returned"]];
-  for (const [i, [source, status]] of COST.entries()) {
+  for (const [i, [source, status]] of Array.from(COST.entries())) {
     const t = soldTags[i % soldTags.length];
     const s = source === "acquisition" ? saleReseller : i === 3 ? saleCancelled : salePaid;
     await db.insert("sales_sale_tags", {
@@ -651,7 +651,7 @@ async function seed(db: Db) {
   const PLAN_STATUS = ["draft", "active", "paused", "validated", "invalidated", "done", "cancelled"] as const;
   const PLAN_KIND = ["strategy", "hypothesis", "experiment", "target", "task"] as const;
   const plans: Row[] = [];
-  for (const [i, status] of PLAN_STATUS.entries()) {
+  for (const [i, status] of Array.from(PLAN_STATUS.entries())) {
     plans.push(await db.insert("tag_plans", {
       kind: PLAN_KIND[i % 5], title: `Demo plan: ${PLAN_KIND[i % 5]} (${status})`, description: "Fake plan from the development dataset.", status,
       batch_id: batches[i % batches.length].id, lead_id: i % 2 ? lead(0) : null, due_date: dateKey(days(i * 3)), created_by_user_id: "demo-admin",
@@ -662,7 +662,7 @@ async function seed(db: Db) {
   const J_SOURCE = ["system", "admin", "field", "mcp"] as const;
   const J_ACTOR = ["human", "ai", "system"] as const;
   const J_STATUS = ["active", "needs_review", "archived", "superseded"] as const;
-  for (const [i, kind] of J_KIND.entries()) {
+  for (const [i, kind] of Array.from(J_KIND.entries())) {
     await db.insert("tag_journey_entries", {
       kind, action: `demo_${kind}`, title: `Demo ${kind}: Google review plates sell best at restaurants`, content: "Fake journey entry.",
       batch_id: batches[0].id, tag_id: tags[i].id, plan_id: plans[i].id, rep_id: ana, lead_id: lead(0), source: J_SOURCE[i % 4], actor: J_ACTOR[i % 3],
@@ -689,14 +689,14 @@ async function seed(db: Db) {
   if (serial) {
     const bed = Array.isArray(serial.beds) && serial.beds[0]?.label ? String(serial.beds[0].label) : "x4";
     const requests: Row[] = [];
-    for (const [i, org] of [org1, orgPrint].entries()) {
+    for (const [i, org] of Array.from([org1, orgPrint].entries())) {
       requests.push(await db.insert("print_requests", {
         model_id: serial.model_id, version_id: serial.version_id, bed_label: bed, quantity: 4 * (i + 1), notes: "Demo print request", source: "admin",
         requested_by_user_id: "demo-admin", organization_id: org,
       }));
     }
     const JOB_STATUS = ["requested", "building", "ready", "printing", "printed", "failed", "cancelled"] as const;
-    for (const [i, status] of JOB_STATUS.entries()) {
+    for (const [i, status] of Array.from(JOB_STATUS.entries())) {
       const busy = status === "printing" || status === "printed";
       await db.insert("print_jobs", {
         model_id: serial.model_id, version_id: serial.version_id, bed_label: bed, plates: 1, quantity: 4, status, request_id: requests[i % 2].id,
@@ -715,7 +715,7 @@ async function seed(db: Db) {
   }
   const PJ_STATUS = ["pending", "claimed", "writing", "verifying", "succeeded", "failed", "cancelled"] as const;
   const provJobs: Row[] = [];
-  for (const [i, status] of PJ_STATUS.entries()) {
+  for (const [i, status] of Array.from(PJ_STATUS.entries())) {
     const t = tags[i + 1];
     provJobs.push(await db.insert("tag_provisioning_jobs", {
       tag_id: t.id, expected_url: `https://xpot.example.com/t/${t.public_code}`, status, requested_by_user_id: "demo-admin",
@@ -728,7 +728,7 @@ async function seed(db: Db) {
   }
   const PE = ["job_created", "job_claimed", "job_cancelled", "job_expired", "reader_connected", "reader_disconnected", "tag_detected", "write_started",
     "write_completed", "verification_passed", "verification_failed", "lock_requested", "lock_completed", "erase_completed", "error"];
-  for (const [i, event] of PE.entries()) {
+  for (const [i, event] of Array.from(PE.entries())) {
     const job = provJobs[i % provJobs.length];
     await db.insert("tag_provisioning_events", { job_id: job.id, tag_id: job.tag_id, device_id: activeDevice.id, event_type: event, detail: { demo: true } });
   }
@@ -756,7 +756,7 @@ async function seed(db: Db) {
     ["allocated", "assigned", "reserved", "rep"], ["delivered", "active", "sold", "customer"], ["released", "inventory", "available", "company"],
     ["damaged", "inventory", "damaged", "company"], ["returned", "inventory", "available", "company"],
   ];
-  for (const [i, [state, status, stock, ownership]] of PIECES.entries()) {
+  for (const [i, [state, status, stock, ownership]] of Array.from(PIECES.entries())) {
     const t = await db.insert("tags", {
       organization_id: org1, public_code: code(900 + i), product_type: "large_plate", face: "menu", sales_product_id: plateLarge.id, status, stock_status: stock,
       ownership_type: ownership, custodian_rep_id: ownership === "rep" ? ana : null, rep_id: ana, lead_id: ownership === "customer" ? lead(0) : null,
@@ -766,7 +766,7 @@ async function seed(db: Db) {
     });
     await db.insert("customer_order_pieces", { line_id: standard.id, tag_id: t.id, state, delivery_id: state === "delivered" ? delivered.id : null });
   }
-  for (const [i, action] of ["order_created", "line_added", "line_added", "piece_allocated", "delivery_confirmed"].entries()) {
+  for (const [i, action] of Array.from(["order_created", "line_added", "line_added", "piece_allocated", "delivery_confirmed"].entries())) {
     await db.insert("customer_order_events", { order_id: order.id, action, command_key: `demo-cmd-${i}`, fingerprint: `demo-fp-${i}`, actor_user_id: "demo-rep-ana", detail: { demo: true } });
   }
   for (const [kind, amount] of [["received", 5000], ["applied", 3598], ["refund", 500], ["retained", 400], ["release", 502]] as Array<[string, number]>) {
