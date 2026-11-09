@@ -5,18 +5,23 @@
 import sys
 import tempfile
 import unittest
+from importlib.util import find_spec
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-from builders import build_piece  # noqa: E402
-from builders.face import BRANDS, FORMS, MENU_STYLES, colours, layout  # noqa: E402
+# The geometry runtime (print-pipeline/requirements.txt) is on the bench, not in CI: skipped where it is missing.
+GEOMETRY = all(find_spec(p) for p in ('numpy', 'shapely', 'fitz', 'matplotlib', 'segno', 'trimesh'))
+if GEOMETRY:
+    from builders import build_piece  # noqa: E402
+    from builders.face import BRANDS, FORMS, MENU_STYLES, colours, layout  # noqa: E402
 
 CODE = 'A7K3P9X2'
 TAG = {'serial_number': '001', 'public_code': CODE, 'qr_url': f'https://xpot.place/q/{CODE}', 'nfc_url': '', 'position': ''}
 
 
+@unittest.skipUnless(GEOMETRY, 'needs the geometry packages (print-pipeline/requirements.txt)')
 class FaceLayout(unittest.TestCase):
     def test_every_face_fits_every_form_in_both_colours(self):
         for face in BRANDS:
@@ -39,6 +44,7 @@ class FaceLayout(unittest.TestCase):
             self.assertEqual(len(places), 1, f'{product} {size}')
 
 
+@unittest.skipUnless(GEOMETRY, 'needs the geometry packages (print-pipeline/requirements.txt)')
 class FaceBuild(unittest.TestCase):
     def test_black_paypal_plate_builds_inverted_with_two_blues(self):
         with tempfile.TemporaryDirectory() as tmp:
