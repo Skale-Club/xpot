@@ -84,7 +84,78 @@ def versions(models):
     return out
 
 
+def _svg_paths(geom, colour):
+    import face_art as fa
+    if geom is None or geom.is_empty:
+        return ''
+    out = []
+    for poly in fa.polys(geom):
+        d = ' '.join('M' + ' L'.join(f'{x:.3f} {y:.3f}' for x, y in list(r.coords)[:-1]) + ' Z' for r in [poly.exterior, *poly.interiors])
+        out.append(f'<path d="{d}" fill="{colour}" fill-rule="evenodd"/>')
+    return ''.join(out)
+
+
+def _frame(product, w, h, body):
+    return (f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="-5 -5 {w + 10} {h + 16}"><rect x="0" y="0" width="{w}" '
+            f'height="{h}" rx="{6 if product == "stand" else 8}" fill="{body}" stroke="#888" stroke-width=".3"/>')
+
+
+def _base(product, w, h):
+    return (f'<rect x="-2" y="{h - 8}" width="{w + 4}" height="12" rx="2" fill="#161616"/><path d="M-2 {h - 8}H{w + 2}" '
+            f'stroke="#444" stroke-width="1.5"/>') if product == 'stand' else ''
+
+
+def previews(target):
+    """The catalog's face pictures (client/public/production/previews/<productType>/<face>/<style>-<theme>.svg): what
+    Tags > Production shows and what Stuscle turns into each variant's image (scripts/build-nfc-catalog-assets.mjs).
+    Face v3 pieces are drawn from their real layout; the black Google and Instagram Plates from their meshes, QR inverted."""
+    import tempfile
+    import trimesh
+    from shapely import affinity
+    from builders import build_piece
+    from builders.face import layout, dimensions
+    import card_per_code_large_instagram as geom
+    written = 0
+    for product_type in ('small_plate', 'large_plate', 'small_stand', 'large_stand'):
+        size, product = product_type.split('_')
+        w, h = dimensions(product, size)
+        for face in BRANDS:
+            for theme in BODY:
+                for style in (MENU_STYLES if face == 'menu' else ('classic',)):
+                    art = layout(face, product, size, 'A7K3P9X2', theme, style)
+                    ink = BODY['black' if theme == 'white' else 'white']
+                    svg = _frame(product, w, h, BODY[theme]) + _svg_paths(art['ink'], ink)
+                    svg += ''.join(_svg_paths(c, hexc) for c, hexc in zip(art['colours'], colours(face, theme)))
+                    path = Path(target) / product_type / face / f'{style}-{theme}.svg'
+                    path.parent.mkdir(parents=True, exist_ok=True)
+                    path.write_text(svg + _base(product, w, h) + '</svg>', encoding='utf-8')
+                    written += 1
+        if product != 'plate':
+            continue
+        for face, builder, accent in (('google_review', 'plate.google', '#FBBC05'), ('instagram', 'plate.instagram', '#C85BD6')):
+            tag = dict(public_code='A7K3P9X2', serial_number='001', qr_url='https://xpot.place/q/A7K3P9X2')
+            with tempfile.TemporaryDirectory(prefix='xpot-face-preview-') as tmp:
+                _, parts = build_piece(builder, tag, 0, dict(size=size, theme='black', qr='inverted'), tmp)
+                svg = _frame(product, w, h, BODY['black'])
+                for _, filename, slot in parts[1:]:
+                    mesh = trimesh.load(Path(tmp) / filename)
+                    section = geom.mesh_section_polygons(mesh, float(mesh.bounds[1][2]) - .26)
+                    svg += _svg_paths(affinity.affine_transform(section, [1, 0, 0, -1, w / 2, h]), BODY['white'] if slot == 2 else accent)
+            if face == 'google_review':
+                import tile_per_code_google as google
+                google.configure(size)
+                svg += ''.join(_svg_paths(piece, hexc) for hexc, piece in google.layout('A7K3P9X2')['g_pieces'])
+            path = Path(target) / product_type / face / 'classic-black.svg'
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(svg + '</svg>', encoding='utf-8')
+            written += 1
+    return written
+
+
 if __name__ == '__main__':
+    if sys.argv[1] == '--previews':
+        print(previews(sys.argv[2]), 'previews')
+        sys.exit()
     models = json.loads(Path(sys.argv[1]).read_text(encoding='utf-8'))
     result = versions(models)
     Path(sys.argv[2]).write_text(json.dumps(result, indent=1), encoding='utf-8')
