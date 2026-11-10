@@ -64,3 +64,11 @@ export function wholesaleStoreUrl(storeUrl: string, lang: string | null): string
 export function wholesaleUrl(storeBaseUrl: string, code: string): string {
   return `${storeBaseUrl.replace(/\/+$/, "")}/wholesale/kit?code=${encodeURIComponent(formatWholesaleCode(code))}`;
 }
+
+/**
+ * The store link that opens a product's wholesale page: Stuscle checks the code, opens the session and lands on
+ * /wholesale/products/<handle> without putting anything in the cart. `handle` is Stuscle's product handle.
+ */
+export function stuscleProductUrl(storeBaseUrl: string, code: string, handle: string): string {
+  return `${storeBaseUrl.replace(/\/+$/, "")}/wholesale/kit?code=${encodeURIComponent(formatWholesaleCode(code))}&product=${encodeURIComponent(handle)}`;
+}

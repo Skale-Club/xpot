@@ -4,7 +4,7 @@
 // Pure, no I/O: the server validates with these schemas and the app types its form from them.
 
 import { z } from "zod";
-import { stuscleKitUrl, wholesaleUrl } from "./wholesale.js";
+import { stuscleKitUrl, stuscleProductUrl, wholesaleUrl } from "./wholesale.js";
 
 export const TAG_SHOWCASE_KINDS = ["model", "kit"] as const;
 export type TagShowcaseKind = (typeof TAG_SHOWCASE_KINDS)[number];
@@ -147,6 +147,8 @@ export type TagShopProduct = {
   handle: string;
   thumbnail: string | null;
   description: string | null;
+  /** Opens the product on Stuscle's wholesale page (the session first, nothing added to the cart). */
+  productUrl: string;
   images: string[];
   /** The choices a reader makes (Color, Size…), only values some priced variant has. */
   options: Array<{ title: string; values: string[] }>;
@@ -239,7 +241,7 @@ export function toShopProducts(body: unknown, storeBaseUrl: string, code: string
       });
     }
     const options = (Array.isArray(raw.options) ? raw.options : []).flatMap((o) => { const title = str(o?.title); const values = strings(o?.values); return title && values.length ? [{ title, values }] : []; });
-    if (variants.length) products.push({ id, title, handle, thumbnail: str(raw.thumbnail), description: str(raw.description), images: strings(raw.images), options, variants });
+    if (variants.length) products.push({ id, title, handle, thumbnail: str(raw.thumbnail), description: str(raw.description), productUrl: stuscleProductUrl(storeBaseUrl, code, handle), images: strings(raw.images), options, variants });
   }
   return { currency, products };
 }
@@ -299,33 +301,6 @@ export function shopSectionOf(product: Pick<TagShopProduct, "variants">): ShopSe
   return "other";
 }
 
-/** The NFC chip is not a choice a reseller makes: its option is not shown, and a pack holds the rigid disc (a SKU with no -R25 / -RECT) unless a link names another. */
-const HIDDEN_OPTIONS = new Set(["nfc"]);
-export const isShopOptionShown = (title: string): boolean => !HIDDEN_OPTIONS.has(title.trim().toLowerCase());
-export const isDefaultChip = (sku: string): boolean => !/-(R25|RECT)(-|$)/i.test(sku);
-
-/** The variant to open on: the default chip, so the hidden NFC option never decides it. */
-export function shopDefaultVariant(product: Pick<TagShopProduct, "variants">): TagShopVariant {
-  return product.variants.find((v) => isDefaultChip(v.sku)) ?? product.variants[0];
-}
-
-/**
- * The variant with this option value that keeps the most of the other shown choices, and among those the default chip
- * (Stuscle's pickOption). Null when no variant has the value.
- */
-export function shopPickOption(product: Pick<TagShopProduct, "options" | "variants">, current: TagShopVariant, title: string, value: string): TagShopVariant | null {
-  const shown = product.options.filter((o) => isShopOptionShown(o.title) && o.title !== title);
-  const score = (v: TagShopVariant) => shown.filter((o) => v.options[o.title] === current.options[o.title]).length * 2 + Number(isDefaultChip(v.sku));
-  return product.variants.filter((v) => v.options[title] === value).sort((a, b) => score(b) - score(a))[0] ?? null;
-}
-
-/** Other products of the same section first (other stands under a stand), then the rest: "You might also be interested in". */
-export function shopRelated(products: TagShopProduct[], current: TagShopProduct, max: number): TagShopProduct[] {
-  const section = shopSectionOf(current);
-  const others = products.filter((p) => p.id !== current.id);
-  return [...others.filter((p) => shopSectionOf(p) === section), ...others.filter((p) => shopSectionOf(p) !== section)].slice(0, max);
-}
-
 /**
  * What it takes to start buying a variant, as Stuscle's wholesale cards price it: its smallest pack in full against the
  * same pieces at retail (or one piece when it is sold by the piece). `retailCents` and `percentOff` are null with no saving.
@@ -338,4 +313,13 @@ export function shopStartingOffer(variant: Pick<TagShopVariant, "wholesalePriceC
 /** The variant a card prices from: the one that is cheapest to start buying. */
 export function shopStartingVariant(product: Pick<TagShopProduct, "variants">): TagShopVariant {
   return product.variants.reduce((a, b) => (shopStartingOffer(b).totalCents < shopStartingOffer(a).totalCents ? b : a));
+}
+
+/** A product's link to its wholesale page, in the reseller's language (the same `lang` the cart links carry). */
+export function shopProductLink(product: Pick<TagShopProduct, "productUrl">, lang?: string | null): string {
+  const language = stuscleLang(lang);
+  if (!language) return product.productUrl;
+  const url = new URL(product.productUrl);
+  url.searchParams.set("lang", language);
+  return url.toString();
 }

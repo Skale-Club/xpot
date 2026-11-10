@@ -1,7 +1,7 @@
 // Tags › Shop, the Stuscle half: what Xpot makes of Stuscle's wholesale catalogue, and the links its cards open. The
 // links are the contract with Stuscle's /wholesale/kit: the reader's own code and SKU:quantity, never a price.
 import { describe, expect, it } from "vitest";
-import { shopDefaultVariant, shopLinkWithQuantity, shopPickOption, shopPictureFor, shopRelated, shopSectionOf, shopStartQuantity, shopStartingOffer, shopStartingVariant, shopTotals, stuscleLang, toShopProducts } from "../shared/tagShowcase";
+import { shopLinkWithQuantity, shopPictureFor, shopProductLink, shopSectionOf, shopStartQuantity, shopStartingOffer, shopStartingVariant, shopTotals, stuscleLang, toShopProducts } from "../shared/tagShowcase";
 import { stuscleKitUrl } from "../shared/wholesale";
 
 const CODE = "XPABCD1234";
@@ -185,7 +185,7 @@ describe("stuscleLang and the language of a link", () => {
 });
 
 // The new catalogue shape: one product per design, its variants Color x Size x NFC chip, the chip never a choice.
-describe("options, sections and related products", () => {
+describe("options, sections and the product link", () => {
   const v = (id: string, sku: string, options: Record<string, string>) => ({ id, title: id, sku, wholesale_price: 15, retail_price: 25, options, packs: [{ quantity: 10, unit_price: 15, retail_unit_price: 25 }] });
   const stand = {
     id: "p1", title: "Google Stand", handle: "google-stand", description: "A stand.",
@@ -206,15 +206,18 @@ describe("options, sections and related products", () => {
     expect(products[1].description).toBeNull();
     expect(products[1].options).toEqual([]);
   });
-  it("opens on the rigid disc, and picking a colour keeps it", () => {
-    const first = shopDefaultVariant(products[0]);
-    expect(first.sku).toBe("NFC-STAND-GOOGLE-WHITE-S");
-    expect(shopPickOption(products[0], first, "Color", "Black")?.sku).toBe("NFC-STAND-GOOGLE-BLACK-S");
-  });
-  it("sorts a product into stands or plates by its SKUs, and lists the same kind first as related", () => {
+  it("sorts a product into stands or plates by its SKUs", () => {
     expect(shopSectionOf(products[0])).toBe("stands");
     expect(shopSectionOf(products[1])).toBe("plates");
-    expect(shopRelated(products, products[0], 4).map((p) => p.id)).toEqual(["p2"]);
+  });
+  it("opens a product through the kit route with the reseller's code, nothing in the cart, and their language", () => {
+    expect(products[0].productUrl).toBe(`${BASE}/wholesale/kit?code=XP-ABCD-1234&product=google-stand`);
+    expect(products[0].productUrl).not.toContain("items=");
+    const link = new URL(shopProductLink(products[0], "pt"));
+    expect(link.pathname).toBe("/wholesale/kit");
+    expect(link.searchParams.get("lang")).toBe("pt-BR");
+    expect(link.searchParams.get("product")).toBe("google-stand");
+    expect(shopProductLink(products[0], "fr")).toBe(products[0].productUrl);
   });
 });
 
