@@ -318,3 +318,27 @@ export function shopProductLink(product: Pick<TagShopProduct, "productUrl">, lan
   const language = stuscleLang(lang);
   return language ? withOpenParams(product.productUrl, { lang: language }) : product.productUrl;
 }
+
+/** The NFC chip is not a choice a reseller makes: its option is never shown, and a pack holds the rigid disc (a SKU with no -R25 / -RECT) unless a link names another. */
+const HIDDEN_OPTIONS = new Set(["nfc"]);
+export const isDefaultChip = (sku: string): boolean => !/-(R25|RECT)(-|$)/i.test(sku);
+
+/** The choices a card offers (Color, Size, lettering style…): the NFC chip is left out, and an option with a single value is not a choice. */
+export function shopShownOptions(product: Pick<TagShopProduct, "options">): Array<{ title: string; values: string[] }> {
+  return product.options.filter((o) => !HIDDEN_OPTIONS.has(o.title.trim().toLowerCase()) && o.values.length > 1);
+}
+
+/** The variant a card opens on: the first with the default chip, so the hidden NFC option never decides it (Stuscle's product page does the same). */
+export function shopDefaultVariant(product: Pick<TagShopProduct, "variants">): TagShopVariant {
+  return product.variants.find((v) => isDefaultChip(v.sku)) ?? product.variants[0];
+}
+
+/**
+ * The variant with this option value that keeps the most of the other shown choices, and among those the default chip
+ * (Stuscle's pickOption). Null when no variant has the value.
+ */
+export function shopPickOption(product: Pick<TagShopProduct, "options" | "variants">, current: TagShopVariant, title: string, value: string): TagShopVariant | null {
+  const others = shopShownOptions(product).filter((o) => o.title !== title);
+  const score = (v: TagShopVariant) => others.filter((o) => v.options[o.title] === current.options[o.title]).length * 2 + Number(isDefaultChip(v.sku));
+  return product.variants.filter((v) => v.options[title] === value).sort((a, b) => score(b) - score(a))[0] ?? null;
+}

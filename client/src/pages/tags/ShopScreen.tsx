@@ -2,14 +2,19 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { ChevronLeft, ChevronRight, ExternalLink, ImageOff, ShoppingBag, ShoppingCart } from "lucide-react";
 import {
-  shopProductLink,
+  shopDefaultVariant,
+  shopLinkWithQuantity,
+  shopPickOption,
+  shopShownOptions,
+  shopStartQuantity,
+  shopTotals,
+  TAG_SHOWCASE_MAX_QUANTITY,
   shopSectionOf,
-  shopStartingOffer,
-  shopStartingVariant,
   showcaseAddsToCart,
   type ShopSectionKey,
   type TagShopCatalog,
   type TagShopProduct,
+  type TagShopVariant,
   type TagShowcaseView,
 } from "@shared/tagShowcase";
 import { Button } from "@/components/ui/button";
@@ -31,17 +36,18 @@ import { partnerLine, useWholesale, WholesaleCard } from "./WholesaleCard";
 // Tags › Shop: a showcase of what Skale Club sells. The pieces a reseller already has live in My pieces, not here. First
 // the Stuscle wholesale catalogue, read from Stuscle (the same products and prices as its /wholesale page), then the
 // ready-made kits the Xpot admin keeps (Manage › Shop). Xpot sells nothing itself: every product is shown, in one
-// carousel for the stands and one for the plates, and "View product" opens that product on Stuscle's wholesale page with
-// the reader's own wholesale code (the session opens, nothing goes in the cart). The packs, the options and the cart are
-// Stuscle's. A reseller whose partner handles its own distribution does not buy here at all: the screen says whose
+// carousel for the stands and one for the plates, each card with its choices (Size, Color…), its bulk packs and the total
+// for the pack. Add to cart opens that product on Stuscle's wholesale page through Xpot's open route, with the chosen variant
+// and pack already in the cart and selected there. The price that counts, the cart and checkout are Stuscle's. A reseller whose partner handles its own distribution does not buy here at all: the screen says whose
 // pieces they are and to ask them (no catalogue, no price, no code).
 //
-// The cards copy Stuscle's wholesale card (apps/storefront/.../wholesale/components/product-card.tsx): the photo on
-// Stuscle's image field (its dark theme, the one visitors see), the name ending in "Bulk", the smallest pack in full
-// against the same pieces at retail, and the saving.
+// The cards copy Stuscle's wholesale card and buying column (apps/storefront/.../wholesale/components): the photo on
+// Stuscle's image field (its dark theme, the one visitors see), the name ending in "Bulk", the same pickers, the packs
+// with their saving, and the total against the same pieces at retail.
 
 /** Stuscle's image field (--image-field, dark theme) and the 29:34 shape every product photo is shown in. */
 const PHOTO = "relative aspect-[29/34] w-full overflow-hidden bg-[#27272a]";
+const GREEN_PILL = "rounded-full bg-emerald-400/15 px-2 py-0.5 text-xs font-medium text-emerald-300";
 
 function Picture({ src, title }: { src: string | null; title: string }) {
   const t = useT(tagsMessages);
@@ -56,33 +62,123 @@ function Picture({ src, title }: { src: string | null; title: string }) {
   );
 }
 
-/** A Stuscle product in a carousel, shaped like Stuscle's wholesale card: the photo, the name ending in "Bulk", the smallest pack in full ("From $150.00") with the same pieces at retail struck through and the saving, then View product. */
-function ProductTile({ product, currency }: { product: TagShopProduct; currency: string }) {
+/** Stuscle's colour dots: white and black are the bodies it sells; any other colour gets a neutral dot. */
+const COLOR_DOTS: Record<string, string> = { white: "#ffffff", black: "#000000" };
+
+/**
+ * A Stuscle product in a carousel, shaped like Stuscle's wholesale card and buying column: the photo, the name ending in
+ * "Bulk", the choices (Size, Colorâ€¦), the bulk packs, the total for the pack against the same pieces at retail, and Add to
+ * cart. Add to cart opens the product's wholesale page on Stuscle with that variant and pack already in the cart, so the
+ * same choices are selected there. Every product is its own line and its own bulk.
+ */
+function ProductCard({ product, currency }: { product: TagShopProduct; currency: string }) {
   const t = useT(tagsMessages);
-  const cheapest = shopStartingVariant(product);
-  const offer = shopStartingOffer(cheapest);
-  // The product's own thumbnail, as Stuscle's card shows it: a variant's photos can be shared with other designs.
-  const picture = product.thumbnail ?? product.images[0] ?? null;
-  const link = shopProductLink(product, t.lang);
+  const first = shopDefaultVariant(product);
+  const [variantId, setVariantId] = useState(first.id);
+  const [quantity, setQuantity] = useState(shopStartQuantity(first));
+  const variant: TagShopVariant = product.variants.find((v) => v.id === variantId) ?? first;
+  const options = shopShownOptions(product);
+  const sold = variant.packs.length > 0;
+  const totals = shopTotals(variant, quantity);
+  const money = (cents: number) => formatMoney(cents, currency);
+  const link = shopLinkWithQuantity(variant, totals.quantity, t.lang);
+  // A variant sold in packs only takes a pack's size: changing variant keeps the pack when it has one like it, else its smallest.
+  const pick = (next: TagShopVariant) => {
+    setVariantId(next.id);
+    if (next.packs.length > 0 && !next.packs.some((p) => p.quantity === quantity)) setQuantity(shopStartQuantity(next));
+  };
+  const choice = (on: boolean) => `rounded-md border px-3 text-white transition-colors ${on ? "border-white ring-1 ring-white" : "border-white/15 hover:border-white"}`;
   return (
-    <li className="flex w-[calc(50%-0.5rem)] shrink-0 snap-start flex-col gap-3 md:w-[calc(33.333%-0.667rem)] lg:w-[calc(25%-0.75rem)]" data-testid="shop-tile">
-      <a href={link} target="_blank" rel="noopener noreferrer" tabIndex={-1} aria-hidden="true">
-        <div className={PHOTO}>
-          {picture ? <img src={picture} alt="" loading="lazy" draggable={false} className="h-full w-full object-contain" /> : <ImageOff className="absolute left-1/2 top-1/2 h-8 w-8 -translate-x-1/2 -translate-y-1/2 text-zinc-500" aria-hidden="true" />}
-        </div>
-      </a>
-      <div className="flex flex-1 flex-col gap-1">
-        <p className="text-sm font-medium leading-snug text-white" data-testid="shop-tile-title">{t("shopBulkTitle", { title: product.title })}</p>
-        <p className="flex flex-wrap items-baseline gap-x-2 text-sm">
-          {offer.retailCents !== null && <span className="text-white/55 line-through">{formatMoney(offer.retailCents, currency)}</span>}
-          <span className="font-semibold text-white">{offer.quantity > 1 ? t("shopFrom", { price: formatMoney(offer.totalCents, currency) }) : t("shopEach", { price: formatMoney(offer.totalCents, currency) })}</span>
-        </p>
-        {offer.percentOff !== null && <span className="text-sm font-medium text-emerald-300">{t("shopSave", { percent: offer.percentOff })}</span>}
+    <li className="flex w-[82%] shrink-0 snap-start flex-col gap-4 md:w-[calc(50%-0.5rem)] lg:w-[calc(33.333%-0.667rem)]" data-testid="shop-tile">
+      <div className={PHOTO}>
+        {product.thumbnail ?? product.images[0] ? <img src={(product.thumbnail ?? product.images[0]) as string} alt="" loading="lazy" draggable={false} className="h-full w-full object-contain" /> : <ImageOff className="absolute left-1/2 top-1/2 h-8 w-8 -translate-x-1/2 -translate-y-1/2 text-zinc-500" aria-hidden="true" />}
       </div>
-      <Button asChild variant="brand" accent="tags" className="w-full rounded-full">
-        <a href={link} target="_blank" rel="noopener noreferrer" data-testid="shop-view">
-          {t("shopViewProduct")}
-          <ExternalLink />
+      <p className="text-base font-medium leading-snug text-white" data-testid="shop-tile-title">{t("shopBulkTitle", { title: product.title })}</p>
+
+      {options.map((option) => (
+        <div key={option.title} className="flex flex-col gap-y-2" data-testid="shop-option">
+          <span className="text-sm text-white/80">{option.title}</span>
+          <div className="grid grid-cols-2 gap-2" role="radiogroup" aria-label={option.title}>
+            {option.values.map((value) => {
+              const on = variant.options[option.title] === value;
+              const dot = option.title.trim().toLowerCase() === "color" ? COLOR_DOTS[value.trim().toLowerCase()] ?? "#71717a" : null;
+              return (
+                <button
+                  key={value}
+                  type="button"
+                  role="radio"
+                  aria-checked={on}
+                  onClick={() => { const next = shopPickOption(product, variant, option.title, value); if (next) pick(next); }}
+                  className={`flex min-h-10 items-center justify-center gap-2 py-2 text-sm ${choice(on)}`}
+                >
+                  {dot && <span className="h-4 w-4 shrink-0 rounded-full border border-white/30" style={{ backgroundColor: dot }} aria-hidden="true" />}
+                  {value}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      ))}
+
+      {sold ? (
+        <div className="flex flex-col gap-y-2">
+          <span className="text-sm text-white/80">{t("shopPacksTitle")}</span>
+          <div className="grid grid-cols-2 gap-2" role="radiogroup" aria-label={t("shopPacksTitle")}>
+            {variant.packs.map((pack) => {
+              const retail = pack.retailUnitPriceCents ?? variant.retailPriceCents;
+              const percent = retail !== null && retail > pack.unitPriceCents ? Math.round(((retail - pack.unitPriceCents) / retail) * 100) : null;
+              const on = totals.quantity === pack.quantity;
+              return (
+                <button
+                  key={pack.quantity}
+                  type="button"
+                  role="radio"
+                  aria-checked={on}
+                  onClick={() => setQuantity(pack.quantity)}
+                  className={`flex flex-col items-center gap-y-0.5 py-3 text-center ${choice(on)}`}
+                  data-testid="shop-pack"
+                >
+                  <span className="text-sm font-medium">{t("shopPieces", { count: pack.quantity })}</span>
+                  <span className="text-xs text-white/55">{t("shopEach", { price: money(pack.unitPriceCents) })}</span>
+                  {percent !== null && <span className="text-xs font-medium text-emerald-300">{t("shopSave", { percent })}</span>}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      ) : (
+        <label className="flex flex-col gap-1 text-sm text-white/80">
+          {t("shopQuantity")}
+          <input
+            type="number"
+            inputMode="numeric"
+            min={1}
+            max={TAG_SHOWCASE_MAX_QUANTITY}
+            step={1}
+            value={quantity}
+            onChange={(e) => setQuantity(Math.min(TAG_SHOWCASE_MAX_QUANTITY, Math.max(1, Math.floor(Number(e.target.value)) || 1)))}
+            className="h-10 w-24 rounded-md border border-white/15 bg-white/[0.05] px-3 text-white focus:outline-none focus:ring-2 focus:ring-violet-300/60"
+            data-testid="shop-quantity"
+          />
+        </label>
+      )}
+
+      <div className="flex flex-col gap-y-1 text-white" data-testid="shop-total">
+        <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+          <span className="text-3xl font-semibold" data-testid="shop-wholesale-price">{money(totals.wholesaleCents)}</span>
+          {totals.retailCents !== null && <span className="text-lg text-white/55 line-through">{money(totals.retailCents)}</span>}
+          {totals.percentOff !== null && <span className={GREEN_PILL}>{t("shopSave", { percent: totals.percentOff })}</span>}
+        </div>
+        <p className="text-sm text-white/55">
+          {t("shopSummary", { count: totals.quantity, price: money(totals.unitCents) })}
+          {totals.saveCents !== null && ` · ${t("shopSaved", { amount: money(totals.saveCents) })}`}
+        </p>
+      </div>
+
+      <Button asChild variant="brand" accent="tags" size="lg" className="mt-auto h-14 w-full rounded-full text-base">
+        <a href={link} target="_blank" rel="noopener noreferrer" data-testid="shop-add">
+          <ShoppingCart />
+          {t("shopAddToCart")}
         </a>
       </Button>
     </li>
@@ -119,7 +215,7 @@ function Carousel({ title, testId, products, currency }: { title: string; testId
       </div>
       <ul ref={row} onScroll={measure} className="flex snap-x snap-mandatory gap-4 overflow-x-auto pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden" data-testid="shop-carousel-row">
         {products.map((product) => (
-          <ProductTile key={product.id} product={product} currency={currency} />
+          <ProductCard key={product.id} product={product} currency={currency} />
         ))}
       </ul>
     </section>

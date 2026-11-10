@@ -2,7 +2,7 @@
 // links go to Xpot's open route (SKU:quantity or a product handle, never a price and never the code), which signs a
 // ticket for the reader's own code and redirects to Stuscle's /wholesale/kit.
 import { describe, expect, it } from "vitest";
-import { shopLinkWithQuantity, shopPictureFor, shopProductLink, shopSectionOf, shopStartQuantity, shopStartingOffer, shopStartingVariant, shopTotals, stuscleLang, toShopProducts } from "../shared/tagShowcase";
+import { shopLinkWithQuantity, shopPictureFor, shopProductLink, shopSectionOf, shopStartQuantity, shopStartingOffer, shopStartingVariant, shopTotals, stuscleLang, toShopProducts, shopDefaultVariant, shopPickOption, shopShownOptions } from "../shared/tagShowcase";
 import { stuscleKitUrl, WHOLESALE_OPEN_PATH } from "../shared/wholesale";
 
 /** A link the app renders, read as a URL of this app. */
@@ -242,5 +242,31 @@ describe("shopStartingOffer", () => {
   it("picks the variant cheapest to start buying", () => {
     const cheap = { ...variant, id: "b", packs: [pack(5, 2400)] };
     expect(shopStartingVariant({ variants: [{ ...variant, id: "a" }, cheap] as never }).id).toBe("b");
+  });
+});
+
+// The choices on a card: Color and Size are shown, the NFC chip never is, and a card opens on the rigid disc.
+describe("card choices", () => {
+  const v = (id: string, sku: string, options: Record<string, string>) => ({ id, title: id, sku, wholesale_price: 24, retail_price: 40, options, packs: [{ quantity: 5, unit_price: 24, retail_unit_price: 40 }] });
+  const stand = {
+    id: "p1", title: "Google Stand", handle: "google-stand",
+    options: [{ title: "Color", values: ["White", "Black"] }, { title: "Size", values: ["Small", "Large"] }, { title: "NFC", values: ["Rigid disc", "Round sticker"] }, { title: "Style", values: ["Classic"] }],
+    variants: [
+      v("a", "NFC-STAND-GOOGLE-WHITE-S-R25", { Color: "White", Size: "Small", NFC: "Round sticker" }),
+      v("b", "NFC-STAND-GOOGLE-WHITE-S", { Color: "White", Size: "Small", NFC: "Rigid disc" }),
+      v("c", "NFC-STAND-GOOGLE-BLACK-S", { Color: "Black", Size: "Small", NFC: "Rigid disc" }),
+      v("d", "NFC-STAND-GOOGLE-WHITE-L", { Color: "White", Size: "Large", NFC: "Rigid disc" }),
+    ],
+  };
+  const { products } = toShopProducts({ currency_code: "usd", products: [stand] });
+  it("shows Color and Size, never the NFC chip, and nothing with a single value", () => {
+    expect(shopShownOptions(products[0]).map((o) => o.title)).toEqual(["Color", "Size"]);
+  });
+  it("opens on the rigid disc, and picking a value keeps the other choices and the chip", () => {
+    const first = shopDefaultVariant(products[0]);
+    expect(first.sku).toBe("NFC-STAND-GOOGLE-WHITE-S");
+    expect(shopPickOption(products[0], first, "Color", "Black")?.sku).toBe("NFC-STAND-GOOGLE-BLACK-S");
+    expect(shopPickOption(products[0], first, "Size", "Large")?.sku).toBe("NFC-STAND-GOOGLE-WHITE-L");
+    expect(shopPickOption(products[0], first, "Color", "Green")).toBeNull();
   });
 });
