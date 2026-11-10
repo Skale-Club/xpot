@@ -1,7 +1,7 @@
 // Tags › Shop, the Stuscle half: what Xpot makes of Stuscle's wholesale catalogue, and the links its cards open. The
 // links are the contract with Stuscle's /wholesale/kit: the reader's own code and SKU:quantity, never a price.
 import { describe, expect, it } from "vitest";
-import { shopDefaultVariant, shopLinkWithQuantity, shopPickOption, shopPictureFor, shopRelated, shopSectionOf, shopStartQuantity, shopTotals, stuscleLang, toShopProducts } from "../shared/tagShowcase";
+import { shopDefaultVariant, shopLinkWithQuantity, shopPickOption, shopPictureFor, shopRelated, shopSectionOf, shopStartQuantity, shopStartingOffer, shopStartingVariant, shopTotals, stuscleLang, toShopProducts } from "../shared/tagShowcase";
 import { stuscleKitUrl } from "../shared/wholesale";
 
 const CODE = "XPABCD1234";
@@ -215,5 +215,21 @@ describe("options, sections and related products", () => {
     expect(shopSectionOf(products[0])).toBe("stands");
     expect(shopSectionOf(products[1])).toBe("plates");
     expect(shopRelated(products, products[0], 4).map((p) => p.id)).toEqual(["p2"]);
+  });
+});
+
+// A wholesale card prices the smallest pack in full, as Stuscle's card does: 10 plates at $15 against $25 each.
+describe("shopStartingOffer", () => {
+  const pack = (quantity: number, unit: number) => ({ quantity, unitPriceCents: unit, retailUnitPriceCents: 2500 });
+  const variant = { wholesalePriceCents: 1500, retailPriceCents: 2500, packs: [pack(10, 1500), pack(25, 1375)] };
+  it("is the smallest pack in full against the same pieces at retail", () => {
+    expect(shopStartingOffer(variant)).toEqual({ quantity: 10, totalCents: 15000, retailCents: 25000, percentOff: 40 });
+  });
+  it("is one piece for a variant sold by the piece, with no saving when there is no retail price", () => {
+    expect(shopStartingOffer({ wholesalePriceCents: 850, retailPriceCents: null, packs: [] })).toEqual({ quantity: 1, totalCents: 850, retailCents: null, percentOff: null });
+  });
+  it("picks the variant cheapest to start buying", () => {
+    const cheap = { ...variant, id: "b", packs: [pack(5, 2400)] };
+    expect(shopStartingVariant({ variants: [{ ...variant, id: "a" }, cheap] as never }).id).toBe("b");
   });
 });

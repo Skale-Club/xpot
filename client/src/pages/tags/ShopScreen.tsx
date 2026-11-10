@@ -10,6 +10,8 @@ import {
   shopPictureFor,
   shopRelated,
   shopSectionOf,
+  shopStartingOffer,
+  shopStartingVariant,
   shopStartQuantity,
   shopTotals,
   showcaseAddsToCart,
@@ -57,12 +59,6 @@ const PHONE_MAX_WIDTH = "calc((100svh - 17rem) * 29 / 34)";
 const ZOOM = 2.2;
 
 const GREEN_PILL = "rounded-full bg-emerald-400/15 px-2 py-0.5 text-xs font-medium text-emerald-300";
-
-/** The lowest unit price a variant reaches: its largest pack, or its only price when it is sold by the piece. */
-function lowestPriceOf(variant: TagShopVariant): { cents: number; retailCents: number | null } {
-  const pack = variant.packs[variant.packs.length - 1];
-  return pack ? { cents: pack.unitPriceCents, retailCents: pack.retailUnitPriceCents ?? variant.retailPriceCents } : { cents: variant.wholesalePriceCents, retailCents: variant.retailPriceCents };
-}
 
 function percentOff(cents: number, retailCents: number | null): number | null {
   return retailCents !== null && retailCents > cents ? Math.round(((retailCents - cents) / retailCents) * 100) : null;
@@ -338,14 +334,12 @@ function ProductDetail({ product, currency }: { product: TagShopProduct; currenc
   );
 }
 
-/** A Stuscle product in a grid, shaped like Stuscle's wholesale card: the photo, the name, "From" the lowest price with the retail one struck through, and the saving. */
+/** A Stuscle product in a grid, shaped like Stuscle's wholesale card: the photo, the name ending in "Bulk", and the smallest pack in full ("From $150.00") with the same pieces at retail struck through and the saving. */
 function ProductTile({ product, currency, onOpen }: { product: TagShopProduct; currency: string; onOpen: () => void }) {
   const t = useT(tagsMessages);
-  const cheapest = product.variants.reduce((a, b) => (lowestPriceOf(b).cents < lowestPriceOf(a).cents ? b : a));
-  const { cents, retailCents } = lowestPriceOf(cheapest);
-  const off = percentOff(cents, retailCents);
+  const cheapest = shopStartingVariant(product);
+  const offer = shopStartingOffer(cheapest);
   const picture = shopPictureFor(product, cheapest);
-  const hasRange = product.variants.length > 1 || cheapest.packs.length > 0;
   return (
     <li>
       <button type="button" onClick={onOpen} className="group flex w-full flex-col gap-3 text-left" data-testid="shop-tile">
@@ -353,12 +347,12 @@ function ProductTile({ product, currency, onOpen }: { product: TagShopProduct; c
           {picture ? <img src={picture} alt="" loading="lazy" className="h-full w-full object-contain" /> : <ImageOff className="absolute left-1/2 top-1/2 h-8 w-8 -translate-x-1/2 -translate-y-1/2 text-zinc-500" aria-hidden="true" />}
         </div>
         <div className="flex flex-col gap-1">
-          <p className="text-sm font-medium leading-snug text-white group-hover:underline group-hover:underline-offset-2">{product.title}</p>
+          <p className="text-sm font-medium leading-snug text-white group-hover:underline group-hover:underline-offset-2" data-testid="shop-tile-title">{t("shopBulkTitle", { title: product.title })}</p>
           <p className="flex flex-wrap items-baseline gap-x-2 text-sm">
-            <span className="font-semibold text-white">{hasRange ? t("shopFrom", { price: formatMoney(cents, currency) }) : formatMoney(cents, currency)}</span>
-            {retailCents !== null && off !== null && <span className="text-white/55 line-through">{formatMoney(retailCents, currency)}</span>}
+            {offer.retailCents !== null && <span className="text-white/55 line-through">{formatMoney(offer.retailCents, currency)}</span>}
+            <span className="font-semibold text-white">{offer.quantity > 1 ? t("shopFrom", { price: formatMoney(offer.totalCents, currency) }) : t("shopEach", { price: formatMoney(offer.totalCents, currency) })}</span>
           </p>
-          {off !== null && <span className="text-sm font-medium text-emerald-300">{t("shopSave", { percent: off })}</span>}
+          {offer.percentOff !== null && <span className="text-sm font-medium text-emerald-300">{t("shopSave", { percent: offer.percentOff })}</span>}
         </div>
       </button>
     </li>
@@ -463,7 +457,7 @@ export default function ShopScreen() {
   // The catalogue in Stuscle's sections (stands, then plates), the side menu offering only the ones that hold a product.
   const sectionKeys = ((["stands", "plates", "other"] as const).filter((key) => products.some((p) => shopSectionOf(p) === key)));
   const sectionLabel = (key: ShopSectionKey) => (key === "stands" ? t("shopSectionStands") : key === "plates" ? t("shopSectionPlates") : t("shopCatalogTitle"));
-  const reach = (p: TagShopProduct) => Math.min(...p.variants.map((v) => lowestPriceOf(v).cents));
+  const reach = (p: TagShopProduct) => shopStartingOffer(shopStartingVariant(p)).totalCents;
   const shown = products.filter((p) => section === "all" || shopSectionOf(p) === section);
   const sorted = sort === "low" ? [...shown].sort((a, b) => reach(a) - reach(b)) : sort === "high" ? [...shown].sort((a, b) => reach(b) - reach(a)) : shown;
   const totalPages = Math.max(1, Math.ceil(sorted.length / PAGE_SIZE));

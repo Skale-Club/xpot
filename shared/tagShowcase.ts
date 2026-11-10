@@ -325,3 +325,17 @@ export function shopRelated(products: TagShopProduct[], current: TagShopProduct,
   const others = products.filter((p) => p.id !== current.id);
   return [...others.filter((p) => shopSectionOf(p) === section), ...others.filter((p) => shopSectionOf(p) !== section)].slice(0, max);
 }
+
+/**
+ * What it takes to start buying a variant, as Stuscle's wholesale cards price it: its smallest pack in full against the
+ * same pieces at retail (or one piece when it is sold by the piece). `retailCents` and `percentOff` are null with no saving.
+ */
+export function shopStartingOffer(variant: Pick<TagShopVariant, "wholesalePriceCents" | "retailPriceCents" | "packs">): { quantity: number; totalCents: number; retailCents: number | null; percentOff: number | null } {
+  const totals = shopTotals(variant, shopStartQuantity(variant));
+  return { quantity: totals.quantity, totalCents: totals.wholesaleCents, retailCents: totals.retailCents, percentOff: totals.percentOff };
+}
+
+/** The variant a card prices from: the one that is cheapest to start buying. */
+export function shopStartingVariant(product: Pick<TagShopProduct, "variants">): TagShopVariant {
+  return product.variants.reduce((a, b) => (shopStartingOffer(b).totalCents < shopStartingOffer(a).totalCents ? b : a));
+}
