@@ -1,4 +1,5 @@
-import { useLocation } from "wouter";
+import { screens } from "@/lib/screens";
+import { Redirect, useLocation, useSearch } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { ShieldAlert } from "lucide-react";
 import { AppLoader } from "@/components/ui/spinner";
@@ -9,20 +10,12 @@ import { PageHeader } from "@/components/xpot/PageHeader";
 import { SessionGate } from "@/components/xpot/SessionGate";
 import { AppLayout } from "@/components/xpot/AppLayout";
 import { panelGroups } from "@/components/xpot/moduleNav";
+import { panelHome, panelOfPath, panelsOf } from "@/components/xpot/panels";
 import { usePanelNames } from "@/components/xpot/panelNames";
 import { ownedOrganizationId, profileOfMe } from "@/lib/adminMode";
 import type { XpotMeResponse } from "@/pages/xpot/types";
-import { AdminOverview } from "./AdminOverview";
-import { AdminReps } from "./AdminReps";
-import { AdminIntegrations } from "./AdminIntegrations";
-import { AdminBrandSite } from "./platform/AdminBrandSite";
-import { AdminTags, CodeLookup } from "./tags/AdminTags";
+import { CodeLookup } from "./tags/CodeLookup";
 import { useProductionAccess } from "./tags/production-shared";
-import { AdminProducts } from "./AdminProducts";
-import { AdminSettings } from "./AdminSettings";
-import { AdminSystemHealth } from "./AdminSystemHealth";
-import { AdminHome } from "./AdminHome";
-import { AdminWork } from "./AdminWork";
 import { can } from "@shared/profiles";
 import { isTagPieceQueue } from "@shared/tagQueues";
 import { pieceQueueCard } from "./tags/overview-model";
@@ -36,7 +29,9 @@ import { manageMessages } from "@/i18n/messages/manage";
 import { workspacesMessages } from "@/i18n/messages/workspaces";
 import { useXpotModules, homeForModules } from "@/components/ModuleSwitch";
 
-const SECTIONS = ["home", "work", "overview", "tags", "products", "integrations", "branding", "landing", "xphere", "reps", "settings", "health"] as const;
+const { adminTags: AdminTags, adminOverview: AdminOverview, adminReps: AdminReps, adminIntegrations: AdminIntegrations, adminBrandSite: AdminBrandSite, adminProducts: AdminProducts, adminSettings: AdminSettings, adminHealth: AdminSystemHealth, adminHome: AdminHome, adminWork: AdminWork, adminAcademy: AdminAcademy } = screens;
+
+const SECTIONS = ["home", "work", "overview", "tags", "products", "integrations", "branding", "landing", "xphere", "reps", "settings", "health", "academy"] as const;
 /** What an owner's or a partner's panel reaches; the rest of /admin is the platform's. (Tags narrows itself by tab: AdminTags.) */
 const ORGANIZATION_SECTIONS = ["home", "work", "tags"];
 /**
@@ -50,12 +45,17 @@ const OWN_PIECE_SEARCH = /^\/admin\/tags\/pieces(?:\/|$)/;
 const PLATFORM_ONLY = /^\/admin\/tags\/(?:shop|journey)(?:\/|$)/;
 const PRINT_ONLY = /^\/admin\/tags\/(?:production|batches|provisioners)(?:\/|$)/;
 
+/** Tasks and Sales of every company left the Admin menu but still open by their URL: their title is said here. */
+const HIDDEN_WORK = /^\/admin\/work\/(tasks|sales)(?:\/|$)/;
+
 /**
- * The panel's frame, one per profile (shared/profiles.ts): the sidebar (a bottom bar on the phone) and
- * the screen's own title, once. A member has no panel.
+ * The management screens' frame: the sidebar (a bottom bar on the phone) of the panel the path belongs to
+ * (components/xpot/panels.ts) and the screen's own title, once. An owner's screens have Visits' chrome and its Company
+ * group (AppLayout); a member has none of these.
  */
 export function AdminApp({ section }: { section: string }) {
   const [location, navigate] = useLocation();
+  const search = useSearch();
   const meQuery = useQuery<XpotMeResponse>({ queryKey: ["/api/xpot/me"], retry: false });
   const t = useT(shellMessages);
   const tt = useT(tagsMessages);
@@ -64,7 +64,7 @@ export function AdminApp({ section }: { section: string }) {
   const tn = useT(navIaMessages);
   const tw = useT(workspacesMessages);
   const tf = useT(adminTagsFlowMessages);
-  const { panelName: nameOf, names } = usePanelNames();
+  const { panelLabel, names } = usePanelNames();
   const modules = useXpotModules();
   const { prints } = useProductionAccess();
   const me = meQuery.data;
@@ -74,24 +74,32 @@ export function AdminApp({ section }: { section: string }) {
   if (!me) return <SessionGate error={meQuery.error} />;
   const profile = profileOfMe(me);
   const hasPanel = !!profile && can(profile, "useManagementPanel");
-  const allowed = hasPanel && (profile === "platform" || ORGANIZATION_SECTIONS.includes(active) || active === "overview");
+  // The panel of the path must be one the person has, on top of the rule for the screen (never more access than that rule gave).
+  // An owner has no panel (their screens are Visits' Company group), so their rule alone stays: exactly the sections they had.
+  const panel = panelOfPath(`${location}${search ? `?${search}` : ""}`, profile);
+  const allowed = hasPanel && (profile === "platform" || ORGANIZATION_SECTIONS.includes(active) || active === "overview") && (profile === "owner" || panelsOf(profile, modules).includes(panel));
   if (!me || !hasPanel) {
     const exit = me ? homeForModules(modules) : "/";
     return <AppBackground><div className="mx-auto w-full max-w-md px-4 pb-20 pt-6"><PageHeader backHref={exit} backLabel={me ? tm("backToApp") : tc("goToSignIn")} title={tm("accessRestricted")} /><EmptyState icon={ShieldAlert} title={me ? tm("ownersOnly") : tm("signInToContinue")} action={<Button variant="secondary" onClick={() => navigate(exit)}>{me ? tm("backToApp") : tc("goToSignIn")}</Button>} /></div></AppBackground>;
   }
-  const panelName = nameOf(profile);
-  const groups = panelGroups(profile, modules, { shell: t, tags: tt, nav: tn }, names, ownedOrganizationId(me));
+  // A partner has no Today of its own: its first screen is the board of its production.
+  if (profile === "partner" && /^\/admin\/?$/.test(location)) return <Redirect to={panelHome("production", profile)} />;
+  // What a screen the person's panel lacks is titled, and the way back it offers: the Company group's name for an owner.
+  const panelName = profile === "owner" ? names.company : panelLabel(panel);
+  const todayName = profile === "owner" ? names.companyOverview : tw("todayTitle");
+  const groups = panelGroups(profile, panel, modules, { shell: t, tags: tt, nav: tn }, names, ownedOrganizationId(me));
   const current = groups.flatMap((group) => group.items).find((item) => item.match(location));
   // A queue's list (what Today opened) is titled by the queue, not by the screen it hangs from (NAV-17).
   const queue = /^\/admin\/tags\/overview\/([^/]+)\/?$/.exec(location)?.[1];
-  const title = queue && isTagPieceQueue(queue) ? tf(pieceQueueCard(queue).labelKey) : current?.label ?? panelName;
+  const hidden = HIDDEN_WORK.exec(location)?.[1];
+  const title = queue && isTagPieceQueue(queue) ? tf(pieceQueueCard(queue).labelKey) : current?.label ?? (hidden ? t(hidden === "tasks" ? "tabTasks" : "tabSales") : panelName);
   const denied = profile !== "platform" && (PLATFORM_ONLY.test(location) || (PRINT_ONLY.test(location) && !prints));
   const lookupAllowed = active === "tags" && !NO_CODE_LOOKUP.test(location) && !denied;
   // Stock has its own search, which takes a code or a scanned link: a second box for the same thing would only ask which to use.
   const lookupBox = lookupAllowed && !OWN_PIECE_SEARCH.test(location);
   // A screen the person's panel does not have: said inside the panel, with the way back to Today.
   if (!allowed) return <AppLayout title={panelName} size="wide" mobileMaxWidth="max-w-5xl" mobileColumnClassName="pb-10 pt-5">
-    <EmptyState icon={ShieldAlert} title={tm("accessRestricted")} hint={tm("noAdminPermission")} action={<Button variant="secondary" onClick={() => navigate("/admin")}>{tw("todayTitle")}</Button>} />
+    <EmptyState icon={ShieldAlert} title={tm("accessRestricted")} hint={tm("noAdminPermission")} action={<Button variant="secondary" onClick={() => navigate("/admin")}>{todayName}</Button>} />
   </AppLayout>;
   return <AppLayout title={title} size="wide" mobileMaxWidth="max-w-5xl" mobileColumnClassName="pb-10 pt-5"
     topBarActions={lookupBox ? <CodeLookup onFound={(id) => navigate(`/admin/tags/pieces/${id}`)} /> : undefined}
@@ -104,6 +112,7 @@ export function AdminApp({ section }: { section: string }) {
     {(active === "integrations" || active === "xphere") && <AdminIntegrations />}
     {(active === "branding" || active === "landing") && <AdminBrandSite />}
     {active === "health" && <AdminSystemHealth />}
+    {active === "academy" && <AdminAcademy />}
     {active === "reps" && <AdminReps />}
     {active === "tags" && <AdminTags />}
     {active === "settings" && <AdminSettings />}

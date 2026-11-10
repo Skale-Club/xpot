@@ -6,8 +6,8 @@
 //            code (a Stand base, a G token). It never changes when the recipe improves.
 //   version  the frozen recipe that produced a batch: builder + parameters, slicer settings, bed layouts. A version
 //            an order used is never edited; an improvement is a new version with a changelog.
-//   request  "print N pieces of this model" (print_requests), split into plates of at most one bed each; the last
-//            plate may be partial (10 on a 4-up bed: 4 + 4 + 2).
+//   request  "print N pieces of this model" (print_requests): new serialized requests fit one printer plate;
+//            parts and historical requests may have several plates.
 //   plate    one bed to print (print_jobs, "print order" in the API): for a serialized model it owns its batch and
 //            codes; for a part it is the fixed file and a count. The admin downloads it, prints it in Bambu Studio
 //            and marks it printed: nothing is sent to the printer from here.
@@ -15,6 +15,7 @@
 import { z } from "zod";
 import { TAG_PRODUCT_TYPES, normalizeTagCode } from "./tags.js";
 import { TAG_FACES } from "./tagFace.js";
+import { PRINT_PALETTE, printStyle } from "./printDesigns.js";
 
 export const PRINT_MODEL_KINDS = ["serialized", "part"] as const;
 export type PrintModelKind = (typeof PRINT_MODEL_KINDS)[number];
@@ -446,18 +447,56 @@ export const printProblemSchema = z.object({
 // Public codes of the pieces that came out bad on the plate (damaged, not stock). Printed only.
 const badPiecesField = z.array(z.string().trim().min(1).max(40)).max(1000).optional();
 
+/** What went wrong with a piece on the printer, so the problem rate can say why (Production's screen). */
+export const PRINT_PIECE_PROBLEMS = ["warped", "came_off_bed", "layer_shift", "qr_unreadable", "surface", "nfc_chip", "broke", "other"] as const;
+export type PrintPieceProblem = (typeof PRINT_PIECE_PROBLEMS)[number];
+
+// What the piece's history says (tag_stock_movements.reason); the summary reads the problem back from it.
+const PROBLEM_REASON: Record<PrintPieceProblem, string> = {
+  warped: "Printer problem: warped",
+  came_off_bed: "Printer problem: came off the bed",
+  layer_shift: "Printer problem: layers shifted",
+  qr_unreadable: "Printer problem: QR does not read",
+  surface: "Printer problem: bad surface or colour",
+  nfc_chip: "Printer problem: NFC chip",
+  broke: "Printer problem: broke",
+  other: "Printer problem: other",
+};
+/** A bad piece with no problem named: every one before problems existed, and callers that do not name one. */
+export const UNSPECIFIED_PRINT_PROBLEM_REASON = "Came out bad on the printer plate";
+
+export function printProblemReason(problem: PrintPieceProblem | null | undefined): string {
+  return problem ? PROBLEM_REASON[problem] : UNSPECIFIED_PRINT_PROBLEM_REASON;
+}
+
+export function printProblemOfReason(reason: string | null | undefined): PrintPieceProblem | "unspecified" {
+  return PRINT_PIECE_PROBLEMS.find((problem) => PROBLEM_REASON[problem] === reason) ?? "unspecified";
+}
+
+/** `badPieces`' problems by public code, written as typed like the codes themselves. */
+export function problemsByCode(problems: Readonly<Record<string, PrintPieceProblem>> = {}): Map<string, PrintPieceProblem> {
+  return new Map(Object.entries(problems).flatMap(([raw, problem]) => {
+    const code = normalizeTagCode(raw);
+    return code ? [[code, problem] as const] : [];
+  }));
+}
+
+const pieceProblemsField = z.record(z.string().trim().min(1).max(40), z.enum(PRINT_PIECE_PROBLEMS)).optional();
+
 export const printJobUpdateSchema = z.object({
   action: z.enum(["start", "printed", "fail", "cancel", "release", "complete"]),
   reason: optionalText(500),
   /** `printed`: pieces that came out bad (public codes of the plate's batch); the rest of the batch goes into stock. */
   badPieces: badPiecesField,
-}).strict().refine((v) => !v.badPieces?.length || v.action === "printed", {
+  /** What went wrong with each of `badPieces`, by public code. */
+  pieceProblems: pieceProblemsField,
+}).strict().refine((v) => (!v.badPieces?.length && !Object.keys(v.pieceProblems ?? {}).length) || v.action === "printed", {
   message: "Only a printed plate can list bad pieces",
   path: ["badPieces"],
 });
 
 /** Put the pending pieces of an already printed plate into stock (`POST /print-jobs/:id/stock`). */
-export const printJobStockSchema = z.object({ badPieces: badPiecesField }).strict();
+export const printJobStockSchema = z.object({ badPieces: badPiecesField, pieceProblems: pieceProblemsField }).strict();
 
 export interface PrintedPieceSplit {
   /** Pending pieces that go into house stock. */
@@ -599,6 +638,9 @@ export interface PrintJobItem {
   stale: boolean;
   /** A failed or cancelled plate already printed again: the attempt that took its place (it cannot be redone twice). */
   redoneBy: string | null;
+  /** The serial numbers of the plate's pieces, lowest and highest; null for a part, which has none. */
+  serialFrom: number | null;
+  serialTo: number | null;
   /** A printed plate whose damaged pieces were asked for again: the first live plate of that request (null again if it was cancelled). */
   reprintedBy: { id: string; batchCode: string | null } | null;
   /** This plate belongs to a request that replaces the damaged pieces of another printed plate. */
@@ -636,6 +678,24 @@ export interface PrintRequestItem {
   /** Whose production the request is. */
   organizationId: number;
   organizationName: string;
+}
+
+/** How the pieces marked printed came out over a period: the rate of problems and why. */
+export interface PrintQualitySummary {
+  days: number;
+  /** Pieces with a serial marked printed, the bad ones included. */
+  pieces: number;
+  withProblem: number;
+  byProblem: Array<{ problem: PrintPieceProblem | "unspecified"; count: number }>;
+  /** Whole prints marked failed. Their pieces never came out, so they are apart from `pieces`. */
+  failedPrints: number;
+  failedPieces: number;
+}
+
+/** The share of pieces with a problem, as a percentage to one decimal; null with nothing printed. */
+export function printProblemRate(summary: Pick<PrintQualitySummary, "pieces" | "withProblem">): number | null {
+  if (summary.pieces <= 0) return null;
+  return Math.round((summary.withProblem / summary.pieces) * 1000) / 10;
 }
 
 export interface PrintJobPiece {
@@ -754,9 +814,11 @@ export function printPartFamilies<T extends { title: string }>(parts: readonly T
 
 /** A serialized model the house can generate right now: ready, with a generator, a bed and what its batch needs. */
 export function canGenerateModel(model: PrintModelItem): boolean {
+  const standardPlaque = ["large_stand", "small_stand", "large_plate", "small_plate"].includes(model.productType ?? "") && model.face !== "custom";
+  const approvedBody = !standardPlaque || PRINT_PALETTE.some((colour) => colour.theme === model.theme?.trim().toLowerCase());
   return model.kind === "serialized" && model.status === "ready" && !!model.currentVersion?.builder &&
     (model.currentVersion.beds?.length ?? 0) > 0 && !!model.productType && !!model.face && !!model.theme &&
-    !!model.salesProductId && !!model.batchPrefix;
+    !!model.salesProductId && !!model.batchPrefix && approvedBody;
 }
 
 export interface PrintGenerateFace {
@@ -775,6 +837,9 @@ export interface PrintGenerateFace {
   nfcVariants: PrintNfcVariants;
   /** The title fonts to ask about; empty on anything but a Menu piece. */
   menuFonts: readonly PrintMenuFont[];
+  style: string;
+  /** Every ready design sharing this face, including font/layout alternatives. */
+  styles?: PrintGenerateFace[];
 }
 
 export interface PrintGenerateOption {
@@ -782,7 +847,8 @@ export interface PrintGenerateOption {
   colours: Array<{ theme: string; faces: PrintGenerateFace[] }>;
 }
 
-const THEME_ORDER = ["white", "black"];
+const THEME_ORDER = PRINT_PALETTE.map((colour) => colour.theme);
+const STYLE_ORDER = ["classic", "italic", "modern", "spaced", "bold", "rounded"];
 const rank = (list: readonly string[], value: string) => {
   const index = list.indexOf(value);
   return index < 0 ? list.length : index;
@@ -791,19 +857,19 @@ const rank = (list: readonly string[], value: string) => {
 /**
  * The questions of "generate pieces", from the catalog: per product (Large Stand, Small Plate…) the colours that
  * have at least one generable face, and per colour the faces. Only what the house can actually make shows up; a
- * product × colour × face with two ready models takes the first by the catalog's order.
+ * styles of a product × colour × face stay together. Older clients without modelSlug get the first style.
  */
 export function printGenerateOptions(models: readonly PrintModelItem[]): PrintGenerateOption[] {
-  const byProduct = new Map<string, Map<string, Map<string, PrintModelItem>>>();
+  const byProduct = new Map<string, Map<string, Map<string, PrintModelItem[]>>>();
   for (const model of [...models].sort((a, b) => a.sortOrder - b.sortOrder || a.title.localeCompare(b.title))) {
     if (!canGenerateModel(model)) continue;
-    const colours = byProduct.get(model.productType!) ?? new Map<string, Map<string, PrintModelItem>>();
+    const colours = byProduct.get(model.productType!) ?? new Map<string, Map<string, PrintModelItem[]>>();
     byProduct.set(model.productType!, colours);
     // Colours group in lowercase: a model typed "White" is the same colour as "white".
     const theme = model.theme!.trim().toLowerCase();
-    const faces = colours.get(theme) ?? new Map<string, PrintModelItem>();
+    const faces = colours.get(theme) ?? new Map<string, PrintModelItem[]>();
     colours.set(theme, faces);
-    if (!faces.has(model.face!)) faces.set(model.face!, model);
+    faces.set(model.face!, [...(faces.get(model.face!) ?? []), model]);
   }
   return Array.from(byProduct.entries())
     .sort(([a], [b]) => rank(TAG_PRODUCT_TYPES, a) - rank(TAG_PRODUCT_TYPES, b))
@@ -814,22 +880,23 @@ export function printGenerateOptions(models: readonly PrintModelItem[]): PrintGe
         .map(([theme, faces]) => ({
           theme,
           faces: Array.from(faces.values())
-            .sort((a, b) => rank(TAG_FACES, a.face!) - rank(TAG_FACES, b.face!))
-            .map((model) => {
-              const bed = model.currentVersion!.beds[0];
-              return {
-                face: model.face!,
-                modelId: model.id,
-                slug: model.slug,
-                title: model.title,
-                copies: bed.copies,
-                bedLabel: bed.label,
-                hasPreview: !!model.currentVersion!.preview,
-                materials: model.materials ?? [],
-                nfcMounts: nfcMountsOf(model.currentVersion!.nfcVariants),
-                nfcVariants: model.currentVersion!.nfcVariants ?? {},
-                menuFonts: menuFontsOf(model.currentVersion!.builder),
-              };
+            .sort((a, b) => rank(TAG_FACES, a[0].face!) - rank(TAG_FACES, b[0].face!))
+            .map((variants) => {
+              const choices = variants
+                .sort((a, b) => rank(STYLE_ORDER, printStyle(a.currentVersion!.params)) - rank(STYLE_ORDER, printStyle(b.currentVersion!.params)))
+                .map((model): PrintGenerateFace => {
+                  const bed = model.currentVersion!.beds[0];
+                  return {
+                    face: model.face!, modelId: model.id, slug: model.slug, title: model.title,
+                    copies: bed.copies, bedLabel: bed.label, hasPreview: !!model.currentVersion!.preview,
+                    materials: model.materials ?? [],
+                    nfcMounts: nfcMountsOf(model.currentVersion!.nfcVariants),
+                    nfcVariants: model.currentVersion!.nfcVariants ?? {},
+                    style: printStyle(model.currentVersion!.params),
+                    menuFonts: model.face === "menu" ? PRINT_MENU_FONTS : menuFontsOf(model.currentVersion!.builder),
+                  };
+                });
+              return { ...choices[0], styles: choices };
             }),
         })),
     }));
@@ -840,6 +907,8 @@ export const printGenerateSchema = z.object({
   productType: z.enum(TAG_PRODUCT_TYPES),
   theme: z.string().trim().toLowerCase().pipe(z.string().min(1).max(40)),
   face: z.enum(TAG_FACES),
+  /** Exact style within this product/colour/face. Legacy clients still get the first catalog style. */
+  modelSlug: z.string().trim().min(1).max(80).optional(),
   quantity: z.number().int().positive().max(10_000),
   /** Which NFC goes inside (as printJobCreateSchema's). */
   nfcMount: z.enum(PRINT_NFC_MOUNTS).optional(),
@@ -851,10 +920,12 @@ export const printGenerateSchema = z.object({
 export type PrintGenerateInput = z.infer<typeof printGenerateSchema>;
 
 /** The model behind one choice of printGenerateOptions, or null when the house does not make it. */
-export function pickGenerateFace(options: readonly PrintGenerateOption[], choice: Pick<PrintGenerateInput, "productType" | "theme" | "face">): PrintGenerateFace | null {
+export function pickGenerateFace(options: readonly PrintGenerateOption[], choice: Pick<PrintGenerateInput, "productType" | "theme" | "face" | "modelSlug">): PrintGenerateFace | null {
   const colours = options.find((option) => option.productType === choice.productType)?.colours ?? [];
   const faces = colours.find((colour) => sameTheme(colour.theme, choice.theme))?.faces ?? [];
-  return faces.find((face) => face.face === choice.face) ?? null;
+  const face = faces.find((face) => face.face === choice.face);
+  if (!face) return null;
+  return choice.modelSlug ? (face.styles ?? [face]).find((style) => style.slug === choice.modelSlug) ?? null : face;
 }
 
 /** A part that is only bought (its one bed is "bought"): nothing to print, only a count to keep right. */

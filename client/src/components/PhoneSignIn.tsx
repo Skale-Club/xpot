@@ -1,3 +1,4 @@
+import { prepareGoogleIdentity, sendGooglePhoneCode, confirmGooglePhoneCode, signInGoogleAlternative, cancelGooglePhoneChallenge, googlePhoneError, type GoogleLoginConfig } from '@/lib/googleIdentity';
 import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { ArrowLeft, ArrowRight, Check, Phone } from "lucide-react";
@@ -6,15 +7,16 @@ import { Button } from "@/components/ui/button";
 import { Loader2 } from "@/components/ui/loader";
 import { FIELD_CONTROL } from "@/components/xpot/Field";
 import { InlineAlert } from "@/components/xpot/InlineAlert";
-import { formatPhone, normalizePhone } from "@shared/phone";
+import { formatPhone, normalizePhone, phonePlaceholderFor } from "@shared/phone";
 import { CountryCodePicker } from "@/components/CountryCodePicker";
 import { useT } from "@/i18n";
 import { signinMessages } from "@/i18n/messages/signin";
 import { StateSelect } from "@/components/StateSelect";
 import { phoneCountryCodeFromIso, phoneCountryCodeFromLocales } from "@shared/phoneCountry";
 
-// Sign in (or sign up) with a code texted to the phone. Only an approved rep
-// gets in; a new number completes a saved, one-question-at-a-time application.
+// Sign in (or sign up) with a code texted to the phone, or with Google: each
+// works on its own. Only an approved rep gets in; a new number or Google
+// account completes a saved, one-question-at-a-time application.
 
 type Step = "phone" | "code" | "application" | "pending" | "blocked";
 // name, email, location, vehicle, kit, active seller
@@ -42,7 +44,7 @@ async function post<T>(url: string, body: unknown): Promise<{ ok: boolean; data:
 
 export function PhoneSignIn({ onSignedIn }: { onSignedIn: () => void | Promise<unknown> }) {
   const t = useT(signinMessages);
-  const { data: config } = useQuery<{ smsLive: boolean; supportWhatsapp: string | null; countryIso: string | null }>({
+  const { data: config } = useQuery<{ smsLive: boolean; supportWhatsapp: string | null; countryIso: string | null; provider?: string; google?: GoogleLoginConfig }>({
     queryKey: ["/api/auth/phone/config"],
     staleTime: Infinity,
   });
@@ -70,6 +72,11 @@ export function PhoneSignIn({ onSignedIn }: { onSignedIn: () => void | Promise<u
   const [resendAt, setResendAt] = useState(0);
   const [now, setNow] = useState(Date.now());
   const codeRef = useRef<HTMLInputElement>(null);
+  const pending = useRef(false);
+  useEffect(() => {
+    if (config?.google) void prepareGoogleIdentity(config.google).catch(() => {});
+    return cancelGooglePhoneChallenge;
+  }, [config?.google]);
   // The last draft the server has, so moving back and forth sends nothing new.
   const lastSavedDraft = useRef("");
   const countryWasChosen = useRef(false);
@@ -97,8 +104,14 @@ export function PhoneSignIn({ onSignedIn }: { onSignedIn: () => void | Promise<u
     setDraftLoading(true);
     fetch("/api/auth/phone/application-draft", { credentials: "include" })
       .then((response) => response.json())
-      .then(({ draft }) => {
-        if (cancelled || !draft) return;
+      .then(({ draft, suggested }) => {
+        if (cancelled) return;
+        // A new Google applicant: what Google knows fills the first answers.
+        if (!draft) {
+          if (suggested?.displayName) setName(suggested.displayName);
+          if (suggested?.email) setEmail(suggested.email);
+          return;
+        }
         const saved: Answers = {
           name: draft.displayName ?? "",
           email: draft.email ?? "",
@@ -134,19 +147,27 @@ export function PhoneSignIn({ onSignedIn }: { onSignedIn: () => void | Promise<u
   };
 
   const sendCode = async (target: string) => {
+    if (pending.current || !config) return;
+    pending.current = true;
     setBusy(true);
     setError("");
     try {
-      const { ok, data } = await post<{ phone: string; devCode?: string }>("/api/auth/phone/start", { phone: target, countryCode, lang: t.lang });
-      if (!ok) return showError(data);
-      setPhone(data.phone);
-      setDevCode(data.devCode ?? "");
-      setCode(data.devCode ?? "");
+      const targetPhone = normalizePhone(target, countryCode);
+      if (!targetPhone) return showError({ code: 'invalid_phone' });
+      if (config?.provider === 'google' && config.google) {
+        await sendGooglePhoneCode(config.google, targetPhone);
+        setPhone(targetPhone); setCode(''); setDevCode('');
+      } else {
+        const { ok, data } = await post<{ phone: string; devCode?: string }>("/api/auth/phone/start", { phone: target, countryCode, lang: t.lang });
+        if (!ok) return showError(data);
+        setPhone(data.phone); setDevCode(data.devCode ?? ''); setCode(data.devCode ?? '');
+      }
       setResendAt(Date.now() + 30_000);
       setStep("code");
-    } catch {
-      setError(t("err_generic"));
+    } catch (error) {
+      showError({ code: googlePhoneError(error) });
     } finally {
+      pending.current = false;
       setBusy(false);
     }
   };
@@ -158,21 +179,45 @@ export function PhoneSignIn({ onSignedIn }: { onSignedIn: () => void | Promise<u
   };
 
   const verify = async (value: string) => {
+    if (pending.current) return;
+    pending.current = true;
     setBusy(true);
     setError("");
     try {
-      const { ok, data } = await post<{ status: "active" | "pending" | "blocked" | "new" }>("/api/auth/phone/verify", { phone, code: value });
+      const { ok, data } = config?.provider === 'google'
+        ? await post<{ status: 'active' | 'pending' | 'blocked' | 'new' }>('/api/auth/identity', { idToken: await confirmGooglePhoneCode(phone, value) })
+        : await post<{ status: 'active' | 'pending' | 'blocked' | 'new' }>("/api/auth/phone/verify", { phone, code: value });
       if (!ok) {
         setCode("");
         return showError(data);
       }
       if (data.status === "active") return void (await onSignedIn());
       setStep(data.status === "new" ? "application" : data.status);
-    } catch {
-      setError(t("err_generic"));
+    } catch (error) {
+      showError({ code: googlePhoneError(error) });
     } finally {
+      pending.current = false;
       setBusy(false);
     }
+  };
+
+  const google = async () => {
+    if (pending.current || !config?.google) return;
+    pending.current = true; setBusy(true); setError('');
+    try {
+      const idToken = await signInGoogleAlternative(config.google);
+      const { ok, data } = await post<{ status: 'active' | 'pending' | 'blocked' | 'new' }>('/api/auth/identity', { idToken });
+      if (!ok) return showError(data);
+      if (data.status === 'active') return void (await onSignedIn());
+      setStep(data.status === 'new' ? 'application' : data.status);
+    } catch (error) {
+      const code = (error as { code?: string })?.code;
+      // Firebase's own code, for whoever looks into a failed Google sign-in.
+      console.warn('[signin] Google sign-in failed', code ?? error);
+      if (code === 'auth/popup-closed-by-user' || code === 'auth/cancelled-popup-request') return;
+      showError({ code: code === 'auth/popup-blocked' ? 'popup_blocked' : googlePhoneError(error) });
+    }
+    finally { pending.current = false; setBusy(false); }
   };
 
   const onCode = (value: string) => {
@@ -271,7 +316,7 @@ export function PhoneSignIn({ onSignedIn }: { onSignedIn: () => void | Promise<u
         kind={step}
         whatsappHref={whatsappLink(step)}
         action={
-          <button type="button" onClick={restart} className="min-h-10 text-sm text-white/50 hover:text-white">
+          <button type="button" onClick={restart} className="min-h-11 text-sm text-white/50 hover:text-white">
             {t("backToStart")}
           </button>
         }
@@ -335,7 +380,7 @@ export function PhoneSignIn({ onSignedIn }: { onSignedIn: () => void | Promise<u
           {applicationStep === APPLICATION_STEPS - 1 ? t("requestAccess") : t("next")}
           {applicationStep < APPLICATION_STEPS - 1 ? <ArrowRight /> : null}
         </Button>
-        {applicationStep > 0 ? <button type="button" disabled={busy} onClick={() => goToStep(applicationStep - 1)} className="mx-auto flex min-h-10 items-center gap-2 text-sm text-white/45 hover:text-white"><ArrowLeft className="h-4 w-4" />{t("previous")}</button> : null}
+        {applicationStep > 0 ? <button type="button" disabled={busy} onClick={() => goToStep(applicationStep - 1)} className="mx-auto flex min-h-11 items-center gap-2 text-sm text-white/45 hover:text-white"><ArrowLeft className="h-4 w-4" />{t("previous")}</button> : null}
         <p className="text-center text-xs text-white/35">{t("draftSaved")}</p>
       </form>
     );
@@ -352,7 +397,7 @@ export function PhoneSignIn({ onSignedIn }: { onSignedIn: () => void | Promise<u
         className="space-y-4"
         data-testid="signin-code"
       >
-        <button type="button" onClick={restart} className="flex min-h-10 items-center gap-2 text-sm text-white/60 hover:text-white">
+        <button type="button" onClick={restart} className="flex min-h-11 items-center gap-2 text-sm text-white/60 hover:text-white">
           <ArrowLeft className="h-4 w-4" />
           {t("changeNumber")}
         </button>
@@ -382,7 +427,7 @@ export function PhoneSignIn({ onSignedIn }: { onSignedIn: () => void | Promise<u
           type="button"
           disabled={busy || wait > 0}
           onClick={() => void sendCode(phone)}
-          className="min-h-10 w-full text-sm text-blue-300 hover:text-white disabled:text-white/35"
+          className="min-h-11 w-full text-sm text-blue-300 hover:text-white disabled:text-white/35"
         >
           {wait > 0 ? t("resendIn", { seconds: wait }) : t("resend")}
         </button>
@@ -414,7 +459,7 @@ export function PhoneSignIn({ onSignedIn }: { onSignedIn: () => void | Promise<u
                 type="tel"
                 inputMode="tel"
                 autoComplete="tel-national"
-                placeholder={t("phonePlaceholder")}
+                placeholder={phonePlaceholderFor(countryCode)}
                 autoFocus
                 required
                 className={`${FIELD} pl-10`}
@@ -423,10 +468,22 @@ export function PhoneSignIn({ onSignedIn }: { onSignedIn: () => void | Promise<u
             </div>
           </div>
         </div>
-        <Button type="submit" variant="brand" size="lg" className="w-full" disabled={phoneInput.replace(/\D/g, "").length < 7} loading={busy} data-testid="button-send-code">
+        <Button type="submit" variant="brand" size="lg" className="w-full" disabled={!config || phoneInput.replace(/\D/g, "").length < 7} loading={busy} data-testid="button-send-code">
           {t("sendCode")}
           <ArrowRight />
         </Button>
+        {config?.provider === 'google' && <>
+          <div className="flex items-center gap-3 text-xs text-white/45"><span className="h-px flex-1 bg-white/15" />{t('or')}<span className="h-px flex-1 bg-white/15" /></div>
+          <Button type="button" variant="outline" size="lg" className="w-full" disabled={busy} onClick={() => void google()}>
+            <svg aria-hidden="true" focusable="false" viewBox="0 0 24 24" className="h-5 w-5 shrink-0">
+              <path fill="#4285F4" d="M22.56 12.25c0-.73-.06-1.42-.19-2.09H12v3.96h5.92c-.26 1.28-1.02 2.37-2.15 3.1v2.58h3.48c2.04-1.88 3.21-4.65 3.21-7.55Z" />
+              <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.48-2.58c-.98.66-2.24 1.06-3.8 1.06-2.87 0-5.3-1.94-6.17-4.54H2.23v2.66C4.04 20.53 7.73 23 12 23Z" />
+              <path fill="#FBBC05" d="M5.83 14.28A6.6 6.6 0 0 1 5.48 12c0-.79.14-1.55.35-2.28V7.06H2.23A10.94 10.94 0 0 0 1 12c0 1.78.43 3.45 1.23 4.94l3.6-2.66Z" />
+              <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.65l3.15-3.15C17.45 2.09 14.97 1 12 1 7.73 1 4.04 3.47 2.23 7.06l3.6 2.66C6.7 7.12 9.13 5.38 12 5.38Z" />
+            </svg>
+            {t('continueGoogle')}
+          </Button>
+        </>}
       </form>
   );
 }

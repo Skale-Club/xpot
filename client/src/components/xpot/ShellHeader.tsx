@@ -7,7 +7,6 @@ import { shellMessages } from "@/i18n/messages/shell";
 import type { XpotMeResponse } from "@/pages/xpot/types";
 import { UserGreeting } from "./UserGreeting";
 import { useAvatarUpload } from "./useAvatarUpload";
-import { usePanelDoor } from "./panelDoor";
 import { SignOutConfirm } from "./SignOutConfirm";
 import { useOnline } from "@/hooks/use-online";
 import { navigateGuarded } from "@/hooks/useUnsavedChangesGuard";
@@ -17,9 +16,10 @@ import { navigateGuarded } from "@/hooks/useUnsavedChangesGuard";
 // and the buttons that belong to the whole app rather than one module:
 // Settings and sign out. Install app lives in the Settings header; management
 // is a tab of each module's bar (Manage) and a switch in Settings, not a
-// button here. For someone with a panel there is one more round button, to the
-// panel. The Visits/Tags switch sits right below it. On desktop the sidebar has
-// the buttons and the same identity block. Sign out asks first.
+// button here. The other panels (Production, Admin) are rows in Settings, so
+// the header keeps room for the name (an owner's team is the Company group of
+// the bar). The Visits/Tags switch sits right below it. On desktop the sidebar has the buttons and the
+// same identity block. Sign out asks first.
 
 const ICON_BUTTON =
   "flex h-10 w-10 items-center justify-center rounded-[18px] border border-white/5 bg-white/[0.03] text-white/40 transition-all hover:bg-white/10 hover:text-white active:scale-95 touch-manipulation";
@@ -29,7 +29,6 @@ export function ShellHeader({ actions = true }: { actions?: boolean }) {
   const [, navigate] = useLocation();
   const online = useOnline();
   const avatar = useAvatarUpload();
-  const door = usePanelDoor();
   const [confirming, setConfirming] = useState(false);
   const { data: me } = useQuery<XpotMeResponse>({ queryKey: ["/api/xpot/me"], retry: false });
 
@@ -82,11 +81,6 @@ export function ShellHeader({ actions = true }: { actions?: boolean }) {
 
       {actions && (
         <div className="relative z-10 flex shrink-0 items-center gap-1.5">
-          {door ? (
-            <button type="button" onClick={door.go} title={door.label} aria-label={door.label} className={ICON_BUTTON} data-testid="shell-panel">
-              <door.Icon className="h-[18px] w-[18px]" />
-            </button>
-          ) : null}
           <button type="button" onClick={() => navigateGuarded("/settings", navigate)} title={ts("navSettings")} aria-label={ts("navSettings")} className={ICON_BUTTON} data-testid="shell-settings">
             <Settings className="h-[18px] w-[18px]" />
           </button>

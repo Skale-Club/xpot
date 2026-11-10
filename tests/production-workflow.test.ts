@@ -1,13 +1,23 @@
 import { describe, expect, it } from "vitest";
 import type { PrintModelItem, PrintRequestItem } from "../shared/printProduction";
 import { parseBatchName, batchTabsFor, pendingBatches } from "../client/src/pages/admin/tags/batches-model";
-import { buildState, collapsedPlates, damagedToReprint, needsPrintComputer, journeyTitle, personName, plainTitle, batchPrefixFromTitle, boardGroups, chipsWritten, pauseNeedsChips, canAssembleJob, canPrintModel, journeyProgress, latestPlates, pendingPieces, plateActions, printableBeds, printComputers, printedOutcome, printQuantity, productionNeedsAction, productionPath, productionTabFor, showPlateNumber, slugFromTitle } from "../client/src/pages/admin/tags/production-workflow";
+import { piecesAwaitingPrinted, assemblyParts, buildState, collapsedPlates, damagedToReprint, needsPrintComputer, journeyTitle, personName, plainTitle, batchPrefixFromTitle, boardGroups, chipsWritten, pauseNeedsChips, canAssembleJob, canPrintModel, journeyProgress, latestPlates, pendingPieces, plateActions, printableBeds, printComputers, printedOutcome, printQuantity, productionNeedsAction, productionPath, productionTabFor, showPlateNumber, slugFromTitle } from "../client/src/pages/admin/tags/production-workflow";
 
 const model = {
   id: "model", kind: "serialized", status: "ready", productType: "large_plate", face: "google_review", salesProductId: 1,
   currentVersion: { builder: "plate.google", beds: [{ label: "x4", copies: 4 }, { label: "x8", copies: 8 }] },
 } as PrintModelItem;
 const batch = { id: "batch", batchCode: "LP-001", productType: "large_plate", face: "google_review", salesProductId: 1, tagCount: 6 };
+
+describe("the bar of pieces waiting to be marked printed", () => {
+  const plate = (status: string, quantity: number) => ({ status, quantity, downloads: [], redoneBy: null });
+  const request = (modelKind: string, ...plates: unknown[]) => ({ modelKind, plates }) as unknown as PrintRequestItem;
+  it("counts the pieces of the plates that can be marked printed, parts and finished plates apart", () => {
+    expect(piecesAwaitingPrinted([])).toBe(0);
+    expect(piecesAwaitingPrinted([request("serialized", plate("ready", 4), plate("printing", 2), plate("printed", 4), plate("requested", 8), plate("failed", 4))])).toBe(6);
+    expect(piecesAwaitingPrinted([request("part", plate("ready", 16))])).toBe(0);
+  });
+});
 
 describe("production tabs", () => {
   it("lights Models only on /models and Produce on every other view, the orders list included", () => {
@@ -16,10 +26,21 @@ describe("production tabs", () => {
     expect(productionTabFor("batches")).toBe("board");
     expect(productionTabFor("jobs")).toBe("board");
     expect(productionTabFor("models")).toBe("catalog");
+    expect(productionTabFor("printing")).toBe("board");
   });
 });
 
 describe("unified production", () => {
+  it("reviews assembly parts for the selected NFC without changing the model recipe", () => {
+    const original = [{ part: "round", perPiece: 1 }];
+    const configured = { ...model, currentVersion: { ...model.currentVersion!, consumes: original,
+      nfcVariants: { sticker_10x20: { pause: { z: 1, text: "Insert NFC" }, consumes: [{ part: "base", perPiece: 1 }, { part: "rectangle", perPiece: 1 }] } },
+    } } as PrintModelItem;
+    const names = new Map([["round", { title: "Round NFC" }], ["rectangle", { title: "Rectangle NFC" }], ["base", { title: "Base" }]]);
+    expect(assemblyParts(configured, names, "sticker_10x20")).toEqual(["1 Base", "1 Rectangle NFC"]);
+    expect(assemblyParts(configured, names)).toEqual(["1 Round NFC"]);
+    expect(configured.currentVersion!.consumes).toEqual(original);
+  });
   it("walks file, printer, stock and done; a failed or cancelled job is on no step", () => {
     const at = (status: string, extra = {}) => journeyProgress({ status, batchId: "b", pendingCount: 0, ...extra } as never);
     expect(at("requested")).toBe(0);
@@ -53,14 +74,14 @@ describe("unified production", () => {
     const job = (status: string, files = 1, redoneBy: string | null = null) => ({ status, redoneBy, downloads: Array.from({ length: files }, (_, i) => ({ id: String(i), kind: "gcode_3mf", filename: "x" })) }) as never;
     expect(plateActions(job("requested", 0))).toEqual([]);
     expect(plateActions(job("building", 0))).toEqual([]);
-    expect(plateActions(job("ready"))).toEqual(["download", "start"]);
-    expect(plateActions(job("ready", 0))).toEqual([]);
+    expect(plateActions(job("ready", 0))).toEqual(["markPrinted"]);
+    expect(plateActions(job("ready"))).toEqual(["download", "markPrinted"]);
     expect(plateActions(job("printing"))).toEqual(["markPrinted", "download"]);
     expect(plateActions(job("failed"))).toEqual(["printAgain"]);
     expect(plateActions(job("failed", 1, "next"))).toEqual([]);
     expect(plateActions(job("printed"))).toEqual([]);
     expect(plateActions(job("cancelled"))).toEqual([]);
-    for (const status of ["requested", "building", "ready", "failed", "cancelled", "printed"]) expect(plateActions(job(status))).not.toContain("markPrinted");
+    for (const status of ["requested", "building", "failed", "cancelled", "printed"]) expect(plateActions(job(status))).not.toContain("markPrinted");
   });
   it("groups the board by what the operator must do, failed first, and only the last attempt of each plate", () => {
     const plate = (plateNumber: number, status: string, createdAt: string, redoneBy: string | null = null) => ({ plateNumber, status, createdAt, redoneBy }) as never;
@@ -175,8 +196,10 @@ describe("unified production", () => {
     expect(canPrintModel(model, { ...batch, salesProductId: 2 })).toBe(false);
     expect(canPrintModel(model, { ...batch, tagCount: 9 })).toBe(false);
   });
-  it("splits a requested quantity exactly and never truncates or clamps invalid input", () => {
-    expect(printQuantity("10", 4, true)).toMatchObject({ valid: true, count: 10, plates: [4, 4, 2], pieces: 10 });
+  it("limits serialized generation to one printer plate without clamping", () => {
+    expect(printQuantity("4", 4, true)).toMatchObject({ valid: true, count: 4, max: 4, plates: [4], pieces: 4 });
+    expect(printQuantity("3", 4, true)).toMatchObject({ valid: true, plates: [3], pieces: 3 });
+    for (const raw of ["5", "10", "80"]) expect(printQuantity(raw, 4, true)).toMatchObject({ valid: false, plates: [], pieces: 0 });
     for (const raw of ["", "0", "-1", "1.5", "NaN", "10001"]) expect(printQuantity(raw, 4, true).valid).toBe(false);
     expect(printQuantity("5", 4, false)).toMatchObject({ valid: true, plates: [4, 4], pieces: 8 });
   });

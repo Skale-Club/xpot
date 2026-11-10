@@ -25,6 +25,7 @@ import { createFilesRouter } from "./files.js";
 import { createProspectingRouter } from "./prospecting.js";
 import { createOrganizationsRouter } from "./organizations.js";
 import { createSystemHealthRouter } from "./system-health.js";
+import { createAcademyRouter } from "./academy.js";
 
 export function registerXpotRoutes(app: Express) {
   // Public branding (favicon / manifest / apple-touch) — no auth.
@@ -51,6 +52,7 @@ export function registerXpotRoutes(app: Express) {
   app.use("/api/xpot", createAdminRouter());
   app.use("/api/xpot", createAdminIntegrationsRouter());
   app.use("/api/xpot", createSystemHealthRouter());
+  app.use("/api/xpot", createAcademyRouter());
   app.use("/api/xpot", createBrandingAdminRouter());
   app.use("/api/xpot", createLandingContentAdminRouter());
   // Sales module: catalog, direct sales, consigned stock. A member never receives cost or profit.

@@ -16,7 +16,7 @@ export function useTagLabels() {
   const tt = useT(tagsMessages);
   const t = useT(manageTagsMessages);
   return useMemo(() => {
-    const lookup = (prefix: string, value: string | null | undefined, fallback = "—") => {
+    const lookup = (prefix: string, value: string | null | undefined, fallback = "-") => {
       if (!value) return fallback;
       const key = `${prefix}${value}`;
       const label = tt(key as never);

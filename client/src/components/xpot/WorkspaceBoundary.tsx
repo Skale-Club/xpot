@@ -1,7 +1,7 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useLocation } from "wouter";
-import { AppLoader } from "@/components/ui/spinner";
+import { RouteLoader } from "./RouteLoader";
 import { workspaceForPath } from "@/lib/workspace";
 import { clearWorkspaceQueries } from "@/lib/workspaceQueries";
 
@@ -17,5 +17,5 @@ export function WorkspaceBoundary({ children }: { children: ReactNode }) {
     void clearWorkspaceQueries(client).then(() => { if (active) setScope(target); });
     return () => { active = false; };
   }, [scope, target, client]);
-  return scope === target ? children : <AppLoader />;
+  return scope === target ? children : <RouteLoader />;
 }

@@ -199,7 +199,39 @@ def stand_menu(tag, index, params, out_dir, batch=''):
     return _stand('card_per_code_large_menu', 'Menu', tag, index, params, out_dir, batch)
 
 
+def plate_service(tag, index, params, out_dir):
+    from builders.service import build
+    report, parts = build(tag, params, out_dir, 'plate')
+    _check_url(report['qr_url'], tag)
+    return report, parts
+
+
+def stand_service(tag, index, params, out_dir, batch=''):
+    from builders.service import build
+    report, parts = build(tag, params, out_dir, 'stand')
+    _check_url(report['qr_url'], tag)
+    return report, parts
+
+
+def plate_face(tag, index, params, out_dir):
+    from builders.face import build
+    report, parts = build(tag, {**params, 'theme': _theme(params, index)}, out_dir, 'plate')
+    _check_url(report['qr_url'], tag)
+    return report, parts
+
+
+def stand_face(tag, index, params, out_dir, batch=''):
+    from builders.face import build
+    report, parts = build(tag, {**params, 'theme': _theme(params, index)}, out_dir, 'stand')
+    _check_url(report['qr_url'], tag)
+    return report, parts
+
+
 BUILDERS = {
+    'plate.face': plate_face,
+    'stand.face': stand_face,
+    'plate.service': plate_service,
+    'stand.service': stand_service,
     'plate.instagram': plate_instagram,
     'plate.google': plate_google,
     'plate.menu': plate_menu,
@@ -210,7 +242,7 @@ BUILDERS = {
     'stand.menu': stand_menu,
 }
 
-NEEDS_BATCH = {'stand.google', 'stand.instagram', 'stand.menu'}
+NEEDS_BATCH = {'stand.google', 'stand.instagram', 'stand.menu', 'stand.service', 'stand.face'}
 
 
 def build_piece(builder_id, tag, index, params, out_dir, batch=''):

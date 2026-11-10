@@ -17,7 +17,7 @@ import { formatPhone as formatE164 } from "../../../shared/phone";
 type DateInput = string | number | Date | null | undefined;
 
 /** Shown for a missing value. */
-export const EMPTY_VALUE = "—";
+export const EMPTY_VALUE = "-";
 
 function toDate(value: DateInput): Date | null {
   if (value == null || value === "") return null;
@@ -27,7 +27,7 @@ function toDate(value: DateInput): Date | null {
 
 // ─── Dates ────────────────────────────────────────────────────────────────────
 
-/** "Mar 4, 2026, 2:05 PM" / "4 de mar. de 2026, 14:05". Missing or invalid: "—". */
+/** "Mar 4, 2026, 2:05 PM" / "4 de mar. de 2026, 14:05". Missing or invalid: "-". */
 export function formatDateTime(value: DateInput, locale: string = currentLocale()): string {
   const date = toDate(value);
   if (!date) return EMPTY_VALUE;
@@ -81,7 +81,7 @@ export function formatCurrency(value: number | null | undefined, currency: strin
 
 // ─── Numbers ──────────────────────────────────────────────────────────────────
 
-/** A ratio (0.452) → "45%" / "45 %" as the language writes it. Not finite: "—". */
+/** A ratio (0.452) → "45%" / "45 %" as the language writes it. Not finite: "-". */
 export function formatPercent(
   ratio: number | null | undefined,
   { digits = 0, locale = currentLocale() }: { digits?: number; locale?: string } = {},
@@ -128,7 +128,7 @@ export function formatPhone(e164: string | null | undefined): string {
 
 // ─── Durations ────────────────────────────────────────────────────────────────
 
-/** Seconds → "45 s", "12 min", "1 h 05 min", "2 h". Missing or negative: "—". */
+/** Seconds → "45 s", "12 min", "1 h 05 min", "2 h". Missing or negative: "-". */
 export function formatDuration(seconds: number | null | undefined): string {
   if (seconds == null || !Number.isFinite(seconds) || seconds < 0) return EMPTY_VALUE;
   if (seconds < 60) return translate(kitMessages, "durationSeconds", { seconds: Math.round(seconds) });

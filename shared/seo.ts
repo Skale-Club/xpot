@@ -39,9 +39,9 @@ const HTML_LANG: Record<SeoLang, string> = {
 const COPY: Record<SeoLang, Record<PublicSeoPage, { title: string; description: string }>> = {
   en: {
     home: {
-      title: formatTitle("Xpot", "Flexible independent field sales"),
+      title: formatTitle("Xpot", "Field Sales Platform"),
       description:
-        "Sell selected products to local businesses on your schedule, whether for a few flexible hours or as a full-time business. Plan routes, confirm visits by GPS and organize sales with Xpot.",
+        "Xpot is the field sales platform: plan routes, confirm visits by GPS and organize your sales.",
     },
     privacy: {
       title: formatTitle("Privacy Policy", "Xpot"),
@@ -54,9 +54,9 @@ const COPY: Record<SeoLang, Record<PublicSeoPage, { title: string; description: 
   },
   pt: {
     home: {
-      title: formatTitle("Xpot", "Vendas independentes no seu ritmo"),
+      title: formatTitle("Xpot", "Plataforma de vendas externas"),
       description:
-        "Venda produtos selecionados para comércios locais no seu ritmo, por algumas horas ou como atividade principal. Planeje rotas, confirme visitas por GPS e organize vendas no Xpot.",
+        "O Xpot é a plataforma de vendas externas: planeje rotas, confirme visitas por GPS e organize suas vendas.",
     },
     privacy: {
       title: formatTitle("Política de Privacidade", "Xpot"),
@@ -69,9 +69,9 @@ const COPY: Record<SeoLang, Record<PublicSeoPage, { title: string; description: 
   },
   es: {
     home: {
-      title: formatTitle("Xpot", "Ventas independientes a tu ritmo"),
+      title: formatTitle("Xpot", "Plataforma de ventas de campo"),
       description:
-        "Vende productos seleccionados a comercios locales a tu ritmo, por unas horas o como actividad principal. Planifica rutas, confirma visitas por GPS y organiza ventas con Xpot.",
+        "Xpot es la plataforma de ventas de campo: planifica rutas, confirma visitas por GPS y organiza tus ventas.",
     },
     privacy: {
       title: formatTitle("Política de Privacidad", "Xpot"),
@@ -86,19 +86,19 @@ const COPY: Record<SeoLang, Record<PublicSeoPage, { title: string; description: 
 
 const FEATURES: Record<SeoLang, string[]> = {
   en: [
-    "Flexible selling routes for independent sellers",
+    "Route planning for field sales",
     "GPS-confirmed visits to local businesses",
     "Sales, stock and earnings tracking",
     "QR and NFC products for local businesses",
   ],
   pt: [
-    "Rotas flexíveis para vendedores independentes",
+    "Planejamento de rotas para vendas externas",
     "Visitas a comércios locais confirmadas por GPS",
     "Controle de vendas, estoque e ganhos",
     "Produtos com QR e NFC para comércios locais",
   ],
   es: [
-    "Rutas flexibles para vendedores independientes",
+    "Planificación de rutas para ventas de campo",
     "Visitas a comercios locales confirmadas por GPS",
     "Control de ventas, stock y ganancias",
     "Productos con QR y NFC para comercios locales",
@@ -252,7 +252,7 @@ export function renderSeoHead(pathname: string): string {
     meta("og:image", SEO_OG_IMAGE, true),
     meta("og:image:width", "1200", true),
     meta("og:image:height", "630", true),
-    meta("og:image:alt", "Xpot for independent sellers building income on their terms", true),
+    meta("og:image:alt", "Xpot, the field sales platform", true),
     meta("og:locale", seo.locale, true),
     ...alternateLocales,
     meta("twitter:card", "summary_large_image"),

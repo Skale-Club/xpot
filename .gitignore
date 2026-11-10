@@ -21,3 +21,9 @@ Xpot Logo-font-backup.svg
 # Python bytecode (print-pipeline/)
 __pycache__/
 *.pyc
+
+/.codex-local/
+/.audit-*.json
+
+# Xpot Desktop launcher, compiled by npm run desktop:installer
+print-pipeline/setup/build/

@@ -1,6 +1,6 @@
 import { Fragment, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { ChevronRight, ClipboardList, Files, PackageCheck, Play, Printer, RotateCcw } from "lucide-react";
+import { ChevronRight, ClipboardList, Files, PackageCheck, Printer, RotateCcw } from "lucide-react";
 import { canMarkPrinted, type PrintJobDetail, type PrintRequestItem } from "@shared/printProduction";
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/xpot/ConfirmDialog";
@@ -12,7 +12,7 @@ import { productionMessages } from "@/i18n/messages/production";
 import { productionBoardMessages } from "@/i18n/messages/productionBoard";
 import { ADMIN_TAGS_KEY, errorMessage, formatDateTime, getJson, invalidateAdminTags, sendJson } from "./api";
 import { Loading, LoadError } from "./pieces-shared";
-import { DownloadFileButton, JobStatusPill, PRODUCTION_BASE, formatBytes, minutesText, useBuildSentence, useFileDownload, usePrintComputers, usePrintModels, useProductionAccess } from "./production-shared";
+import { DownloadFileButton, JobStatusPill, PRODUCTION_BASE, formatBytes, minutesText, useBuildSentence, usePrintComputers, usePrintModels, useProductionAccess } from "./production-shared";
 import { ProductionIdentity } from "./production-identity";
 import { PrintPreviewCard } from "./production-preview";
 import { PrintedDialog } from "./production-printed-dialog";
@@ -41,7 +41,6 @@ export function PrintJobPage({ id, go }: { id: string; go: Go }) {
   const { loaded: computersLoaded, computers } = usePrintComputers();
   const buildSentence = useBuildSentence();
   const { toast } = useToast();
-  const { download, busy: downloading } = useFileDownload();
   const [confirming, setConfirming] = useState<Step | null>(null);
   const [marking, setMarking] = useState(false);
   const [reporting, setReporting] = useState(false);
@@ -231,14 +230,10 @@ export function PrintJobPage({ id, go }: { id: string; go: Go }) {
           <div className="flex flex-wrap items-center gap-2">
             {/* The computer is making it: nothing to do. When it is off or silent, the way out is to try again. */}
             {job.status === "building" && building && building !== "making" ? <Button type="button" variant="brand" accent="tags" onClick={() => setConfirming("release")} data-testid="production-release"><RotateCcw />{t("release")}</Button> : null}
-            {job.status === "ready" ? <>
-              {download1 ? <Button type="button" variant="brand" accent="tags" loading={downloading === download1.id} onClick={() => void download(download1.id)} data-testid="production-primary-download">{t("downloadSliced")}</Button> : null}
-              <Button type="button" variant="secondary" loading={step.isPending} onClick={() => step.mutate({ action: "start" })} data-testid="production-start"><Play />{t("startPrinting")}</Button>
-            </> : null}
-            {job.status === "printing" ? <>
-              <Button type="button" variant="brand" accent="tags" onClick={() => setMarking(true)} data-testid="production-mark-printed"><Printer />{t("markPrinted")}</Button>
-              {download1 ? <DownloadFileButton id={download1.id} label={t("downloadAgain")} quiet /> : null}
-            </> : null}
+            {/* The next step in colour: a plate ready to print is downloaded, which puts it on the printer. */}
+            {job.status === "ready" && download1 ? <DownloadFileButton id={download1.id} label={t("downloadSliced")} onDownloaded={() => step.mutate({ action: "start" })} /> : null}
+            {job.status === "ready" || job.status === "printing" ? <Button type="button" variant={job.status === "ready" && download1 ? "ghost" : "brand"} accent="tags" onClick={() => setMarking(true)} data-testid="production-mark-printed"><Printer />{t("markPrinted")}</Button> : null}
+            {job.status === "printing" && download1 ? <DownloadFileButton id={download1.id} label={t("downloadSliced")} quiet /> : null}
             {outcome === "pending" ? <Button type="button" variant="brand" accent="tags" loading={stock.isPending} onClick={() => stock.mutate()} data-testid="production-stock-pending"><PackageCheck />{t.plural("putInStock", pending)}</Button> : null}
             {reprint > 0 ? <Button type="button" variant="brand" accent="tags" loading={again.isPending} onClick={() => again.mutate()} data-testid="production-print-damaged"><RotateCcw />{t.plural("printDamagedAgain", reprint)}</Button> : null}
             {canAssemble ? <Button type="button" variant="secondary" onClick={() => setAssembling(true)} data-testid="production-assembled">{t("markAssembled")}</Button> : null}
@@ -292,8 +287,8 @@ export function PrintJobPage({ id, go }: { id: string; go: Go }) {
               <tbody className="divide-y divide-white/[0.06]">
                 {job.pieces.map((piece) => (
                   <tr key={piece.publicCode}>
-                    <td className="py-1.5 pr-3 text-white/70">{piece.position ?? "—"}</td>
-                    <td className="py-1.5 pr-3 font-mono text-white/70">{piece.serialNumber ?? "—"}</td>
+                    <td className="py-1.5 pr-3 text-white/70">{piece.position ?? "-"}</td>
+                    <td className="py-1.5 pr-3 font-mono text-white/70">{piece.serialNumber ?? "-"}</td>
                     <td className="py-1.5 pr-3 font-mono text-white">{piece.publicCode}</td>
                     <td className="py-1.5 text-white/60">{piece.stockStatus === "pending" ? t("stockPending") : piece.stockStatus === "damaged" ? t("stockDamaged") : t("stockReceived")}</td>
                   </tr>

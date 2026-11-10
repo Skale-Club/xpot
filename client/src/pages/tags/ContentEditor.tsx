@@ -63,7 +63,7 @@ function PhoneField({ value, onChange, label, testId }: {
         aria-label={label}
         value={value.local}
         onChange={(e) => onChange({ ...value, local: value.cc === "1" ? maskUsPhoneInput(e.target.value) : e.target.value.replace(/[^\d\s()+-]/g, "") })}
-        placeholder={value.cc === "1" ? "(407) 555-1234" : ""}
+        placeholder={value.cc === "1" ? "(000) 000-0000" : ""}
         className={`${INPUT} min-w-0 flex-1`}
         data-testid={testId}
       />

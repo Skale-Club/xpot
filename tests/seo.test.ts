@@ -31,7 +31,7 @@ describe("public SEO routes", () => {
 
   it("renders indexable localized metadata and structured data for the landing", () => {
     const head = renderSeoHead("/pt");
-    expect(head).toContain("Xpot · Vendas independentes no seu ritmo");
+    expect(head).toContain("Xpot · Plataforma de vendas externas");
     expect(head).toContain('name="robots" content="index, follow, max-image-preview:large"');
     expect(head).toContain('rel="canonical" href="https://xpot.place/pt"');
     expect(head).toContain('hreflang="es" href="https://xpot.place/es"');

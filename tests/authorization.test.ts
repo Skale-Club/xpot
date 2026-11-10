@@ -745,3 +745,29 @@ describe("Admin › Integrations › Xphere", () => {
     expect((await request(appFor(router, "user-m"), "POST", "/admin/xphere/user-a/rotate-inbound-key")).status).toBe(403);
   });
 });
+
+describe("a person has one name", () => {
+  const router = createAuthRouter();
+  beforeEach(() => {
+    storage.updateSalesRepProfile.mockClear();
+    storage.updateUserProfile.mockClear();
+  });
+
+  it("first and last name write the name the app shows, together", async () => {
+    const res = await request(appFor(router, "user-a"), "PATCH", "/me", { firstName: "Vanildo", lastName: "Jr" });
+    expect(res.status).toBe(200);
+    expect(storage.updateSalesRepProfile).toHaveBeenCalledWith(1, expect.objectContaining({ displayName: "Vanildo Jr" }));
+    expect(storage.updateUserProfile).toHaveBeenCalledWith("user-a", { firstName: "Vanildo", lastName: "Jr" });
+  });
+
+  it("clearing the last name takes it out of the name shown", async () => {
+    await request(appFor(router, "user-a"), "PATCH", "/me", { firstName: "Vanildo", lastName: null });
+    expect(storage.updateSalesRepProfile).toHaveBeenCalledWith(1, expect.objectContaining({ displayName: "Vanildo" }));
+  });
+
+  it("a separate display name can no longer be set", async () => {
+    const res = await request(appFor(router, "user-a"), "PATCH", "/me", { displayName: "Someone else" });
+    expect(res.status).toBe(200);
+    expect(storage.updateSalesRepProfile).not.toHaveBeenCalled();
+  });
+});

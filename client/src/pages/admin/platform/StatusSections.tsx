@@ -73,7 +73,7 @@ export function ServicesSection({ query }: { query: ReturnType<typeof useService
       label: tp("colLastSuccess"),
       headerClassName: "hidden md:table-cell",
       cellClassName: "hidden md:table-cell whitespace-nowrap text-white/60",
-      render: (s) => (s.lastSuccessAt ? ago(s.lastSuccessAt) : "—"),
+      render: (s) => (s.lastSuccessAt ? ago(s.lastSuccessAt) : "-"),
     },
     {
       key: "error",
@@ -93,7 +93,7 @@ export function ServicesSection({ query }: { query: ReturnType<typeof useService
             )}
           </div>
         ) : (
-          <span className="text-white/35">—</span>
+          <span className="text-white/35">-</span>
         ),
     },
     {

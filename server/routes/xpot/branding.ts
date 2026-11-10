@@ -3,7 +3,7 @@ import { z } from "zod";
 import { randomUUID } from "crypto";
 import { storage } from "../../storage.js";
 import { requireSuperAdmin, requirePlatformAdmin } from "./middleware.js";
-import { getSupabaseAdmin } from "../../lib/supabase.js";
+import { publicUploadsConfigured, putPublicFile } from "../../lib/files.js";
 import { sendValidationError } from "../../lib/validation.js";
 
 const DEFAULT_FAVICON = "/favicon.png";
@@ -150,7 +150,7 @@ export function createBrandingAdminRouter() {
       const { imageData } = req.body as { imageData?: string };
       if (!imageData) return res.status(400).json({ message: "imageData is required" });
 
-      if (!process.env.SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
+      if (!publicUploadsConfigured()) {
         return res.status(503).json({ message: "Storage not configured" });
       }
 
@@ -165,18 +165,12 @@ export function createBrandingAdminRouter() {
         return res.status(400).json({ message: "Image too large (max 2MB)." });
       }
 
-      const supabase = getSupabaseAdmin();
       const filename = `branding/${asset}-${Date.now()}_${randomUUID()}.${ext}`;
-      const { error: uploadError } = await supabase.storage
-        .from("uploads")
-        .upload(filename, buffer, { contentType: mimeType, upsert: true });
-      if (uploadError) throw new Error(uploadError.message);
-
-      const { data: urlData } = supabase.storage.from("uploads").getPublicUrl(filename);
+      const publicUrl = await putPublicFile(filename, buffer, mimeType);
       const saved = await storage.upsertAppBranding(
         asset === "favicon"
-          ? { faviconUrl: urlData.publicUrl, faviconContentType: mimeType }
-          : { logoUrl: urlData.publicUrl, logoContentType: mimeType },
+          ? { faviconUrl: publicUrl, faviconContentType: mimeType }
+          : { logoUrl: publicUrl, logoContentType: mimeType },
       );
       res.json(present(saved));
     } catch (err) {

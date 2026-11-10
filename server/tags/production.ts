@@ -41,6 +41,11 @@ import {
   printGenerateOptions,
   splitIntoPlates,
   splitPrintedPieces,
+  printProblemOfReason,
+  printProblemReason,
+  problemsByCode,
+  type PrintPieceProblem,
+  type PrintQualitySummary,
   type PrintBed,
   type PrintFileKind,
   type PrintGenerateInput,
@@ -675,7 +680,7 @@ export async function currentPreview(modelRef: string, actor?: TagActor): Promis
 interface JobRow {
   id: string; model_id: string; model_slug: string; model_title: string; model_kind: string; version_id: string;
   version_number: number; bed_label: string; plates: number; quantity: number; status: string; batch_id: string | null; nfc_mount: string | null; menu_font: string | null;
-  batch_code: string | null; piece_count: number | null; received_count: number | null; pending_count: number | null; damaged_count: number | null; device_name: string | null;
+  batch_code: string | null; piece_count: number | null; received_count: number | null; pending_count: number | null; damaged_count: number | null; serial_from: number | null; serial_to: number | null; device_name: string | null;
   notes: string | null; error_code: string | null; error_message: string | null; report: Record<string, unknown> | null; created_at: Date | string;
   built_at: Date | string | null; printed_at: Date | string | null; updated_at: Date | string; last_event_at: Date | string | null;
   request_id: string | null; plate_number: number; plate_count: number; request_quantity: number;
@@ -708,6 +713,8 @@ const JOB_SELECT = sql`
       ELSE (SELECT count(*)::int FROM tags t WHERE t.batch_id = j.batch_id AND t.stock_status = 'pending') END AS pending_count,
     CASE WHEN j.batch_id IS NULL THEN NULL
       ELSE (SELECT count(*)::int FROM tags t WHERE t.batch_id = j.batch_id AND t.stock_status = 'damaged') END AS damaged_count,
+    CASE WHEN j.batch_id IS NULL THEN NULL ELSE (SELECT min(t.serial_number) FROM tags t WHERE t.batch_id = j.batch_id) END AS serial_from,
+    CASE WHEN j.batch_id IS NULL THEN NULL ELSE (SELECT max(t.serial_number) FROM tags t WHERE t.batch_id = j.batch_id) END AS serial_to,
     d.device_name, j.notes, j.error_code, j.error_message, j.report, j.created_at, j.built_at, j.printed_at, j.updated_at, j.last_event_at,
     j.request_id, COALESCE(j.plate_number, 1) AS plate_number,
     CASE WHEN j.request_id IS NULL THEN 1
@@ -749,6 +756,8 @@ function jobItem(j: JobRow, now = Date.now()): PrintJobItem {
     pendingCount: j.pending_count === null ? null : Number(j.pending_count),
     pieceCount: j.piece_count === null ? null : Number(j.piece_count),
     damagedCount: j.damaged_count === null ? null : Number(j.damaged_count),
+    serialFrom: j.serial_from === null ? null : Number(j.serial_from),
+    serialTo: j.serial_to === null ? null : Number(j.serial_to),
     deviceName: j.device_name,
     notes: j.notes,
     errorCode: j.error_code,
@@ -901,9 +910,20 @@ function fileItem(f: typeof printJobFiles.$inferSelect): PrintJobFileItem {
   return { id: f.id, kind: f.kind as PrintFileKind, filename: f.filename, bytes: f.bytes, sha256: f.sha256, createdAt: f.createdAt.toISOString() };
 }
 
+/** A Menu drawn by a shared face builder (`plate.service`/`stand.service`, and the face v3 `plate.face`/`stand.face`):
+ * its title font is the `style` param, one of the six approved fonts. */
+function isStyledMenu(version: VersionRow): boolean {
+  return version.params?.face === "menu" && !!version.builder && /\.(service|face)$/.test(version.builder);
+}
+
 /** A version's params, recipe, beds and parts as the plate's NFC type prints them (shared withNfcVariant). */
 function printedVersion(version: VersionRow, mount: string | null, menuFont: string | null) {
-  const params = menuFont ? { ...version.params, font: menuFont } : version.params ?? {};
+  const serviceMenu = isStyledMenu(version);
+  const fontIndex = PRINT_MENU_FONTS.findIndex((font) => font === menuFont);
+  const params = menuFont ? {
+    ...version.params, font: menuFont,
+    ...(serviceMenu && fontIndex >= 0 ? { style: ["classic", "italic", "modern", "spaced", "bold", "rounded"][fontIndex] } : {}),
+  } : version.params ?? {};
   return withNfcVariant(
     { params, recipe: version.recipe ?? {}, beds: version.beds ?? [], consumes: version.consumes ?? [] },
     version.nfc_variants, mount,
@@ -912,7 +932,8 @@ function printedVersion(version: VersionRow, mount: string | null, menuFont: str
 
 /** The title font of a new print: only a Menu piece has one to choose; unsaid, the version's own. */
 function pickMenuFont(version: VersionRow, requested: PrintMenuFont | undefined): PrintMenuFont | null {
-  if (requested && !menuFontsOf(version.builder).includes(requested)) throw new TagError("Only a Menu piece has a title font to choose", 409, "print_font_unavailable");
+  const fonts = isStyledMenu(version) ? PRINT_MENU_FONTS : menuFontsOf(version.builder);
+  if (requested && !fonts.includes(requested)) throw new TagError("Only a Menu piece has a title font to choose", 409, "print_font_unavailable");
   return requested ?? null;
 }
 
@@ -1146,8 +1167,9 @@ async function targetOrganization(ref: string | number | undefined, scope: Produ
 }
 
 /**
- * A print request: `quantity` pieces (or whole `plates`) of a model's current version, split into plates of at most
- * one bed each, the last one partial (10 on a 4-up bed: 4 + 4 + 2). Each serialized plate issues its own batch; a
+ * A new serialized request is one printer plate (1..bed.copies), with one batch of fresh codes. Historical
+ * multi-plate requests retain their lifecycle and history. Customer-order intake generates each plate
+ * successively, and unnumbered parts can span whole beds. A
  * part's plates are its fixed file, so its count rounds up to whole beds. The request and all its plates are written
  * in one transaction: either all of them exist or none. `existingBatch` links a batch made before the catalog
  * instead, as a request of one plate, for the batch's own organization unless another is named. `replaces` (set by
@@ -1183,6 +1205,10 @@ export async function createJob(input: PrintJobCreateInput, userId: string | nul
     throw new TagError("This model needs a product, a sales product and a batch prefix before printing", 409, "print_model_incomplete");
   }
   const quantity = input.quantity ?? bed.copies * (input.plates ?? 1);
+  if (model.kind === "serialized" && quantity > bed.copies) {
+    throw new TagError(`Generate one printer plate at a time: at most ${bed.copies} pieces on ${bed.label}`, 400,
+      "print_single_plate_only", { max: bed.copies });
+  }
   const plates = splitIntoPlates(quantity, bed.copies, model.kind === "serialized");
   if (plates.length > PRINT_MAX_PLATES) {
     throw new TagError(`At most ${PRINT_MAX_PLATES} plates in one request: up to ${PRINT_MAX_PLATES * bed.copies} pieces on ${bed.label}`, 400,
@@ -1288,7 +1314,7 @@ export async function redoJob(id: string, userId: string | null, scope: Producti
   const codes = job.batchId
     ? planRedoCodes({
       errorCode: job.errorCode,
-      anyReceived: Number((await rows<{ n: number }>(sql`SELECT count(*)::int AS n FROM tags WHERE batch_id = ${job.batchId} AND stock_status <> 'pending'`))[0]?.n ?? 0) > 0,
+      anyReceived: Number((await rows<{ n: number }>(RECEIVED_TAG_SQL(job.batchId)))[0]?.n ?? 0) > 0,
     })
     : "fresh";
   const freshCodes = model.kind === "serialized" && codes !== "same";
@@ -1331,6 +1357,8 @@ export async function redoJob(id: string, userId: string | null, scope: Producti
     }
     // A part's plate: the bed's file on the version it printed (a file a plate took is never replaced).
     if (model.kind === "part") return createPartPlate(model, { id: job.versionId }, bed!, ctx);
+    // The same codes: the ones its cancel retired come back.
+    if (job.batchId) await restoreCancelledPlateCodes(tx, job.batchId, userId);
     const [next] = await tx.insert(printJobs).values({
       organizationId: job.organizationId,
       requestId: job.requestId,
@@ -1411,13 +1439,105 @@ export interface TransitionInput {
   reason?: string | null;
   /** `printed`: public codes of the pieces that came out bad (they become damaged; the rest go into stock). */
   badPieces?: readonly string[];
+  /** What went wrong with each of `badPieces`, by public code. */
+  pieceProblems?: Readonly<Record<string, PrintPieceProblem>>;
   userId: string | null;
   source?: JourneySource;
 }
 
-const BAD_PIECE_REASON = "Came out bad on the printer plate";
+/** The reason on the `retire` movement of a code whose plate was cancelled before anything of its batch was received. */
+export const CANCELLED_PLATE_RETIRE_REASON = "Never printed: the plate was cancelled";
 
-interface StockedPieces { stocked: Array<{ id: string; publicCode: string }>; damaged: Array<{ id: string; publicCode: string }> }
+/**
+ * A plate cancelled before any piece of its batch was received: the batch's codes never become pieces, so they are
+ * retired (one `retire` movement each, CANCELLED_PLATE_RETIRE_REASON) and the batch is cancelled, which takes them
+ * out of every stock number ("not received" above all). Only while this plate is the batch's plate and nothing was
+ * received; printing the plate again (redoJob) brings the same codes back (restoreCancelledPlateCodes).
+ */
+async function retireCancelledPlateCodes(tx: Tx, job: PrintJobRow, userId: string | null, source: JourneySource): Promise<() => Promise<void>> {
+  const none = async () => {};
+  if (!job.batchId) return none;
+  const [batch] = await tx.select().from(tagBatches).where(eq(tagBatches.id, job.batchId)).for("update");
+  if (!batch || batch.status === "cancelled" || (batch.printJobId && batch.printJobId !== job.id)) return none;
+  const list = await tx.select().from(tags).where(eq(tags.batchId, batch.id)).for("update");
+  if (list.some((t) => t.stockStatus !== "pending")) return none;
+  const now = new Date();
+  if (list.length) {
+    await tx.update(tags).set({ status: "retired", stockStatus: "retired", disabledAt: now, stockUpdatedAt: now, updatedAt: now })
+      .where(inArray(tags.id, list.map((t) => t.id)));
+    await tx.insert(tagStockMovements).values(list.map((t) => ({
+      tagId: t.id,
+      movementType: "retire",
+      fromStockStatus: "pending",
+      toStockStatus: "retired",
+      fromOwnershipType: t.ownershipType,
+      toOwnershipType: t.ownershipType,
+      fromCustodianRepId: t.custodianRepId,
+      toCustodianRepId: t.custodianRepId,
+      actorUserId: userId,
+      referenceType: "batch",
+      referenceId: batch.id,
+      reason: CANCELLED_PLATE_RETIRE_REASON,
+    })));
+  }
+  await tx.update(tagBatches).set({ status: "cancelled", updatedAt: now }).where(eq(tagBatches.id, batch.id));
+  return () => recordJourney({
+    kind: "execution",
+    action: "batch_status_changed",
+    title: `Batch ${batch.batchCode} cancelled: ${list.length} codes never printed retired`,
+    content: `${CANCELLED_PLATE_RETIRE_REASON}.`,
+    batchId: batch.id,
+    beforeValue: batch.status,
+    afterValue: "cancelled",
+    metadata: { printJobId: job.id, retired: list.length },
+  }, journeyContext(userId, source));
+}
+
+/** A tag counts as received unless it is still pending or was retired only because its plate was cancelled. */
+const RECEIVED_TAG_SQL = (batchId: string) => sql`
+  SELECT count(*)::int AS n FROM tags t
+  WHERE t.batch_id = ${batchId} AND t.stock_status <> 'pending'
+    AND NOT (t.stock_status = 'retired' AND (
+      SELECT m.reason FROM tag_stock_movements m WHERE m.tag_id = t.id ORDER BY m.created_at DESC LIMIT 1
+    ) = ${CANCELLED_PLATE_RETIRE_REASON})`;
+
+/**
+ * The cancelled plate is printed again with the same codes: the codes its cancel retired go back to pending (one
+ * `adjustment` movement each) and the batch opens again. Codes retired for any other reason stay retired.
+ */
+async function restoreCancelledPlateCodes(tx: Tx, batchId: string, userId: string | null): Promise<number> {
+  const [batch] = await tx.select().from(tagBatches).where(eq(tagBatches.id, batchId)).for("update");
+  if (!batch || batch.status !== "cancelled") return 0;
+  const back = await rows<{ id: string; ownership_type: string; custodian_rep_id: number | null }>(sql`
+    SELECT t.id, t.ownership_type, t.custodian_rep_id FROM tags t
+    WHERE t.batch_id = ${batchId} AND t.stock_status = 'retired' AND (
+      SELECT m.reason FROM tag_stock_movements m WHERE m.tag_id = t.id ORDER BY m.created_at DESC LIMIT 1
+    ) = ${CANCELLED_PLATE_RETIRE_REASON}
+    FOR UPDATE OF t`, tx);
+  const now = new Date();
+  if (back.length) {
+    await tx.update(tags).set({ status: "inventory", stockStatus: "pending", disabledAt: null, stockUpdatedAt: now, updatedAt: now })
+      .where(inArray(tags.id, back.map((t) => t.id)));
+    await tx.insert(tagStockMovements).values(back.map((t) => ({
+      tagId: t.id,
+      movementType: "adjustment",
+      fromStockStatus: "retired",
+      toStockStatus: "pending",
+      fromOwnershipType: t.ownership_type,
+      toOwnershipType: t.ownership_type,
+      fromCustodianRepId: t.custodian_rep_id,
+      toCustodianRepId: t.custodian_rep_id,
+      actorUserId: userId,
+      referenceType: "batch",
+      referenceId: batchId,
+      reason: "The cancelled plate is printed again with the same codes",
+    })));
+  }
+  await tx.update(tagBatches).set({ status: "open", updatedAt: now }).where(eq(tagBatches.id, batchId));
+  return back.length;
+}
+
+interface StockedPieces { stocked: Array<{ id: string; publicCode: string }>; damaged: Array<{ id: string; publicCode: string; reason: string }> }
 
 /**
  * Puts a printed plate's pending pieces in house stock: the same end state as a successful intake scan (available,
@@ -1425,7 +1545,7 @@ interface StockedPieces { stocked: Array<{ id: string; publicCode: string }>; da
  * damaged instead (the same state and `damage` movement as markTagDamaged). A piece that is not pending any more is
  * left alone, so repeating it is harmless. Runs inside the caller's transaction.
  */
-async function stockPrintedPieces(tx: Tx, batchId: string, badPieces: readonly string[], userId: string | null): Promise<StockedPieces> {
+async function stockPrintedPieces(tx: Tx, batchId: string, badPieces: readonly string[], pieceProblems: Readonly<Record<string, PrintPieceProblem>> | undefined, userId: string | null): Promise<StockedPieces> {
   const [batch] = await tx.select().from(tagBatches).where(eq(tagBatches.id, batchId)).for("update");
   if (!batch) throw new TagError("Batch not found", 404, "batch_not_found");
   const list = await tx.select().from(tags).where(eq(tags.batchId, batchId)).for("update");
@@ -1440,6 +1560,8 @@ async function stockPrintedPieces(tx: Tx, batchId: string, badPieces: readonly s
   const goodTags = list.filter((t) => good.has(t.publicCode));
   const badTags = list.filter((t) => bad.has(t.publicCode));
   if (!goodTags.length && !badTags.length) return none;
+  const problems = problemsByCode(pieceProblems);
+  const reasonOf = (publicCode: string) => printProblemReason(problems.get(publicCode));
   const now = new Date();
   if (goodTags.length) {
     await tx.update(tags).set({
@@ -1477,13 +1599,13 @@ async function stockPrintedPieces(tx: Tx, batchId: string, badPieces: readonly s
       actorUserId: userId,
       referenceType: "batch",
       referenceId: batch.id,
-      reason: BAD_PIECE_REASON,
+      reason: reasonOf(t.publicCode),
     })));
   }
   await tx.update(tagBatches).set({ updatedAt: now }).where(eq(tagBatches.id, batch.id));
   return {
     stocked: goodTags.map((t) => ({ id: t.id, publicCode: t.publicCode })),
-    damaged: badTags.map((t) => ({ id: t.id, publicCode: t.publicCode })),
+    damaged: badTags.map((t) => ({ id: t.id, publicCode: t.publicCode, reason: reasonOf(t.publicCode) })),
   };
 }
 
@@ -1505,7 +1627,7 @@ async function recordStocked(batchId: string, result: StockedPieces, userId: str
       kind: "execution",
       action: "piece_damaged",
       title: `Piece ${piece.publicCode} marked damaged`,
-      content: BAD_PIECE_REASON,
+      content: piece.reason,
       tagId: piece.id,
       batchId,
       beforeValue: "pending",
@@ -1532,6 +1654,7 @@ export async function transitionJob(id: string, input: TransitionInput, scope: P
     }
   }
   const [model] = await db.select().from(printModels).where(eq(printModels.id, job.modelId)).limit(1);
+  const afterCommit: Array<() => Promise<void>> = [];
   const stocked = await db.transaction(async (tx) => {
     const updated = await tx.update(printJobs).set({
       status: plan.status,
@@ -1546,8 +1669,12 @@ export async function transitionJob(id: string, input: TransitionInput, scope: P
       await tx.insert(printPartMovements).values({ modelId: model.id, delta: job.quantity, reason: "printed", jobId: job.id, actorUserId: input.userId });
       await tx.update(printModels).set({ partOnHand: sql`${printModels.partOnHand} + ${job.quantity}`, updatedAt: now }).where(eq(printModels.id, model.id));
     }
+    // Cancelled before anything was received: its codes never become pieces and leave the stock numbers.
+    if (input.action === "cancel" && job.batchId && model.kind === "serialized") {
+      afterCommit.push(await retireCancelledPlateCodes(tx, job, input.userId, input.source ?? "admin"));
+    }
     // Printed by hand and checked by eye: the good pieces are stock now, without scanning each QR.
-    return input.action === "printed" && job.batchId ? stockPrintedPieces(tx, job.batchId, input.badPieces ?? [], input.userId) : null;
+    return input.action === "printed" && job.batchId ? stockPrintedPieces(tx, job.batchId, input.badPieces ?? [], input.pieceProblems, input.userId) : null;
   });
   if (job.batchId && input.action === "printed") {
     const [batch] = await db.select({ batchCode: tagBatches.batchCode }).from(tagBatches).where(eq(tagBatches.id, job.batchId)).limit(1);
@@ -1559,6 +1686,7 @@ export async function transitionJob(id: string, input: TransitionInput, scope: P
       metadata: { printJobId: job.id, bed: job.bedLabel, plate: job.plateNumber ?? 1, pieces: job.quantity },
     }, journeyContext(input.userId, input.source));
   }
+  await runAfterCommit(afterCommit);
   if (input.action === "fail") await recordPrintFailed(job, input.reason ?? null, "failed", input.userId, input.source ?? "admin");
   if (stocked && job.batchId) await recordStocked(job.batchId, stocked, input.userId, input.source ?? "admin");
   return getJob(job.id, scope);
@@ -1583,15 +1711,50 @@ async function recordPrintFailed(job: PrintJobRow, reason: string | null, errorC
  * them in stock the same way (and `badPieces` come out damaged). Only a printed plate with a batch; repeating it
  * when nothing is pending changes nothing.
  */
-export async function stockJob(id: string, input: { badPieces?: readonly string[]; userId: string | null; source?: JourneySource }, scope: ProductionScope): Promise<PrintJobDetail> {
+export async function stockJob(id: string, input: { badPieces?: readonly string[]; pieceProblems?: Readonly<Record<string, PrintPieceProblem>>; userId: string | null; source?: JourneySource }, scope: ProductionScope): Promise<PrintJobDetail> {
   const job = await loadJob(id, scope);
   if (job.status !== "printed" || !job.batchId) {
     throw new TagError("Only a printed plate with codes can put its pieces in stock", 409, "print_job_state");
   }
   const batchId = job.batchId;
-  const stocked = await db.transaction((tx) => stockPrintedPieces(tx, batchId, input.badPieces ?? [], input.userId));
+  const stocked = await db.transaction((tx) => stockPrintedPieces(tx, batchId, input.badPieces ?? [], input.pieceProblems, input.userId));
   await recordStocked(batchId, stocked, input.userId, input.source ?? "admin");
   return getJob(job.id, scope);
+}
+
+/**
+ * How the pieces marked printed came out over the last `days`: counted from the stock movements the marking wrote, so
+ * only pieces of a print plate count, and a piece damaged later (in someone's hands) is not a printing problem.
+ */
+export async function printQuality(days: number, scope: ProductionScope): Promise<PrintQualitySummary> {
+  const since = sql`now() - make_interval(days => ${days})`;
+  const moved = await rows<{ movement_type: string; reason: string | null; n: number }>(sql`
+    SELECT m.movement_type, m.reason, count(*)::int AS n
+    FROM tag_stock_movements m JOIN tags t ON t.id = m.tag_id
+    WHERE m.reference_type = 'batch' AND m.from_stock_status = 'pending' AND m.movement_type IN ('intake', 'damage') AND m.created_at >= ${since}
+      AND EXISTS (SELECT 1 FROM print_jobs j WHERE j.batch_id = t.batch_id AND ${scopeSql("j.organization_id", scope)})
+    GROUP BY m.movement_type, m.reason`);
+  const [failed] = await rows<{ n: number; pieces: number }>(sql`
+    SELECT count(*)::int AS n, coalesce(sum(j.quantity), 0)::int AS pieces FROM print_jobs j
+    WHERE j.status = 'failed' AND j.batch_id IS NOT NULL AND j.updated_at >= ${since} AND ${scopeSql("j.organization_id", scope)}`);
+  const byProblem = new Map<PrintPieceProblem | "unspecified", number>();
+  let good = 0;
+  for (const row of moved) {
+    if (row.movement_type === "intake") good += Number(row.n);
+    else {
+      const problem = printProblemOfReason(row.reason);
+      byProblem.set(problem, (byProblem.get(problem) ?? 0) + Number(row.n));
+    }
+  }
+  const withProblem = Array.from(byProblem.values()).reduce((sum, n) => sum + n, 0);
+  return {
+    days,
+    pieces: good + withProblem,
+    withProblem,
+    byProblem: Array.from(byProblem, ([problem, count]) => ({ problem, count })).sort((a, b) => b.count - a.count),
+    failedPrints: Number(failed?.n ?? 0),
+    failedPieces: Number(failed?.pieces ?? 0),
+  };
 }
 
 export async function attachJobFile(id: string, kind: PrintFileKind, filename: string, body: Uint8Array, scope: ProductionScope, opts: { deviceId?: string | null } = {}): Promise<PrintJobFileItem> {

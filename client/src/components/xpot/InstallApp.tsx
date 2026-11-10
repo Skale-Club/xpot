@@ -8,9 +8,8 @@ import { shellMessages } from "@/i18n/messages/shell";
 import { GradientTopLine } from "@/components/xpot/GradientTopLine";
 
 // "Install app", offered where the rep goes looking (the Settings header on a
-// phone, the sidebar footer, Settings › Sign-in on desktop) and nowhere else:
-// no banner, no pop-up on load. Renders nothing when the app is already
-// installed or the browser can't install it.
+// phone, its top bar on desktop) and nowhere else: no banner, no pop-up on load.
+// Renders nothing when the app is already installed or the browser can't install it.
 
 /**
  * Where Share lives: Safari's bottom bar on iPhone (behind ••• in the compact
@@ -95,30 +94,6 @@ function useInstallAction() {
   return { onClick, dialog };
 }
 
-/** Sidebar footer item, styled like its neighbours. */
-export function InstallAppSidebarItem({ collapsed }: { collapsed: boolean }) {
-  const t = useT(shellMessages);
-  const action = useInstallAction();
-  if (!action) return null;
-  return (
-    <>
-      <button
-        type="button"
-        onClick={action.onClick}
-        title={collapsed ? t("installApp") : undefined}
-        className={`flex h-10 w-full items-center gap-3 rounded-xl text-sm font-medium text-white/50 transition-colors hover:bg-white/[0.04] hover:text-white/85 ${
-          collapsed ? "justify-center px-0" : "px-3"
-        }`}
-        data-testid="sidebar-install-app"
-      >
-        <Download className="h-[18px] w-[18px] shrink-0" />
-        {!collapsed && <span className="truncate">{t("installApp")}</span>}
-      </button>
-      {action.dialog}
-    </>
-  );
-}
-
 /**
  * "Install app" pill for the Settings page header, on the right of the title.
  * Tinted with the brand blue so it reads as an offer rather than one more grey
@@ -141,29 +116,6 @@ export function InstallAppHeaderButton({ className = "" }: { className?: string 
         <Download className="h-4 w-4 shrink-0 min-[360px]:max-[379px]:hidden" aria-hidden="true" />
         <span className="whitespace-nowrap max-[359px]:sr-only">{t("installApp")}</span>
       </button>
-      {action.dialog}
-    </>
-  );
-}
-
-/** A row for Settings: what installing gets you, and the button. */
-export function InstallAppRow({ className = "" }: { className?: string }) {
-  const t = useT(shellMessages);
-  const action = useInstallAction();
-  if (!action) return null;
-  return (
-    <>
-      <div className={`flex items-center gap-3 rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-3 ${className}`} data-testid="settings-install-app-row">
-        <Download className="h-4 w-4 shrink-0 text-white/50" />
-        <p className="min-w-0 flex-1 text-xs text-white/50">{t("installAppHint")}</p>
-        <button
-          type="button"
-          onClick={action.onClick}
-          className="shrink-0 rounded-xl border border-white/10 bg-white/[0.06] px-3 py-2 text-xs font-semibold text-white transition-colors hover:bg-white/[0.1]"
-        >
-          {t("installApp")}
-        </button>
-      </div>
       {action.dialog}
     </>
   );

@@ -1,7 +1,7 @@
 import { useState, type ReactNode } from "react";
 import { Link } from "wouter";
 import {
-  Building2, CalendarDays, Check, ChevronRight, KeyRound, LayoutGrid, Nfc, PackageOpen, Phone, RotateCcw,
+  Building2, CalendarDays, GraduationCap, Check, ChevronRight, KeyRound, LayoutGrid, Nfc, PackageOpen, Phone, RotateCcw,
   ShieldCheck, Tag, Webhook, X, type LucideIcon,
 } from "lucide-react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -30,6 +30,8 @@ import { DangerZone } from "./PersonDanger";
 import { Memberships } from "./PersonOrganizations";
 import { PersonTagsSales } from "./PersonTagsSales";
 import { XphereConnection } from "./PersonXphere";
+import { PersonAcademy } from "./PersonAcademy";
+import { academyMessages } from "@/i18n/messages/academy";
 
 // One person in Account › People (/admin/reps/:repId): every decision about
 // them in one pane, by section. Access (approve, refuse, block, unblock,
@@ -151,12 +153,33 @@ export function Setting({ label, hint, children }: { label: string; hint?: strin
  * refused has no place and no modules yet: those are chosen when it is approved.
  */
 export function PersonPills({ rep, showStatus = true }: { rep: Rep; showStatus?: boolean }) {
+  const undecided = isUndecided(rep);
+  return (
+    <>
+      {showStatus && <PersonStatusPill rep={rep} />}
+      {!undecided && <PersonPlacePill rep={rep} />}
+      {!undecided && <PersonModules rep={rep} />}
+    </>
+  );
+}
+
+/** A sign-up still waiting or refused: no place and no modules yet. */
+export const isUndecided = (rep: Rep) => {
+  const status = personStatus(rep);
+  return status === "pending" || status === "refused";
+};
+
+/** Where they stand: waiting, active, blocked or refused. */
+export function PersonStatusPill({ rep }: { rep: Rep }) {
   const t = useT(manageMessages);
-  const tc = useT(commonMessages);
+  const status = personStatus(rep);
+  return <Pill tone={STATUS_TONE[status]}>{t(`status_${status}`)}</Pill>;
+}
+
+/** Platform administrator, or their role in their organization ("Owner at Skale Club", "2 organizations"). */
+export function PersonPlacePill({ rep }: { rep: Rep }) {
   const tse = useT(settingsMessages);
   const tw = useT(peopleWorkspaceMessages);
-  const status = personStatus(rep);
-  const undecided = status === "pending" || status === "refused";
   const platform = rep.role === "admin";
   const roleKey = ROLE_KEYS[rep.role as (typeof ROLES)[number]];
   const first = rep.teams[0];
@@ -167,13 +190,13 @@ export function PersonPills({ rep, showStatus = true }: { rep: Rep; showStatus?:
       : first
         ? tw("personOrgLine", { role: tw(first.role === "admin" ? "orgRoleAdmin" : "orgRoleMember"), org: first.name })
         : tw("personNoOrg");
-  return (
-    <>
-      {showStatus && <Pill tone={STATUS_TONE[status]}>{t(`status_${status}`)}</Pill>}
-      {!undecided && <Pill tone={platform ? toneOf(ROLE_TONE, rep.role) : "slate"} className="max-w-full">{place}</Pill>}
-      {!undecided && <span className="text-xs text-white/45">{repModules({ role: rep.role, modules: rep.modules }).map((m) => tc(MODULE_KEYS[m])).join(" · ")}</span>}
-    </>
-  );
+  return <Pill tone={platform ? toneOf(ROLE_TONE, rep.role) : "slate"} className="max-w-full">{place}</Pill>;
+}
+
+/** "Visits · Tags": the modules they use. */
+export function PersonModules({ rep }: { rep: Rep }) {
+  const tc = useT(commonMessages);
+  return <span className="text-xs text-white/45">{repModules({ role: rep.role, modules: rep.modules }).map((m) => tc(MODULE_KEYS[m])).join(" · ")}</span>;
 }
 
 export function Section({ title, icon: Icon, children, testId }: { title: string; icon: LucideIcon; children: ReactNode; testId?: string }) {
@@ -192,6 +215,7 @@ export function Section({ title, icon: Icon, children, testId }: { title: string
 export function PersonDetail({ rep, onClose, onGone }: { rep: Rep; onClose?: () => void; onGone: () => void }) {
   const tc = useT(commonMessages);
   const tw = useT(peopleWorkspaceMessages);
+  const ta = useT(academyMessages);
   const t = useT(manageMessages);
   const isSuperAdmin = useIsSuperAdmin();
   const status = personStatus(rep);
@@ -250,6 +274,13 @@ export function PersonDetail({ rep, onClose, onGone }: { rep: Rep; onClose?: () 
         </Section>
       )}
 
+      {/* What they watched in the Academy and for how long; the global admin's. */}
+      {isSuperAdmin && status === "active" && (
+        <Section title={ta("personSection")} icon={GraduationCap} testId="person-academy">
+          <PersonAcademy key={rep.id} repId={rep.id} />
+        </Section>
+      )}
+
       {member && (modules.includes("tags") || modules.includes("visits")) && (
         <Section title={tw("sectionActivity")} icon={ChevronRight} testId="person-activity">
           <div className="flex flex-wrap gap-2">
@@ -295,7 +326,7 @@ function Application({ rep }: { rep: Rep }) {
   const experienceKey = a.salesExperience ? `applicationSales_${a.salesExperience}` as const : null;
   const readinessKey = a.fieldSalesReadiness ? `applicationReadiness_${a.fieldSalesReadiness}` as const : null;
   const item = (label: string, value: ReactNode, wide = false) => (
-    <div className={wide ? "sm:col-span-2" : undefined}><dt className="text-xs text-white/35">{label}</dt><dd className="mt-0.5 break-words text-white/75">{value || "—"}</dd></div>
+    <div className={wide ? "sm:col-span-2" : undefined}><dt className="text-xs text-white/35">{label}</dt><dd className="mt-0.5 break-words text-white/75">{value || "-"}</dd></div>
   );
   // The form no longer asks these; they show only on applications sent before.
   const legacy = (label: string, value: ReactNode) => (value ? item(label, value) : null);

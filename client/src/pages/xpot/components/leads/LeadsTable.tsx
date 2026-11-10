@@ -7,13 +7,13 @@ import { visitsUiMessages } from "@/i18n/messages/visitsUi";
 import { Button } from "@/components/ui/button";
 import { CompactDataTable, type CompactDataColumn } from "@/components/xpot/CompactDataTable";
 import { Pill } from "@/components/xpot/StatusPill";
-import { displayPhone, formatCents, formatShortDate } from "../../utils";
+import { displayPhone, formatShortDate } from "../../utils";
 import { followUpDueTime } from "../../visitRules";
 import type { FullSalesLead } from "../../types";
 import { fileSrc } from "@/lib/files";
 import { LeadStatePill } from "./LeadStatePill";
 
-type SortKey = "name" | "city" | "sold" | "shelf" | "lastVisit";
+type SortKey = "name" | "city" | "shelf" | "lastVisit";
 
 /**
  * A follow-up as a pill, on every company the "Follow-up" filter lists: red once its date is past, amber for today or
@@ -154,7 +154,6 @@ export function LeadsTable({
       switch (sort.key) {
         case "name": return l.name.toLowerCase();
         case "city": return (l.locations?.[0]?.city ?? "").toLowerCase();
-        case "sold": return l.salesLifetimeCents ?? 0;
         case "shelf": return l.unitsOnShelf ?? 0;
         case "lastVisit": return lastVisitFor(l.id)?.getTime() ?? 0;
       }
@@ -230,21 +229,14 @@ export function LeadsTable({
       ...sortable("city", t("fieldCity")),
       headerClassName: "hidden xl:table-cell",
       cellClassName: "hidden whitespace-nowrap text-white/55 xl:table-cell",
-      render: (lead) => [lead.locations?.[0]?.city, lead.locations?.[0]?.state].filter(Boolean).join(", ") || "—",
+      render: (lead) => [lead.locations?.[0]?.city, lead.locations?.[0]?.state].filter(Boolean).join(", ") || "-",
     },
     {
       key: "phone",
       label: t("colPhone"),
       headerClassName: "hidden 2xl:table-cell",
       cellClassName: "hidden whitespace-nowrap text-white/55 2xl:table-cell",
-      render: (lead) => displayPhone(lead.phone) || "—",
-    },
-    {
-      key: "sold",
-      ...sortable("sold", t("colSold")),
-      align: "right",
-      cellClassName: "whitespace-nowrap text-emerald-300",
-      render: (lead) => (lead.salesLifetimeCents ? formatCents(lead.salesLifetimeCents) : <span className="text-white/20">—</span>),
+      render: (lead) => displayPhone(lead.phone) || "-",
     },
     {
       key: "shelf",
@@ -252,7 +244,7 @@ export function LeadsTable({
       align: "right",
       headerClassName: "hidden 2xl:table-cell",
       cellClassName: "hidden whitespace-nowrap text-white/70 2xl:table-cell",
-      render: (lead) => lead.unitsOnShelf || <span className="text-white/20">—</span>,
+      render: (lead) => lead.unitsOnShelf || <span className="text-white/20">-</span>,
     },
     {
       key: "lastVisit",
@@ -260,22 +252,26 @@ export function LeadsTable({
       cellClassName: "whitespace-nowrap text-white/55",
       render: (lead) => {
         const last = lastVisitFor(lead.id);
-        return last ? formatShortDate(last) : <span className="text-white/20">—</span>;
+        return last ? formatShortDate(last) : <span className="text-white/20">-</span>;
       },
     },
     {
       key: "actions",
       label: <span className="sr-only">{t("colActions")}</span>,
-      cellClassName: "whitespace-nowrap !px-2 !py-1.5",
+      cellClassName: "w-px whitespace-nowrap !px-2 !py-1.5",
       render: (lead) => (
-        <div className="flex items-center justify-end gap-1">
+        <div className="grid grid-cols-[2.25rem_auto_2.25rem] items-center gap-1">
           <RowAction title={t("salesAndConsignment")} onClick={() => onSell(lead)} className="hover:text-emerald-300">
             <DollarSign aria-hidden="true" />
           </RowAction>
-          <CheckInAction lead={lead} activeVisitLeadId={activeVisitLeadId} onCheckIn={onCheckIn} onBackToVisit={onBackToVisit} variant="secondary" />
-          {!canDelete || canDelete(lead) ? (
-            <RowMenu label={t("moreActions")} items={[{ key: "delete", label: t("deleteCompany"), icon: Trash2, run: () => onDelete(lead), danger: true }]} />
-          ) : null}
+          <div className="[&>button]:w-full">
+            <CheckInAction lead={lead} activeVisitLeadId={activeVisitLeadId} onCheckIn={onCheckIn} onBackToVisit={onBackToVisit} variant="secondary" />
+          </div>
+          <div className="h-9 w-9">
+            {!canDelete || canDelete(lead) ? (
+              <RowMenu label={t("moreActions")} items={[{ key: "delete", label: t("deleteCompany"), icon: Trash2, run: () => onDelete(lead), danger: true }]} />
+            ) : null}
+          </div>
         </div>
       ),
     },

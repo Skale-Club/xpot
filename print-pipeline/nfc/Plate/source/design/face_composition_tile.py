@@ -136,6 +136,9 @@ def brand_block(brand, max_w, h, theme='white'):
 
 
 def _font(fontfile):
+    bundled = os.path.join(small.REPO, 'library', 'fonts', fontfile)
+    if os.path.isfile(bundled):
+        return FontProperties(fname=bundled)
     path = os.path.join(UFONTS, fontfile)
     return FontProperties(fname=path if os.path.exists(path) else os.path.join(r'C:\Windows\Fonts', fontfile))
 

@@ -1,14 +1,18 @@
+import { TagModelChips } from "@/components/xpot/TagProductThumbnail";
 import { useMemo, useState, type ReactNode } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Building2, ChevronRight, Package, PackageOpen, Plus, Settings, ShieldCheck, ShoppingBag, UserPlus, Users } from "lucide-react";
 import { Link, Redirect, useLocation, useSearchParams } from "wouter";
+import { currentSearch, useUrlFilters } from "@/hooks/use-url-filters";
 import { PieceStatusPill, usePieceStatusLabel } from "@/components/piece/PieceStatusPill";
 import { Button } from "@/components/ui/button";
 import { AppLayout } from "@/components/xpot/AppLayout";
 import { ConfirmDialog } from "@/components/xpot/ConfirmDialog";
 import { EmptyState, ErrorState } from "@/components/xpot/EmptyState";
 import { Field, Input, Select } from "@/components/xpot/Field";
-import { FilterToggle } from "@/components/xpot/filters";
+import { CompactDataTable, type CompactDataColumn } from "@/components/xpot/CompactDataTable";
+import { FilterBar, FilterSearch, FilterSelect, FilterToggle } from "@/components/xpot/filters";
+import { ListPager, usePagedList } from "@/components/xpot/pagination";
 import { InlineAlert } from "@/components/xpot/InlineAlert";
 import { ListSkeleton } from "@/components/xpot/ListSkeleton";
 import { BackLink, PageHeader } from "@/components/xpot/PageHeader";
@@ -18,7 +22,7 @@ import { DANGER_OUTLINE, GLASS_CLASS, GLASS_SUBTLE_CLASS } from "@/components/xp
 import { Tabs } from "@/components/xpot/Tabs";
 import { apiRequest } from "@/lib/queryClient";
 import { describeApiError } from "@/lib/apiErrors";
-import { managementReach, ownedOrganizationId } from "@/lib/adminMode";
+import { managementReach, ownedOrganizationId, profileOfMe } from "@/lib/adminMode";
 import { formatDate } from "@/lib/dates";
 import { formatMoney, formatPhone } from "@/lib/format";
 import { useToast } from "@/hooks/use-toast";
@@ -69,6 +73,7 @@ type Organization = {
   memberCount?: number;
   personal?: boolean;
   counts?: { members: number; pieces: number; kits: number; customers: number };
+  createdAt?: string;
 };
 
 type Member = {
@@ -132,22 +137,40 @@ function OrganizationsEntry() {
   return only ? <Redirect to={`/organizations/${only}`} /> : <OrganizationsList />;
 }
 
+/**
+ * The organizations as one table (the app's CompactDataTable, as in Tags › Customers), so thirty of them still read
+ * at a glance: name, type (platform) or your role, members, status and created date, each row opening its workspace.
+ * The shared filter bar searches by name and narrows by type and status; on a phone the rows become a compact list.
+ */
 function OrganizationsList() {
   const [, navigate] = useLocation();
   const qc = useQueryClient();
   const t = useT(organizationsMessages);
   const tw = useT(peopleWorkspaceMessages);
+  const isDesktop = useIsDesktop();
   const { data: me } = useQuery<XpotMeResponse>({ queryKey: ["/api/xpot/me"] });
-  const { data: organizations = [], isLoading } = useQuery<Organization[]>({ queryKey: ["/api/xpot/organizations"] });
+  const { data: organizations = [], isLoading, error, refetch } = useQuery<Organization[]>({ queryKey: ["/api/xpot/organizations"] });
   const mayCreate = isPlatformManager(me);
   const { data: reps = [] } = useQuery<Person[]>({ queryKey: ["/api/xpot/admin/reps"], enabled: mayCreate });
   const [name, setName] = useState("");
   const [repAdminId, setRepAdminId] = useState("");
   const [creating, setCreating] = useState(false);
-  const [showPersonal, setShowPersonal] = useState(false);
-  const [type, setType] = useState<"all" | "producer" | "seller">("all");
+  // On a phone the filters wait behind one button, so the first organization is not a screen away (as in People).
+  const [filtersOpen, setFiltersOpen] = useState(false);
+  const filters = useUrlFilters({ q: "", personal: "", type: "", status: "" });
+  const query = filters.values.q.trim().toLocaleLowerCase();
+  const showPersonal = filters.values.personal === "1";
+  const type = filters.values.type === "producer" || filters.values.type === "seller" ? filters.values.type : "";
+  const status = filters.values.status === "active" || filters.values.status === "inactive" ? filters.values.status : "";
   const personalCount = organizations.filter((o) => o.personal).length;
-  const shown = (showPersonal ? organizations : organizations.filter((o) => !o.personal)).filter((o) => type === "all" || (type === "producer") === isProducer(o));
+  const listed = showPersonal ? organizations : organizations.filter((o) => !o.personal);
+  const shown = listed.filter((o) =>
+    (!type || (type === "producer") === isProducer(o))
+    && (!status || (status === "active") === o.isActive)
+    && (!query || o.name.toLocaleLowerCase().includes(query)));
+  const narrowed = Boolean(query || type || status);
+  const paged = usePagedList(shown, { resetKey: `${query}|${type}|${status}|${showPersonal}` });
+  const showControls = isDesktop || filtersOpen || narrowed || showPersonal;
   const create = useMutation({
     mutationFn: () => json<Organization>("POST", "/api/xpot/organizations", { name, repAdminId: Number(repAdminId) }),
     onSuccess: (organization) => {
@@ -156,17 +179,72 @@ function OrganizationsList() {
     },
   });
 
+  const open = (organization: Organization) => navigate(`/organizations/${organization.id}${currentSearch()}`);
+  const typeLabel = (organization: Organization) => (isProducer(organization) ? t("typeProducer") : t("typeSeller"));
+  const roleLabel = (organization: Organization) => (organization.membershipRole === "admin" ? t("roleRepAdmin") : t("roleRep"));
+
+  const columns: CompactDataColumn<Organization>[] = [
+    {
+      key: "organization",
+      label: t("columnOrganization"),
+      render: (organization) => (
+        <div className="flex min-w-0 items-center gap-3">
+          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-white/[0.06] text-white/60">
+            <Building2 className="h-4 w-4" aria-hidden="true" />
+          </span>
+          <span className="min-w-0">
+            <strong className="block truncate text-sm font-semibold text-white/90">{organization.name}</strong>
+            {organization.personal && <span className="mt-0.5 block truncate text-[11px] text-white/35">{tw("personalWorkspace")}</span>}
+          </span>
+        </div>
+      ),
+    },
+    mayCreate
+      ? { key: "type", label: t("typeFilter"), width: 170, render: (organization) => <Pill tone={isProducer(organization) ? "violet" : "blue"}>{typeLabel(organization)}</Pill> }
+      : { key: "role", label: t("columnRole"), width: 150, render: (organization) => (organization.membershipRole ? <Pill tone="slate">{roleLabel(organization)}</Pill> : null) },
+    {
+      key: "members",
+      label: t("columnMembers"),
+      width: 110,
+      align: "right",
+      render: (organization) => <span className="font-semibold text-white/75">{organization.memberCount ?? 0}</span>,
+    },
+    {
+      key: "status",
+      label: t("columnStatus"),
+      width: 130,
+      render: (organization) => <Pill tone={organization.isActive ? "green" : "slate"} dot>{organization.isActive ? t("active") : t("inactive")}</Pill>,
+    },
+    {
+      key: "created",
+      label: t("columnCreated"),
+      width: 140,
+      render: (organization) => <span className="text-white/55">{formatDate(organization.createdAt)}</span>,
+    },
+    {
+      key: "open",
+      label: <span className="sr-only">{t("columnOrganization")}</span>,
+      width: 48,
+      align: "right",
+      render: () => <ChevronRight className="ml-auto h-4 w-4 text-white/20" aria-hidden="true" />,
+    },
+  ];
+
   return (
     <AppLayout title={t("title")} size="wide">
-      <div className="space-y-6">
-        <PageHeader backHref={mayCreate ? "/admin" : undefined} title={t("title")} description={t("intro")} className="mb-0" />
-
-        {mayCreate && (
-          <div className="flex flex-wrap gap-2">
-            <Button type="button" variant="secondary" size="sm" onClick={() => setCreating((open) => !open)} aria-expanded={creating} data-testid="new-organization-open"><Plus />{t("newOrganization")}</Button>
-            <NewPartnerDialog />
-          </div>
-        )}
+      <div className="space-y-4">
+        <PageHeader
+          backHref={mayCreate ? "/admin" : undefined}
+          title={t("title")}
+          description={t("intro")}
+          className="mb-2"
+          actions={mayCreate ? (
+            <div className="flex flex-wrap gap-2">
+              <Button type="button" variant="secondary" size="sm" onClick={() => setCreating((open) => !open)} aria-expanded={creating} data-testid="new-organization-open"><Plus />{t("newOrganization")}</Button>
+              <NewPartnerDialog />
+            </div>
+          ) : undefined}
+        />
 
         {mayCreate && creating && (
           <form
@@ -182,47 +260,78 @@ function OrganizationsList() {
           </form>
         )}
 
-        {(personalCount > 0 || mayCreate) && (
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <p className="text-xs text-white/45">{personalCount > 0 && !showPersonal ? tw.plural("personalHidden", personalCount) : ""}</p>
-            <div className="flex flex-wrap items-center gap-3">
-              {mayCreate && <Select value={type} onChange={(event) => setType(event.target.value as typeof type)} aria-label={t("typeFilter")} data-testid="organizations-type-filter"
-                options={[{ value: "all", label: t("typeAll") }, { value: "producer", label: t("typeProducer") }, { value: "seller", label: t("typeSeller") }]} />}
-              {personalCount > 0 && <FilterToggle pressed={showPersonal} onChange={setShowPersonal} label={tw("showPersonal")} testId="organizations-show-personal" />}
-            </div>
-          </div>
-        )}
-
-        {isLoading ? <ListSkeleton rows={3} className="grid gap-3 md:grid-cols-2 xl:grid-cols-3" rowClassName="h-32 rounded-2xl" /> : !organizations.length ? (
+        {isLoading ? <ListSkeleton rows={5} /> : error ? (
+          <ErrorState message={describeApiError(error)} onRetry={() => void refetch()} />
+        ) : !organizations.length ? (
           <EmptyState icon={Building2} title={t("emptyList")} />
-        ) : !shown.length ? (
-          <EmptyState compact icon={Building2} title={tw("onlyPersonal")} />
         ) : (
-          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3" data-testid="organizations-list">
-            {shown.map((organization) => (
-              <button
-                key={organization.id}
-                onClick={() => navigate(`/organizations/${organization.id}`)}
-                className={`rounded-2xl ${GLASS_CLASS} p-5 text-left transition-colors hover:border-white/20 hover:bg-white/[0.06]`}
-              >
-                <div className="flex items-start justify-between gap-3">
-                  <Building2 className="h-6 w-6 text-slate-200" />
-                  <div className="flex flex-wrap justify-end gap-1.5">
-                    {mayCreate && <Pill tone={isProducer(organization) ? "violet" : "blue"}>{isProducer(organization) ? t("typeProducer") : t("typeSeller")}</Pill>}
-                    {organization.personal && <Pill tone="slate">{tw("personalWorkspace")}</Pill>}
-                    {organization.membershipRole && (
-                      <Pill tone="slate">{organization.membershipRole === "admin" ? t("roleRepAdmin") : t("roleRep")}</Pill>
-                    )}
-                  </div>
+          <>
+            <FilterBar
+              testId="organizations-filters"
+              search={<FilterSearch value={filters.values.q} onChange={(q) => filters.set({ q })} placeholder={t("searchOrganizations")} testId="organizations-search" />}
+              actions={isDesktop ? undefined : <FilterToggle pressed={showControls} onChange={setFiltersOpen} label={tw("filters")} testId="organizations-filters-toggle" />}
+              controls={!showControls ? undefined : (
+                <>
+                  {mayCreate && (
+                    <FilterSelect value={type} onChange={(next) => filters.set({ type: next })} placeholder={t("typeAll")} testId="organizations-type-filter"
+                      options={[{ value: "producer", label: t("typeProducer") }, { value: "seller", label: t("typeSeller") }]} />
+                  )}
+                  <FilterSelect value={status} onChange={(next) => filters.set({ status: next })} placeholder={t("statusAll")} testId="organizations-status-filter"
+                    options={[{ value: "active", label: t("active") }, { value: "inactive", label: t("inactive") }]} />
+                  {personalCount > 0 && <FilterToggle pressed={showPersonal} onChange={(on) => filters.set({ personal: on ? "1" : "" })} label={tw("showPersonal")} testId="organizations-show-personal" />}
+                </>
+              )}
+              summary={{ shown: shown.length, total: listed.length, active: narrowed, onClear: () => filters.set({ q: "", type: "", status: "" }) }}
+            />
+
+            {!shown.length ? (
+              <EmptyState compact icon={Building2} title={narrowed ? t("noMatch") : tw("onlyPersonal")} />
+            ) : (
+              <div>
+                <CompactDataTable
+                  columns={columns}
+                  rows={paged.visible}
+                  getRowKey={(organization) => organization.id}
+                  onRowClick={open}
+                  getRowAriaLabel={(organization) => t("openOrganization", { name: organization.name })}
+                  getRowClassName={(organization) => (organization.isActive ? "" : "opacity-60")}
+                  className="hidden sm:block"
+                  testId="organizations-list"
+                  getRowTestId={(organization) => `organization-row-${organization.id}`}
+                />
+
+                <div className={`divide-y divide-white/[0.055] overflow-hidden rounded-2xl sm:hidden ${GLASS_SUBTLE_CLASS}`}>
+                  {paged.visible.map((organization) => (
+                    <button
+                      key={organization.id}
+                      type="button"
+                      onClick={() => open(organization)}
+                      className={`group flex w-full items-center gap-3 px-3.5 py-3 text-left transition-colors active:bg-white/[0.05] ${organization.isActive ? "" : "opacity-60"}`}
+                      aria-label={t("openOrganization", { name: organization.name })}
+                      data-testid={`organization-card-${organization.id}`}
+                    >
+                      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-white/[0.06] text-white/60">
+                        <Building2 className="h-4 w-4" aria-hidden="true" />
+                      </span>
+                      <span className="min-w-0 flex-1">
+                        <strong className="block truncate text-sm font-semibold text-white/90">{organization.name}</strong>
+                        <span className="mt-1 block truncate text-[11px] text-white/40">
+                          {[
+                            mayCreate ? typeLabel(organization) : organization.membershipRole ? roleLabel(organization) : null,
+                            tw.plural("membersCount", organization.memberCount ?? 0),
+                            organization.isActive ? t("active") : t("inactive"),
+                            organization.personal ? tw("personalWorkspace") : null,
+                          ].filter(Boolean).join(" · ")}
+                        </span>
+                      </span>
+                      <ChevronRight className="h-4 w-4 shrink-0 text-white/20 transition-transform group-active:translate-x-0.5" aria-hidden="true" />
+                    </button>
+                  ))}
                 </div>
-                <h2 className="mt-4 font-semibold text-white">{organization.name}</h2>
-                <p className="mt-1 text-xs text-white/35">
-                  {organization.isActive ? t("active") : t("inactive")}
-                  {organization.memberCount != null ? ` · ${tw.plural("membersCount", organization.memberCount)}` : ""}
-                </p>
-              </button>
-            ))}
-          </div>
+                <ListPager shown={paged.shown} total={paged.total} hasMore={paged.hasMore} onMore={paged.showMore} />
+              </div>
+            )}
+          </>
         )}
       </div>
     </AppLayout>
@@ -259,16 +368,12 @@ function OrganizationWorkspace({ organizationId }: { organizationId: number }) {
   const tab: WorkspaceTab | null = urlTab ?? (ownPanel ? "team" : isDesktop ? "overview" : null);
   const home = `/organizations/${organizationId}`;
   const setTab = (next: WorkspaceTab) => {
-    if (!isDesktop) {
-      navigate(`${home}?tab=${next}`);
-      return;
-    }
     setParams((current) => {
       const updated = new URLSearchParams(current);
-      if (next === "overview") updated.delete("tab");
+      if (isDesktop && next === "overview") updated.delete("tab");
       else updated.set("tab", next);
       return updated;
-    }, { replace: true });
+    }, { replace: isDesktop });
   };
   const base = `/api/xpot/organizations/${organizationId}`;
   const organization = useQuery<Organization>({ queryKey: [base] });
@@ -279,7 +384,14 @@ function OrganizationWorkspace({ organizationId }: { organizationId: number }) {
   const membership = me?.organizationMemberships?.find((item) => item.organizationId === organizationId && item.isActive && !item.blockedAt);
   const mayManageTeam = platformManager || membership?.role === "admin";
   // The owner or partner of this one organization has no list above it: Back goes to their panel.
-  const [backHref, backLabel] = ownedOrganizationId(me) === organizationId ? ["/admin", twp("todayTitle")] : ["/organizations", t("backToList")];
+  const listParams = new URLSearchParams();
+  for (const key of ["personal", "type"]) {
+    const value = params.get(key);
+    if (value) listParams.set(key, value);
+  }
+  const listHref = `/organizations${listParams.size ? `?${listParams}` : ""}`;
+  // (An owner's Today is the Overview of their Company group.)
+  const [backHref, backLabel] = ownedOrganizationId(me) === organizationId ? ["/admin", profileOfMe(me) === "owner" ? twp("companyOverview") : twp("todayTitle")] : [listHref, t("backToList")];
   // The owner follows what the team bought; an employee has no list of it (the server refuses).
   const purchases = useQuery<Purchase[]>({ queryKey: [`${base}/purchases`], enabled: tab === "purchases" && mayManageTeam });
   // Companies open where this viewer works with them: Visits if they have it, else Tags.
@@ -288,7 +400,7 @@ function OrganizationWorkspace({ organizationId }: { organizationId: number }) {
   const [adding, setAdding] = useState(false);
   // Kits and companies name their rep, not "Rep #12".
   const repNames = useMemo(() => new Map((members.data ?? []).map((m) => [m.repId, m.displayName])), [members.data]);
-  const repName = (repId: number | null | undefined) => (repId ? repNames.get(repId) ?? "—" : t("unassigned"));
+  const repName = (repId: number | null | undefined) => (repId ? repNames.get(repId) ?? "-" : t("unassigned"));
 
   const changeMember = useMutation({
     mutationFn: async ({ member, kind }: MemberAction) => {
@@ -356,7 +468,7 @@ function OrganizationWorkspace({ organizationId }: { organizationId: number }) {
     <AppLayout title={org.name} size="wide">
       <div className="space-y-5">
         {phoneSection ? (
-          <PageHeader backHref={home} backLabel={org.name} eyebrow={org.name} title={phoneSection.label} className="mb-0" />
+          <PageHeader backHref={`${home}${currentSearch(["tab"])}`} backLabel={org.name} eyebrow={org.name} title={phoneSection.label} className="mb-0" />
         ) : (
           <PageHeader
             backHref={backHref}
@@ -405,7 +517,7 @@ function OrganizationWorkspace({ organizationId }: { organizationId: number }) {
                     <div className="min-w-0 flex-1">
                       {/* Their work (companies, visits, tasks, sales) for whoever manages the team; the person themselves (access, role, every membership) is in People. */}
                       {mayManageTeam ? (
-                        <Link href={`/organizations/${organizationId}/people/${member.repId}`} className="block truncate font-medium text-white hover:text-blue-200" data-testid={`organization-member-${member.repId}`}>{member.displayName}</Link>
+                        <Link href={`/organizations/${organizationId}/people/${member.repId}${currentSearch(["tab"])}`} className="block truncate font-medium text-white hover:text-blue-200" data-testid={`organization-member-${member.repId}`}>{member.displayName}</Link>
                       ) : (
                         <p className="truncate font-medium text-white">{member.displayName}</p>
                       )}
@@ -434,7 +546,7 @@ function OrganizationWorkspace({ organizationId }: { organizationId: number }) {
           <RecordList query={inventory} empty={t("noPieces")} rowHref={(row) => (platformManager ? `/admin/tags/pieces/${row.id}` : `${managementReach(me) ? "/admin/work" : ""}/tags/pieces/${encodeURIComponent(row.publicCode)}`)}
             seeAll={platformManager ? { href: `/admin/tags/pieces?org=${organizationId}`, label: t("seeAllIn", { screen: ts("managePieces") }), testId: "organization-inventory-all" } : undefined}
             summary={(rows) => <p className="text-sm text-white/60" data-testid="organization-inventory-summary">{statusSummary(rows, statusLabel)}</p>}
-            render={(row) => <><span className="font-mono text-sm text-white">{row.publicCode}</span><span className="flex items-center gap-2 text-xs text-white/45">{lookup(tt, `product_${row.productType}`, String(row.productType ?? ""))}<PieceStatusPill piece={row} /></span></>} />
+            render={(row) => <><span className="font-mono text-sm text-white">{row.publicCode}</span><span className="flex items-center gap-2 text-xs text-white/45"><TagModelChips productType={String(row.productType ?? "")} face={row.face} batchCode={row.batchCode} /><PieceStatusPill piece={row} /></span></>} />
         )}
         {tab === "kits" && (
           <RecordList query={kits} empty={t("noKits")} rowHref={(row) => (platformManager ? `/admin/tags/kits?view=kits&org=${organizationId}${row.repId ? `&kitRep=${row.repId}` : ""}` : `${managementReach(me) ? "/admin/work" : ""}/tags/pieces`)}
@@ -577,7 +689,7 @@ function PurchasesList({ query }: { query: { data?: Purchase[]; isLoading: boole
         {rows.map(({ acquisition, repName, lines }) => (
           <div key={acquisition.id} className="flex flex-wrap items-center gap-x-4 gap-y-1 px-4 py-3" data-testid={`organization-purchase-${acquisition.id}`}>
             <div className="min-w-0 flex-1">
-              <p className="truncate text-sm font-medium text-white">{repName ?? "—"}</p>
+              <p className="truncate text-sm font-medium text-white">{repName ?? "-"}</p>
               <p className="text-xs text-white/45">{lines.map((line) => (line.productName ? t("purchaseLine", { count: line.quantity, name: line.productName }) : t.plural("purchaseNoName", line.quantity))).join(", ")}</p>
             </div>
             <span className="text-xs tabular-nums text-white/45">{formatMoney(lines.reduce((sum, line) => sum + line.subtotalCents, 0), acquisition.currency)} · {formatDate(acquisition.purchasedAt)}</span>

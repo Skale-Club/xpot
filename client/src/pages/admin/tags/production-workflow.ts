@@ -1,4 +1,4 @@
-import { PRINT_MAX_PLATES, planRedoCodes, splitIntoPlates, type PrintJobItem, type PrintModelItem, type PrintRedoCodes, type PrintRequestItem } from "@shared/printProduction";
+import { PRINT_MAX_PLATES, planRedoCodes, splitIntoPlates, type PrintJobItem, type PrintModelItem, type PrintNfcMount, type PrintRedoCodes, type PrintRequestItem } from "@shared/printProduction";
 
 export interface ExistingProductionBatch {
   id: string;
@@ -15,8 +15,8 @@ export function productionPath(path: string): string {
 }
 
 /**
- * The lit tab of Production for a path: Models owns /models; everything else (the board, the full orders list at
- * /queue, a pending-batches list) belongs to Produce, since the board's "Waiting to print" is the day's queue.
+ * The lit tab of Production for a path: Models owns /models; everything else (the one screen, the full orders list at
+ * /queue, a pending-batches list, the old /printing link) belongs to the screen.
  */
 export function productionTabFor(view: string | undefined): "board" | "catalog" {
   return view === "models" ? "catalog" : "board";
@@ -39,7 +39,7 @@ export function canPrintModel(model: PrintModelItem, batch?: ExistingProductionB
 /** Never clamp or truncate the quantity: the review must match what will be ordered. */
 export function printQuantity(raw: string, copies: number, serialized: boolean) {
   const count = Number(raw);
-  const max = Math.min(10_000, PRINT_MAX_PLATES * copies);
+  const max = serialized ? copies : Math.min(10_000, PRINT_MAX_PLATES * copies);
   const valid = raw.trim() !== "" && Number.isInteger(count) && count >= 1 && count <= max;
   const plates = valid ? splitIntoPlates(count, copies, serialized) : [];
   return { count, max, valid, plates, pieces: plates.reduce((sum, n) => sum + n, 0) };
@@ -136,6 +136,11 @@ export interface BoardRequest {
   plates: PrintJobItem[];
 }
 
+/** The requests the Printing screen follows: pieces with a serial. A part has no code to confirm, only a count on its page. */
+export function serializedRequests(requests: readonly PrintRequestItem[]): PrintRequestItem[] {
+  return requests.filter((request) => request.modelKind === "serialized");
+}
+
 /** Open and failed plates by group; a request with plates in two groups shows in both, each with its own plates. Empty groups are left out. */
 export function boardGroups(requests: readonly PrintRequestItem[]): Array<{ group: BoardGroup; requests: BoardRequest[] }> {
   return BOARD_GROUPS.flatMap((group) => {
@@ -147,18 +152,19 @@ export function boardGroups(requests: readonly PrintRequestItem[]): Array<{ grou
 }
 
 /** What a plate's row lets the operator do, left to right; the first is the main one. */
-export type PlateAction = "download" | "start" | "markPrinted" | "printAgain";
+export type PlateAction = "download" | "markPrinted" | "printAgain";
 
 /**
- * Marking printed comes only after the job is on the printer (started), so it is never offered for a job without a
- * file or before the file was taken. A job with no file yet offers nothing: the print computer makes it. A failed one
+ * The next step comes first, because the first is the one in the row's colour: a plate ready to print is downloaded, and
+ * downloading puts it on the printer, where the answer is whether it printed. It can be marked printed at any point, in
+ * case it was printed some other way. A job with no file yet offers nothing: the print computer makes it. A failed one
  * offers printing again.
  */
 export function plateActions(job: Pick<PrintJobItem, "status" | "downloads" | "redoneBy">): PlateAction[] {
   const hasFile = job.downloads.length > 0;
   switch (job.status) {
     case "ready":
-      return hasFile ? ["download", "start"] : [];
+      return hasFile ? ["download", "markPrinted"] : ["markPrinted"];
     case "printing":
       return hasFile ? ["markPrinted", "download"] : ["markPrinted"];
     case "failed":
@@ -210,6 +216,14 @@ export function buildState(job: Pick<PrintJobItem, "status" | "stale" | "deviceN
 }
 
 /** Whether some plate depends on a print computer (waiting for its file or being built): the line that says "files will wait" is true only then. */
+/** How many pieces with a serial were sent to print and wait to be marked printed: the bar at the top of the screen. */
+export function piecesAwaitingPrinted(requests: readonly PrintRequestItem[]): number {
+  return serializedRequests(requests)
+    .flatMap((request) => request.plates)
+    .filter((plate) => plateActions(plate).includes("markPrinted"))
+    .reduce((sum, plate) => sum + plate.quantity, 0);
+}
+
 export function needsPrintComputer(requests: readonly PrintRequestItem[]): boolean {
   return boardGroups(requests).some((g) => g.group === "waiting" || g.group === "making");
 }
@@ -283,7 +297,7 @@ export function plainTitle(title: string): string {
   return title.replace(/\s*\([^)]*\)\s*$/, "").trim() || title;
 }
 
-/** Where to go once pieces were ordered: the one print job that came out of it, or the board when there are several. */
+/** Where to go once pieces were ordered: the one print job that came out of it, or the Printing screen when there are several. */
 export function orderedPath(request: Pick<PrintRequestItem, "plates">): string {
   return request.plates.length === 1 ? `/production/jobs/${request.plates[0].id}` : "/production";
 }
@@ -294,8 +308,9 @@ export function filamentColours(model: Pick<PrintModelItem, "currentVersion"> | 
 }
 
 /** What one piece takes off the counts when assembled, by name ("1 Stand base · Large"), when the part is a model of the catalog. */
-export function assemblyParts(model: Pick<PrintModelItem, "currentVersion"> | undefined, models: ReadonlyMap<string, Pick<PrintModelItem, "title">>): string[] {
-  return (model?.currentVersion?.consumes ?? []).map((c) => `${c.perPiece} ${plainTitle(models.get(c.part)?.title ?? c.part)}`);
+export function assemblyParts(model: Pick<PrintModelItem, "currentVersion"> | undefined, models: ReadonlyMap<string, Pick<PrintModelItem, "title">>, nfcMount?: PrintNfcMount | null): string[] {
+  const selected = nfcMount ? model?.currentVersion?.nfcVariants?.[nfcMount]?.consumes : undefined;
+  return (selected ?? model?.currentVersion?.consumes ?? []).map((c) => `${c.perPiece} ${plainTitle(models.get(c.part)?.title ?? c.part)}`);
 }
 
 // ─── History ──────────────────────────────────────────────────────────────────────────────────────────────────

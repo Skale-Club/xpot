@@ -221,7 +221,7 @@ export function NfcProvisioningCard({
             {latest.errorCode ? (
               <p className="break-all text-xs text-white/40">
                 {ERROR_KEYS[latest.errorCode] ? t(ERROR_KEYS[latest.errorCode]) : latest.errorCode}
-                {latest.errorMessage ? ` — ${latest.errorMessage}` : ""}
+                {latest.errorMessage ? `: ${latest.errorMessage}` : ""}
               </p>
             ) : null}
           </div>

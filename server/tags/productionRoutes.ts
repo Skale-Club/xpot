@@ -1,4 +1,5 @@
 import express, { type Express, type NextFunction, type Request, type RequestHandler, type Response } from "express";
+import { resolve } from "path";
 import { z } from "zod";
 import {
   PRINT_PREVIEW_CATALOG_PATH,
@@ -21,6 +22,7 @@ import { actorOf, productionScopeOf, requireProductionUser, requireTagAdmin, req
 import { TagError } from "./errors.js";
 import * as production from "./production.js";
 import { companyOrganizationId } from "../organizations/service.js";
+import { ensureDevBenchBundle } from "../desktopRoutes.js";
 
 // Tags › Production HTTP API (docs/PRINT_EXECUTION_PLAN.md). Two audiences:
 //   /api/xpot/admin/print-*        — the global admin (catalog, versions, requests and their plates, files), and the
@@ -306,12 +308,23 @@ export function registerProductionRoutes(app: Express, deps: { device: readonly 
     }
   });
 
+  // The problem rate on Production's screen: the last 90 days unless told otherwise.
+  app.get("/api/xpot/admin/print-quality", requireProductionUser, async (req, res) => {
+    try {
+      const asked = Number(req.query.days);
+      const days = Number.isInteger(asked) && asked >= 1 && asked <= 3650 ? asked : 90;
+      res.json(await production.printQuality(days, productionScopeOf(req)));
+    } catch (err) {
+      fail(res, err, "Failed to load the print quality");
+    }
+  });
+
   app.post(`${jobs}/:id/transition`, requireProductionUser, async (req, res) => {
     const id = uuidParam(req.params.id, res);
     if (!id) return;
     try {
-      const { action, reason, badPieces } = printJobUpdateSchema.parse(req.body);
-      res.json(await production.transitionJob(id, { action, reason: reason ?? null, badPieces, userId: userIdOf(req), source: "admin" }, productionScopeOf(req)));
+      const { action, reason, badPieces, pieceProblems } = printJobUpdateSchema.parse(req.body);
+      res.json(await production.transitionJob(id, { action, reason: reason ?? null, badPieces, pieceProblems, userId: userIdOf(req), source: "admin" }, productionScopeOf(req)));
     } catch (err) {
       fail(res, err, "Failed to update the print order");
     }
@@ -323,8 +336,8 @@ export function registerProductionRoutes(app: Express, deps: { device: readonly 
     const id = uuidParam(req.params.id, res);
     if (!id) return;
     try {
-      const { badPieces } = printJobStockSchema.parse(req.body ?? {});
-      res.json(await production.stockJob(id, { badPieces, userId: userIdOf(req), source: "admin" }, productionScopeOf(req)));
+      const { badPieces, pieceProblems } = printJobStockSchema.parse(req.body ?? {});
+      res.json(await production.stockJob(id, { badPieces, pieceProblems, userId: userIdOf(req), source: "admin" }, productionScopeOf(req)));
     } catch (err) {
       fail(res, err, "Failed to put the pieces in stock");
     }
@@ -458,6 +471,15 @@ export function registerProductionRoutes(app: Express, deps: { device: readonly 
     } catch (err) {
       fail(res, err, "Failed to upload the print file");
     }
+  });
+
+  // The print code itself, for Xpot Desktop on a computer that was just connected (scripts/build.ts packs it).
+  app.get("/api/provisioner/bench-bundle", ...bench, (_req, res) => {
+    ensureDevBenchBundle();
+    res.set("Cache-Control", "no-store");
+    res.sendFile(resolve(process.cwd(), "dist/bench/print-pipeline.tgz"), (err) => {
+      if (err && !res.headersSent) res.status(404).json({ message: "This server has no print code to send", code: "bench_bundle_missing" });
+    });
   });
 
   // What the bench's Print Now folder should hold: plates to print and recently printed, with signed file links.

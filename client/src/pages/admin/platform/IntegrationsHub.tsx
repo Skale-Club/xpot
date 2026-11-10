@@ -1,7 +1,7 @@
 import { useEffect, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "wouter";
-import { Bot, ChevronRight, Map, MessageSquareText, Mic, Plug, Server, Smartphone, Webhook, type LucideIcon } from "lucide-react";
+import { BookOpen, Bot, ChevronRight, Map, MessageSquareText, Mic, Plug, Server, Smartphone, Webhook, type LucideIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { SectionCard } from "@/components/xpot/DashboardKit";
 import { ErrorState } from "@/components/xpot/EmptyState";
@@ -31,7 +31,7 @@ import {
   type IntegrationsResponse,
 } from "./ProviderCard";
 import { activeInChain, serviceAnchor, servicesNeedingAttention, SERVICES_KEY } from "./servicesUi";
-import { connectedXphereRows, XPHERE_KEY, type XphereRow } from "../integrationsUi";
+import { connectedXphereRows, providerForAuth, XPHERE_KEY, type XphereRow } from "../integrationsUi";
 
 /** How many connected people the CRM card names before "+N more". */
 const XPHERE_PEOPLE_SHOWN = 8;
@@ -79,6 +79,7 @@ const JOB_ICONS: Record<ServiceJob, LucideIcon> = {
   voice: Mic,
   ai: MessageSquareText,
   crm: Webhook,
+  content: BookOpen,
   assistants: Bot,
   infra: Server,
 };
@@ -167,6 +168,8 @@ export function IntegrationsHub() {
   const lines = useServiceLines();
   const query = useQuery<IntegrationsResponse>({ queryKey: INTEGRATIONS_KEY });
   const servicesQuery = useQuery<ServicesResponse>({ queryKey: [...SERVICES_KEY] });
+  const authQuery = useQuery<{ provider: string }>({ queryKey: ["/api/auth/phone/config"], staleTime: 60_000 });
+  const googleAuth = authQuery.data?.provider === 'google';
   const loaded = Boolean(query.data && servicesQuery.data);
 
   // Status links to a card with #service-<id>: open it there once the cards exist.
@@ -195,7 +198,8 @@ export function IntegrationsHub() {
   const services = servicesQuery.data.services;
   const service = (id: string) => services.find((s) => s.id === id);
   const card = (id: string) => {
-    const def = INTEGRATION_PROVIDERS.find((p) => p.provider === id)!;
+    const registered = INTEGRATION_PROVIDERS.find((p) => p.provider === id)!;
+    const def = providerForAuth(registered, authQuery.data?.provider);
     return <ProviderCard def={def} status={data.status.find((s) => s.provider === id)!} service={service(id)} />;
   };
   const attention = servicesNeedingAttention(services);
@@ -225,7 +229,10 @@ export function IntegrationsHub() {
         </div>
       )}
 
-      <JobSection job="signIn">{card("twilio")}</JobSection>
+      <JobSection job="signIn">
+        {googleAuth && <InlineAlert tone="info">{tp("googleIdentityActive")}</InlineAlert>}
+        {card("twilio")}
+      </JobSection>
 
       <JobSection job="maps">
         {card("google_places")}
@@ -253,7 +260,7 @@ export function IntegrationsHub() {
           }
         >
           <dl className="mt-3 grid grid-cols-2 gap-x-4 gap-y-2">
-            <Meta label={tp("lastSuccess")}>{xphere?.lastSuccessAt ? lines.ago(xphere.lastSuccessAt) : "—"}</Meta>
+            <Meta label={tp("lastSuccess")}>{xphere?.lastSuccessAt ? lines.ago(xphere.lastSuccessAt) : "-"}</Meta>
             {lines.lastError(xphere) && <Meta label={tp("lastError")} tone="bad">{lines.lastError(xphere)}</Meta>}
           </dl>
           <XphereConnectedPeople />
@@ -274,6 +281,8 @@ export function IntegrationsHub() {
           <div className="border-t border-white/[0.07] p-3">{card("gohighlevel")}</div>
         </details>
       </JobSection>
+
+      <JobSection job="content">{card("notion")}</JobSection>
 
       <JobSection job="assistants">
         <SummaryRow

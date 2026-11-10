@@ -9,6 +9,9 @@ import {
   type ConfigFieldKey,
 } from "#shared/integrations-registry.js";
 import { sendValidationError } from "../../lib/validation.js";
+import { normalizeNotionId } from "../../academy/config.js";
+import { NOTION_VERSION } from "../../academy/source.js";
+import { resetAcademyCache } from "../../academy/catalog.js";
 import { invalidateSmsConfig } from "../../auth/sms.js";
 import { checkTwilioConfig } from "../../auth/twilioCheck.js";
 import { maskIntegration, mergeConfigPatch, readConfig } from "./integrationStatus.js";
@@ -25,8 +28,11 @@ const putSchema = z.object({
   calendarId: z.string().trim().max(120).optional().nullable(),
   // Twilio, kept in integration_settings.config. "" clears a value.
   accountSid: z.string().trim().regex(/^(AC[0-9a-zA-Z]{32})?$/, "Account SID starts with AC and has 34 characters").optional(),
-  fromNumber: z.string().trim().regex(/^(\+[1-9]\d{6,14})?$/, "From number must be in E.164 format, e.g. +15085550100").optional(),
+  fromNumber: z.string().trim().regex(/^(\+[1-9]\d{6,14})?$/, "From number must be in E.164 format, e.g. +10000000000").optional(),
   messagingServiceSid: z.string().trim().regex(/^(MG[0-9a-zA-Z]{32})?$/, "Messaging Service SID starts with MG and has 34 characters").optional(),
+  // Notion (Academy): database ids, kept in integration_settings.config. "" clears a value.
+  coursesDatabaseId: z.string().trim().max(200).optional(),
+  lessonsDatabaseId: z.string().trim().max(200).optional(),
   enabled: z.boolean().optional(),
   // "Remove key": an empty apiKey keeps the stored secret, so removing it is explicit.
   clearApiKey: z.boolean().optional(),
@@ -85,6 +91,7 @@ export function createAdminIntegrationsRouter() {
       }
       const saved = await storage.upsertIntegrationSettings(def.provider, data);
       if (def.provider === "twilio") invalidateSmsConfig();
+      if (def.provider === "notion") resetAcademyCache();
       return res.json(maskIntegration(def.provider, saved));
     }
   });
@@ -298,6 +305,18 @@ async function testProvider(
       });
       if (r.ok) return testResult(true, "ok", "GHL authenticated.");
       return httpFailure("GHL", r);
+    }
+    case "notion": {
+      const ids = [config.config.coursesDatabaseId, config.config.lessonsDatabaseId].map(normalizeNotionId);
+      if (ids.some((id) => !id)) return testResult(false, "location_required", "Set both database IDs to test Notion.");
+      // Read-only: retrieving each database proves the token and that the databases are shared with the integration.
+      for (const id of ids) {
+        const r = await fetchWithTimeout(`https://api.notion.com/v1/databases/${id}`, {
+          headers: { Authorization: `Bearer ${apiKey}`, "Notion-Version": NOTION_VERSION },
+        });
+        if (!r.ok) return httpFailure("Notion", r);
+      }
+      return testResult(true, "ok", "Notion authenticated; both databases are reachable.");
     }
     case "twilio":
       // Read-only calls: the test must never send an SMS.

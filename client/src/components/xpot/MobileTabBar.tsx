@@ -2,7 +2,7 @@ import type { LucideIcon } from "lucide-react";
 import type { XpotModule } from "@shared/modules";
 import { MODULE_ACCENT } from "./surface";
 
-export type MobileTab = { id: string; label: string; icon: LucideIcon; testId?: string };
+export type MobileTab = { id: string; label: string; icon: LucideIcon; testId?: string; href?: string };
 
 /** Keep each module's home dashboard in the same first position. */
 export function orderMobileTabs(tabs: MobileTab[], module: XpotModule): MobileTab[] {
@@ -28,7 +28,7 @@ export function MobileTabBar({ tabs, activeId, onSelect, module, accent: accentO
       className="fixed inset-x-0 bottom-0 z-50 flex items-center border-t border-white/[0.07] pb-[max(calc(env(safe-area-inset-bottom,_0px)_-_14px),0px)]"
       style={{ background: "#070b15" }}
     >
-      {orderedTabs.map(({ id, label, icon: Icon, testId }) => {
+      {orderedTabs.map(({ id, label, icon: Icon, testId, href }) => {
         const isActive = activeId === id;
         return (
           <button
@@ -37,6 +37,7 @@ export function MobileTabBar({ tabs, activeId, onSelect, module, accent: accentO
             onClick={() => onSelect(id)}
             style={{ WebkitTapHighlightColor: "transparent" }}
             data-testid={testId}
+            data-preload-href={href}
             aria-current={isActive ? "page" : undefined}
             className={`flex min-h-[44px] min-w-0 flex-1 basis-0 touch-manipulation flex-col items-center justify-center px-1 py-2 transition-colors duration-150 ${
               isActive ? "text-white" : "text-white/45 hover:text-white/70"

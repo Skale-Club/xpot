@@ -87,7 +87,7 @@ export function ChipSection({ desktopWriter, commands }: {
   }, [tag.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const onWritten = async (result: WriteResult, signal?: AbortSignal) => {
-    await write("POST", `/api/xpot/tags/${tag.id}/nfc-written`, { readbackUrl: result.readbackUrl, method: result.method }, signal);
+    await write("POST", `/api/xpot/tags/${tag.id}/nfc-written`, { method: result.method }, signal);
   };
 
   return (
@@ -201,7 +201,6 @@ export function ChipSection({ desktopWriter, commands }: {
         identity="xpot"
         onClose={() => setWriteOpen(false)}
         onDone={onWritten}
-        registerWrite
         onLock={() => setLockOpen(true)}
         confirmed={tag.nfcStatus === "verified" || tag.nfcStatus === "locked"}
         continueUrl={`${window.location.origin}${tagPath(tag.publicCode)}?write=1`}

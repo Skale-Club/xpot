@@ -287,8 +287,10 @@ export interface TagBatchItem {
   tagCount: number;
   /** Codes issued for pieces not received yet (not printed / not delivered). */
   pendingCount: number;
-  /** Pieces physically received into stock at some point (tagCount − pendingCount). */
+  /** Pieces physically received into stock at some point (tagCount − pendingCount − retiredCount). */
   receivedCount: number;
+  /** Codes retired before they became pieces: their plate was cancelled or printed again with fresh codes. */
+  retiredCount: number;
   /** Company stock (shared/tagMetrics.ts `house`): in stock, no rep, not retired, unsold. */
   houseCount: number;
   /** House stock that can go into a kit now (`handOut`: also not set up for a customer). */

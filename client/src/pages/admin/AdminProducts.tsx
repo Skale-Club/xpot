@@ -4,6 +4,7 @@
 // business runs on: what the shop pays us, minus what the unit cost to make.
 
 import { useState } from "react";
+import { useUrlFilters } from "@/hooks/use-url-filters";
 import { Archive, ArchiveRestore, Layers, Package, Pencil, Plus, Trash2 } from "lucide-react";
 import { unitMarginCents } from "#shared/pricing.js";
 import { centsToInput, inputToCents } from "@/pages/xpot/utils";
@@ -96,9 +97,12 @@ export function AdminProducts() {
   const [creating, setCreating] = useState(false);
   const [tiersFor, setTiersFor] = useState<ProductWithTiers | null>(null);
   const [archiving, setArchiving] = useState<ProductWithTiers | null>(null);
-  const [search, setSearch] = useState("");
+  const filters = useUrlFilters({ q: "", view: "active" });
+  const search = filters.values.q;
+  const setSearch = (q: string) => filters.set({ q });
   // Archived products sit in their own tab, where they can be brought back.
-  const [chosenView, setView] = useState<"active" | "archived">("active");
+  const chosenView = filters.values.view === "archived" ? "archived" : "active";
+  const setView = (view: "active" | "archived") => filters.set({ view });
 
   const all = query.data ?? [];
   const archivedCount = all.filter((p) => !p.isActive).length;

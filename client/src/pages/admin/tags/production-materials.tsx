@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useMutation } from "@tanstack/react-query";
-import { ExternalLink, Plus, ShoppingBasket, Trash2 } from "lucide-react";
+import { Plus, ShoppingBasket, Trash2 } from "lucide-react";
 import { PRINT_MATERIALS_MAX, PRINT_MATERIAL_KINDS, type PrintMaterial, type PrintModelDetail } from "@shared/printProduction";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -16,7 +16,12 @@ import { errorMessage, invalidateAdminTags, sendJson } from "./api";
 // platform writes the list on the model page; a partner reads it as "What you need" before ordering (the board's
 // Generate steps and the Print dialog show it whenever the model has any).
 
-/** "What you need": the model's materials, one line each with its supplier and buy link. Nothing when it has none. */
+/** A filament's colour, from its code in the text; grey when the text has none. */
+function colourOf(text: string): string {
+  return /#[0-9a-f]{6}/i.exec(text)?.[0].toLowerCase() ?? "#888888";
+}
+
+/** "What you need": the model's materials, plainly: no brand, supplier or colour code. Nothing when it has none. */
 export function MaterialsNeeded({ materials, filaments = [], assembly = [] }: {
   materials: readonly PrintMaterial[] | null | undefined;
   /** The filament of the version ("White PLA"), when the materials list does not name it. */
@@ -26,9 +31,11 @@ export function MaterialsNeeded({ materials, filaments = [], assembly = [] }: {
 }) {
   const m = useT(partnerMaterialsMessages);
   const t = useT(productionMessages);
-  const named = (materials ?? []).map((material) => `${material.name} ${material.spec ?? ""}`.toLowerCase());
-  const extraFilaments = Array.from(new Set(filaments)).filter((colour) => !named.some((text) => text.includes(colour.toLowerCase())));
-  if (!materials?.length && !extraFilaments.length && !assembly.length) return null;
+  // Filament is said by its colour alone: which brand and which code are the platform's business, kept in the editor below.
+  const rows = (materials ?? []).filter((material) => material.kind !== "filament");
+  const filamentTexts = [...(materials ?? []).filter((material) => material.kind === "filament").map((material) => `${material.name} ${material.spec ?? ""}`), ...filaments];
+  const colours = Array.from(new Set(filamentTexts.map(colourOf)));
+  if (!rows.length && !colours.length && !assembly.length) return null;
   return (
     <section className="space-y-2 rounded-xl border border-amber-300/20 bg-amber-400/[0.05] p-3.5" aria-label={m("needTitle")} data-testid="production-materials-needed">
       <div>
@@ -39,37 +46,21 @@ export function MaterialsNeeded({ materials, filaments = [], assembly = [] }: {
         <p className="mt-0.5 text-xs text-white/50">{m("needIntro")}</p>
       </div>
       <ul className="divide-y divide-white/[0.06]">
-        {(materials ?? []).map((material, index) => (
-          <li key={index} className="flex flex-wrap items-start justify-between gap-x-3 gap-y-1 py-2 first:pt-0 last:pb-0" data-testid="production-material">
-            <div className="min-w-0">
-              <p className="text-sm font-medium text-white">
-                {material.name}
-                {material.spec ? <span className="font-normal text-white/60"> · {material.spec}</span> : null}
-              </p>
-              <p className="text-xs text-white/45">
-                {/* The kind says what the line is; when the name already says it, it says nothing new. */}
-                {material.name.toLowerCase().includes(m(`kind_${material.kind}` as "kind_other").toLowerCase()) ? null : m(`kind_${material.kind}` as "kind_other")}
-                {material.supplier ? `${material.name.toLowerCase().includes(m(`kind_${material.kind}` as "kind_other").toLowerCase()) ? "" : " · "}${m("needSupplier", { supplier: material.supplier })}` : ""}
-              </p>
-              {material.note ? <p className="mt-0.5 text-xs text-white/55">{material.note}</p> : null}
-            </div>
-            {material.url ? (
-              <a
-                href={material.url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex min-h-8 shrink-0 items-center gap-1 text-xs font-medium text-violet-300 underline underline-offset-2 hover:text-violet-200"
-              >
-                {m("needBuy")}
-                <ExternalLink className="h-3 w-3" aria-hidden="true" />
-              </a>
-            ) : null}
+        {rows.map((material, index) => (
+          <li key={index} className="py-2 first:pt-0 last:pb-0" data-testid="production-material">
+            <p className="text-sm font-medium text-white">
+              {material.name}
+              {material.spec ? <span className="font-normal text-white/60"> · {material.spec}</span> : null}
+            </p>
+            {material.note ? <p className="mt-0.5 text-xs text-white/55">{material.note}</p> : null}
           </li>
         ))}
-        {extraFilaments.length ? (
-          <li className="py-2 last:pb-0">
+        {colours.length ? (
+          <li className="flex items-center gap-2 py-2 first:pt-0 last:pb-0" data-testid="production-material-filament">
             <p className="text-sm font-medium text-white">{t("needFilament")}</p>
-            <p className="text-xs text-white/55">{extraFilaments.join(" · ")}</p>
+            <span className="flex items-center gap-1.5">
+              {colours.map((colour) => <span key={colour} className="h-4 w-4 rounded-full border border-white/30" style={{ background: colour }} aria-hidden="true" />)}
+            </span>
           </li>
         ) : null}
         {assembly.length ? (

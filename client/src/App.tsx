@@ -2,9 +2,13 @@ import { lazy, Suspense, useEffect, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Redirect, Route, Router, Switch, useLocation } from "wouter";
 import { useXpotQueries } from "./pages/xpot/hooks/useXpotQueries";
-import { useVisits } from "./pages/xpot/hooks/useVisits";
 import { GeoProvider } from "./pages/xpot/hooks/GeoProvider";
-import { Loader2 } from "@/components/ui/loader";
+import { AppLoader } from "@/components/ui/spinner";
+import { NavigationPreload } from "@/components/xpot/NavigationPreload";
+import { RouteLoader } from "@/components/xpot/RouteLoader";
+import { screens } from "@/lib/screens";
+import { AdminApp } from "./pages/admin/AdminApp";
+import { TagsApp } from "./pages/tags/TagsApp";
 import { ModuleSwitch, rememberModule, useXpotModules } from "@/components/ModuleSwitch";
 import { useT } from "@/i18n";
 import { commonMessages } from "@/i18n/messages/common";
@@ -23,30 +27,15 @@ import type { XpotMeResponse } from "./pages/xpot/types";
 import { PersistentRouteProgress } from "@/components/xpot/PersistentRouteProgress";
 import { WorkspaceBoundary } from "@/components/xpot/WorkspaceBoundary";
 
-const XpotLeads = lazy(() => import("./pages/xpot/XpotLeads").then((module) => ({ default: module.XpotLeads })));
-const XpotSales = lazy(() => import("./pages/xpot/XpotSales").then((module) => ({ default: module.XpotSales })));
-const XpotDashboard = lazy(() => import("./pages/xpot/XpotDashboard").then((module) => ({ default: module.XpotDashboard })));
-const XpotProspecting = lazy(() => import("./pages/xpot/XpotProspecting").then((module) => ({ default: module.XpotProspecting })));
-const XpotTasks = lazy(() => import("./pages/xpot/XpotTasks").then((module) => ({ default: module.XpotTasks })));
-const XpotCheckIn = lazy(() => import("./pages/xpot/XpotCheckIn").then((module) => ({ default: module.XpotCheckIn })));
+const {
+  leads: XpotLeads, sales: XpotSales, dashboard: XpotDashboard,
+  route: XpotProspecting, tasks: XpotTasks, checkIn: XpotCheckIn,
+  settings: XpotSettings, academy: AcademyApp, organizations: OrganizationsPage, organizationPerson: OrganizationPerson,
+} = screens;
 const Login = lazy(() => import("./pages/Login"));
-// The customer panel: a small app of its own, nothing of the team shell (server off switch CUSTOMER_PANEL_ENABLED).
 const MyApp = lazy(() => import("./pages/my/MyApp"));
 const LegalPage = lazy(() => import("./pages/legal/LegalPage").then((module) => ({ default: module.LegalPage })));
-const AdminApp = lazy(() => import("./pages/admin/AdminApp").then((module) => ({ default: module.AdminApp })));
-const XpotSettings = lazy(() => import("./pages/xpot/XpotSettings").then((module) => ({ default: module.XpotSettings })));
-const TagsApp = lazy(() => import("./pages/tags/TagsApp").then((module) => ({ default: module.TagsApp })));
 const XpotLandingPage = lazy(() => import("./pages/xpot/XpotLandingPage").then((module) => ({ default: module.XpotLandingPage })));
-const OrganizationsPage = lazy(() => import("./pages/xpot/OrganizationsPage").then((module) => ({ default: module.OrganizationsPage })));
-const OrganizationPerson = lazy(() => import("./pages/xpot/OrganizationPerson").then((module) => ({ default: module.OrganizationPerson })));
-
-function PageLoader() {
-  return (
-    <div className="flex min-h-screen items-center justify-center bg-[#060912]">
-      <Loader2 className="h-7 w-7 animate-spin text-blue-400" />
-    </div>
-  );
-}
 
 // Screens redesigned for desktop use the full width there; the rest stay in a
 // narrow column until their turn (docs/DESKTOP.md).
@@ -96,7 +85,6 @@ function XpotAppShell() {
   const tNav = useT(navIaMessages);
   const modules = useXpotModules();
   const visitsAllowed = modules.includes("visits");
-  useVisits();
 
   useEffect(() => {
     if (!visitsAllowed) return;
@@ -188,11 +176,7 @@ function RootRoute() {
   });
 
   if (view === "loading") {
-    return (
-      <div className="flex min-h-screen items-center justify-center bg-[#060912]">
-        <Loader2 className="h-7 w-7 animate-spin text-blue-400" />
-      </div>
-    );
+    return <AppLoader />;
   }
 
   if (view === "workspace") return <Redirect to={getXpotHomePath()} />;
@@ -208,8 +192,9 @@ export default function App() {
   }, []);
 
   return (
-    <Suspense fallback={<PageLoader />}>
-      <Router>
+    <Router>
+      <NavigationPreload />
+      <Suspense fallback={<RouteLoader />}>
         <WorkspaceBoundary>
         <Switch>
         <Route path="/" component={RootRoute} />
@@ -241,13 +226,14 @@ export default function App() {
         </Route>
         <Route path="/my/*?" component={MyApp} />
         <Route path="/settings" component={XpotSettings} />
+        <Route path="/academy/*?" component={AcademyApp} />
         <Route path="/tags/*?" component={TagsApp} />
         <Route>{() => <VisitsOrNotFound />}</Route>
         </Switch>
         </WorkspaceBoundary>
-      </Router>
-      {/* The 3D view a piece's small picture opens: one for the whole app, outside every list row it was clicked in. */}
+      </Suspense>
+      {/* The viewer has its own loading boundary and never blocks navigation. */}
       <PieceViewerHost />
-    </Suspense>
+    </Router>
   );
 }

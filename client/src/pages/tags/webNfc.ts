@@ -224,7 +224,9 @@ export async function scanOnce(signal: AbortSignal): Promise<NfcReading> {
 /**
  * Writes one record on the next tap: a URI record for a link, mailto: or tel:
  * (phones open each in the right app), a text/vcard MIME record for a contact
- * card (phones offer to save the contact).
+ * card (phones offer to save the contact). Nothing is read back: the browser
+ * resolves only once the chip holds the record, and a scan right after kept
+ * the radio busy and swallowed the next tap.
  */
 export async function writeContent(value: string, signal: AbortSignal): Promise<void> {
   const Ctor = getCtor();
@@ -270,10 +272,4 @@ export async function lockChip(signal: AbortSignal): Promise<void> {
   } catch (err) {
     throw mapNfcError(err);
   }
-}
-
-/** Reads the next tap (after the write) and returns the URL stored, or null if it holds none. */
-export async function readBack(signal: AbortSignal): Promise<string | null> {
-  const reading = await scanOnce(signal);
-  return reading.kind === "url" ? reading.url : reading.kind === "text" ? reading.text : null;
 }

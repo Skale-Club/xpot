@@ -3,6 +3,7 @@
 // actually uses live here, plus the two integration helpers (`getChatIntegration`,
 // `getIntegrationSettings`) so the GHL sync helpers continue to work.
 
+import { profileNameParts } from "#shared/profileName.js";
 import { and, asc, desc, eq, ilike, inArray, or, sql } from "drizzle-orm";
 import { db } from "./db.js";
 import { expireOverdueVisits } from "./visit-timeout.js";
@@ -412,8 +413,13 @@ export class DatabaseStorage implements IStorage {
         .set({ ...input, updatedAt: new Date() })
         .where(eq(salesReps.id, existing.id))
         .returning();
-      await tx.update(users).set({ isAdmin: isSuperAdmin, updatedAt: new Date() })
-        .where(eq(users.id, input.userId));
+      // Renaming someone in People renames their sign-in record too, or the two drift apart.
+      const parts = input.displayName !== existing.displayName ? profileNameParts(input.displayName, null, null) : null;
+      await tx.update(users).set({
+        isAdmin: isSuperAdmin,
+        ...(parts ? { firstName: parts.firstName, lastName: parts.lastName || null } : {}),
+        updatedAt: new Date(),
+      }).where(eq(users.id, input.userId));
       if (wasSuperAdmin !== isSuperAdmin) {
         await tx.execute(sql`DELETE FROM sessions WHERE sess->>'userId' = ${input.userId}`);
       }

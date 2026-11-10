@@ -108,7 +108,6 @@ export function SalesOverview({ onGoToConsignments, onNewSale }: { onGoToConsign
   // On the 1st the month is one day old: "this month" next to a bigger "last 30 days" figure reads as an error.
   const monthIsNew = new Date().getDate() < 2;
   const monthLabel = monthIsNew ? t("sinceToday", { date: formatShortDate(new Date()) }) : t("soldThisMonth");
-  const nothingYet = s.sales.periodCount === 0 && s.consignment.activeCount === 0 && s.byProduct.length === 0;
 
   const periodPicker = (
     <PeriodSelector
@@ -118,18 +117,6 @@ export function SalesOverview({ onGoToConsignments, onNewSale }: { onGoToConsign
       ariaLabel={t("periodLabel")}
     />
   );
-
-  // Nothing sold and nothing out: one message and the way to start, not a wall of zeros.
-  if (nothingYet) {
-    return (
-      <div className="space-y-4" data-testid="sales-overview-empty">
-        <div className="flex justify-end">{periodPicker}</div>
-        <EmptyState icon={ShoppingBag} title={t("noSalesPeriod")} hint={t("noSalesPeriodHint")}>
-          {onNewSale ? <Button type="button" variant="brand" onClick={onNewSale}>{t("newSale")}</Button> : null}
-        </EmptyState>
-      </div>
-    );
-  }
 
   return (
     <div className="space-y-4 lg:space-y-5">
@@ -149,7 +136,7 @@ export function SalesOverview({ onGoToConsignments, onNewSale }: { onGoToConsign
                 {showProfit ? (days === 1 ? t("keptToday") : t("keptPeriod", { days })) : days === 1 ? t("soldToday") : t("soldPeriod", { days })}
               </div>
               <div className="mt-4 text-[38px] font-bold leading-none tracking-[-0.055em] tabular-nums text-white sm:text-5xl lg:text-[58px]" data-testid="sales-overview-main">
-                {showProfit ? (hasProfit ? formatCents(costed.profitCents) : "—") : formatCents(s.revenue.periodCents)}
+                {showProfit ? (hasProfit ? formatCents(costed.profitCents) : "-") : formatCents(s.revenue.periodCents)}
               </div>
               <div className="mt-2.5 flex flex-wrap items-center gap-2 text-xs text-emerald-50/45">
                 {hasProfit ? (
@@ -159,7 +146,7 @@ export function SalesOverview({ onGoToConsignments, onNewSale }: { onGoToConsign
                     <span data-testid="sales-margin">{t("profitMargin", { percent: costedMargin })}</span>
                   </>
                 ) : showProfit ? (
-                  <span className="max-w-sm" data-testid="sales-no-cost">{t("noCostYet")}</span>
+                  <span className="max-w-sm" data-testid="sales-no-cost">{s.sales.periodCount === 0 ? t("noSalesPeriod") : t("noCostYet")}</span>
                 ) : (
                   <span>{t.plural("salesCount", s.sales.periodCount)} · {t.plural("units", s.sales.unitsSold)}</span>
                 )}
@@ -178,7 +165,7 @@ export function SalesOverview({ onGoToConsignments, onNewSale }: { onGoToConsign
               </div>
               <div className="bg-[#0b2425]/80 px-4 py-3">
                 <div className="text-[9px] font-bold uppercase tracking-[0.17em] text-white/30">{t("keptThisMonth")}</div>
-                <div className="mt-1 text-lg font-bold tabular-nums text-white">{allCosted ? formatCents(s.profit?.monthToDateCents ?? 0) : "—"}</div>
+                <div className="mt-1 text-lg font-bold tabular-nums text-white">{allCosted ? formatCents(s.profit?.monthToDateCents ?? 0) : "-"}</div>
                 <div className="text-[10px] text-white/35">{allCosted ? t("billedAmount", { amount: formatCents(s.revenue.monthToDateCents) }) : t("partialCostShort")}</div>
               </div>
             </div>
@@ -218,7 +205,7 @@ export function SalesOverview({ onGoToConsignments, onNewSale }: { onGoToConsign
             <FinancialMetric label={t("acquisitionCosts")} value={formatCents(s.financial.costCents ?? 0)} accent="cost" />
             <FinancialMetric
               label={allCosted ? t("grossProfitMetric") : t("profitWithCost")}
-              value={allCosted ? formatCents(s.financial.grossProfitCents ?? 0) : hasProfit ? t("profitOfSales", { profit: formatCents(costed.profitCents), sales: formatCents(costed.revenueCents) }) : "—"}
+              value={allCosted ? formatCents(s.financial.grossProfitCents ?? 0) : hasProfit ? t("profitOfSales", { profit: formatCents(costed.profitCents), sales: formatCents(costed.revenueCents) }) : "-"}
               accent="profit"
             />
           </div>
@@ -347,7 +334,9 @@ export function SalesOverview({ onGoToConsignments, onNewSale }: { onGoToConsign
               ))}
             </div>
           ) : (
-            <EmptyState compact dense icon={Boxes} title={t("noSalesPeriod")} hint={t("noSalesPeriodHint")} />
+            <EmptyState compact dense icon={Boxes} title={t("noSalesPeriod")} hint={t("noSalesPeriodHint")}>
+              {onNewSale ? <Button type="button" variant="brand" size="sm" onClick={onNewSale}>{t("newSale")}</Button> : null}
+            </EmptyState>
           )}
         </div>
       </section>

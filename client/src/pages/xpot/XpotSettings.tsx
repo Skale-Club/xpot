@@ -1,17 +1,20 @@
 import { useState, useRef, useEffect } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { Link, useLocation, useSearchParams } from "wouter";
+import { phonePlaceholderFor } from "@shared/phone";
 import {
   Building2,
   Camera,
+  GraduationCap,
   ChevronDown,
   ChevronRight,
-  Eye,
-  EyeOff,
   KeyRound,
   Languages,
   LogOut,
   Save,
+  User,
+  Users,
+  type LucideIcon,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { AppLoader } from "@/components/ui/spinner";
@@ -20,12 +23,13 @@ import { Field, FIELD_CONTROL, Input } from "@/components/xpot/Field";
 import { FormFooter } from "@/components/xpot/FormFooter";
 import { PageHeader } from "@/components/xpot/PageHeader";
 import { Pill } from "@/components/xpot/StatusPill";
+import { navigateGuarded } from "@/hooks/useUnsavedChangesGuard";
+import { describeApiError } from "@/lib/apiErrors";
 import { useAvatarUpload } from "@/components/xpot/useAvatarUpload";
 import { ACCENT_SELECTED, BRAND_GRADIENT, EYEBROW, GLASS_CLASS, SURFACE_MODAL_CLASS } from "@/components/xpot/surface";
 import { CountryFlag } from "@/components/CountryFlag";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import { useViewerAccess } from "@/lib/adminMode";
 import { formatPhone } from "@/lib/format";
 import { LanguageList } from "@/components/LanguagePicker";
 import { LANG_LABELS, useI18n, useT } from "@/i18n";
@@ -36,12 +40,17 @@ import { navIaMessages } from "@/i18n/messages/navIa";
 import { shellMessages } from "@/i18n/messages/shell";
 import { SignOutConfirm } from "@/components/xpot/SignOutConfirm";
 import { addPersonMessages } from "@/i18n/messages/addPerson";
-import { runsATeam } from "@shared/organizations";
+import { organizationsMessages } from "@/i18n/messages/organizations";
 import type { XpotMeResponse } from "./types";
 import { AddPersonForm } from "./components/AddPersonForm";
 import { AppLayout } from "@/components/xpot/AppLayout";
 import { homeForModules, useXpotModules } from "@/components/ModuleSwitch";
-import { InstallAppHeaderButton, InstallAppRow } from "@/components/xpot/InstallApp";
+import { InstallAppHeaderButton } from "@/components/xpot/InstallApp";
+import { useAcademyAvailable } from "@/components/academy/useAcademyAvailable";
+import { academyMessages } from "@/i18n/messages/academy";
+import { SignInMethods } from "@/components/xpot/SignInMethods";
+import { PANEL_ICON, usePanelSwitch } from "@/components/xpot/panelSwitch";
+import { workspacesMessages } from "@/i18n/messages/workspaces";
 
 const COUNTRIES = [
   { code: "BR", dial: "+55", name: "Brazil" },
@@ -63,21 +72,17 @@ const COUNTRIES = [
   { code: "CN", dial: "+86", name: "China" },
 ];
 
-// Settings is the person's own: Profile (photo, names, contact phone; the Tags
-// wholesale code is in My pieces), My company (where they work and their role there; someone
-// selling alone adds the first colleague here), Sign-in (the sign-in phone as
-// text; the password only for an email login) and Language. The panel is not
-// here: "My company" in the account menu is its door. Sign out is the last row
-// of the phone's list, and the avatar menu's on desktop.
-//
-// On a phone it is a list like the phone's own settings (the person's card,
-// Install app, then one row per section showing where it stands), each row
-// opening its own screen. On desktop it is one page, top to bottom.
-const SETTINGS_SECTIONS = ["profile", "organization", "signin", "language"] as const;
+// Settings has one menu, with each item showing only what belongs to it:
+//   My account › Profile (photo, name, contact phone), Sign-in, Language
+//   My company › Company details (its name, the person's role), People (owners only)
+// On desktop the menu sits beside the open item; on a phone it is a list like the
+// phone's own settings, each row opening its own screen. `?tab=` names the item.
+const SETTINGS_SECTIONS = ["profile", "signin", "language", "company", "people"] as const;
 type SettingsSection = (typeof SETTINGS_SECTIONS)[number];
 
-/** `?tab=` of a link; one that names no section (the old "administration", "memberships") opens the list. */
+/** `?tab=` of a link; one that names no section (the old "administration", "memberships") opens the first. */
 function sectionFromParam(value: string | null): SettingsSection | null {
+  if (value === "organization") return "company";
   return SETTINGS_SECTIONS.find((id) => id === value) ?? null;
 }
 
@@ -169,7 +174,7 @@ function CountryPhoneInput({
         type="tel"
         value={local}
         onChange={handleLocalChange}
-        placeholder={active.code === "BR" ? "(11) 99999-9999" : "(555) 000-0000"}
+        placeholder={phonePlaceholderFor(active.dial)}
         className={`${FIELD_CONTROL} rounded-l-none py-2`}
       />
       {open && (
@@ -206,6 +211,81 @@ function Section({ id, title, titled = true, children }: { id?: SettingsSection;
   );
 }
 
+type SettingsCompany = NonNullable<XpotMeResponse["organizations"]>[number];
+
+/** A company's name and the person's role in it. Its owner can rename it; anyone else only reads it. */
+function CompanyDetails({ organization, role }: { organization: SettingsCompany; role?: "admin" | "member" }) {
+  const t = useT(addPersonMessages);
+  const { toast } = useToast();
+  const owner = role === "admin";
+  const [name, setName] = useState(organization.name);
+  const trimmed = name.trim();
+  const dirty = trimmed !== organization.name;
+  const save = useMutation({
+    mutationFn: async () => (await apiRequest("PATCH", `/api/xpot/organizations/${organization.id}`, { name: trimmed })).json(),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["/api/xpot/me"] });
+      void queryClient.invalidateQueries({ queryKey: ["/api/xpot/organizations"] });
+      void queryClient.invalidateQueries({ queryKey: [`/api/xpot/organizations/${organization.id}`] });
+      toast({ title: t("companySaved"), variant: "success" });
+    },
+    onError: (error: Error) => toast({ title: describeApiError(error), variant: "destructive" }),
+  });
+  return (
+    <div className="space-y-4" data-testid="settings-organization">
+      <Field label={t("companyName")}>
+        <Input value={name} onChange={(event) => setName(event.target.value)} readOnly={!owner} disabled={!owner} maxLength={120} data-testid="settings-organization-name" />
+      </Field>
+      <div className="flex items-center justify-between gap-3">
+        <span className="text-sm text-white/55">{t("yourRole")}</span>
+        <Pill tone="slate" data-testid="settings-organization-role">{t(owner ? "roleOwner" : "roleEmployee")}</Pill>
+      </div>
+      {owner ? (
+        <FormFooter dirty={dirty} onCancel={dirty ? () => setName(organization.name) : undefined}>
+          <Button variant="brand" onClick={() => save.mutate()} disabled={!dirty || trimmed.length < 2} loading={save.isPending} data-testid="settings-save-company">
+            <Save />
+            {t("saveCompany")}
+          </Button>
+        </FormFooter>
+      ) : (
+        <p className="text-sm leading-relaxed text-white/50">{t("employeeHint")}</p>
+      )}
+    </div>
+  );
+}
+
+type CompanyMember = { repId: number; displayName: string; phone?: string | null; membershipRole: "admin" | "member"; isActive: boolean; blockedAt?: string | null };
+
+/** Who is in a company, and adding someone. Removing or suspending someone stays on the company's Team page. */
+function CompanyPeople({ organization, viewerRepId }: { organization: SettingsCompany; viewerRepId?: number }) {
+  const t = useT(addPersonMessages);
+  const to = useT(organizationsMessages);
+  const members = useQuery<CompanyMember[]>({ queryKey: [`/api/xpot/organizations/${organization.id}/members`] });
+  const list = members.data ?? [];
+  return (
+    <div className="space-y-4" data-testid="settings-people">
+      <p className="text-sm leading-relaxed text-white/50">{t(organization.personal ? "soloHint" : "ownerHint")}</p>
+      {list.length > 0 && (
+        <ul className="divide-y divide-white/[0.06]" data-testid="settings-people-list">
+          {list.map((member) => (
+            <li key={member.repId} className="flex min-h-14 items-center gap-3 py-2">
+              <span className="min-w-0 flex-1">
+                <span className="block truncate text-sm font-semibold text-white">{member.displayName}{member.repId === viewerRepId ? ` (${t("you")})` : ""}</span>
+                {member.phone ? <span className="block truncate text-xs text-white/45">{formatPhone(member.phone)}</span> : null}
+              </span>
+              <Pill tone="slate">{!member.isActive || member.blockedAt ? to("memberSuspended") : t(member.membershipRole === "admin" ? "roleOwner" : "roleEmployee")}</Pill>
+            </li>
+          ))}
+        </ul>
+      )}
+      {list.length > 1 && (
+        <Button asChild variant="secondary"><Link href={`/organizations/${organization.id}?tab=team`} data-testid="settings-open-team"><Users className="h-4 w-4" />{t("openTeam")}</Link></Button>
+      )}
+      <AddPersonForm organizationId={organization.id} hint={false} />
+    </div>
+  );
+}
+
 export function XpotSettings() {
   const [, setLocation] = useLocation();
   const [params] = useSearchParams();
@@ -215,8 +295,13 @@ export function XpotSettings() {
   const tc = useT(commonMessages);
   const tn = useT(navIaMessages);
   const ts = useT(shellMessages);
+  const ta = useT(academyMessages);
+  const { available: academy } = useAcademyAvailable();
   const tp = useT(addPersonMessages);
-  const access = useViewerAccess();
+  const tw = useT(workspacesMessages);
+  // On a phone the other panels (Production, Admin) are rows here, not buttons on the crowded header.
+  const panelSwitch = usePanelSwitch();
+  const otherPanels = panelSwitch.panels.filter((panel) => panel !== panelSwitch.current);
   const [signingOut, setSigningOut] = useState(false);
   const avatar = useAvatarUpload();
   const [initialized, setInitialized] = useState(false);
@@ -229,35 +314,13 @@ export function XpotSettings() {
 
   const meQuery = useQuery<XpotMeResponse>({ queryKey: ["/api/xpot/me"], retry: false });
   const me = meQuery.data;
-  useEffect(() => {
-    if (meQuery.isLoading) return;
-    if (!isDesktop) {
-      window.scrollTo(0, 0);
-      return;
-    }
-    if (!linkedSection || linkedSection === "profile") return;
-    document.getElementById(`settings-${linkedSection}`)?.scrollIntoView({ block: "start" });
-  }, [linkedSection, meQuery.isLoading, isDesktop]);
 
-  const [displayName, setDisplayName] = useState("");
-  // The name shown to the team is the first and last name, unless it was written differently (it then stays as written).
-  const followName = (first: string, last: string) => {
-    const joined = [first, last].map((part) => part.trim()).filter(Boolean).join(" ");
-    const derived = [firstName, lastName].map((part) => part.trim()).filter(Boolean).join(" ");
-    if (joined && (!displayName.trim() || displayName === derived)) setDisplayName(joined);
-  };
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
   const [phone, setPhone] = useState("");
 
-  const [showPwd, setShowPwd] = useState(false);
-  const [currentPassword, setCurrentPassword] = useState("");
-  const [newPassword, setNewPassword] = useState("");
-  const [confirmPassword, setConfirmPassword] = useState("");
-
   if (me && !initialized) {
     setInitialized(true);
-    setDisplayName(me.rep.displayName);
     setFirstName(me.user.firstName ?? "");
     setLastName(me.user.lastName ?? "");
     setPhone(me.rep.phone ?? "");
@@ -277,30 +340,16 @@ export function XpotSettings() {
     },
   });
 
-  const passwordMutation = useMutation({
-    mutationFn: async (data: { currentPassword: string; newPassword: string }) => {
-      const res = await apiRequest("POST", "/api/xpot/me/change-password", data);
-      return res.json();
-    },
-    onSuccess: () => {
-      toast({ title: t("passwordChanged"), variant: "success" });
-      setCurrentPassword("");
-      setNewPassword("");
-      setConfirmPassword("");
-    },
-    onError: (err: Error) => {
-      toast({ title: t("passwordChangeFailed"), description: err.message, variant: "destructive" });
-    },
-  });
-
   const handleSaveProfile = async () => {
     if (!me) return;
 
     const patch: Record<string, unknown> = {};
-    if (displayName !== me.rep.displayName) patch.displayName = displayName;
     if (phone !== (me.rep.phone ?? "")) patch.phone = phone;
-    if (firstName !== (me.user.firstName ?? "")) patch.firstName = firstName || null;
-    if (lastName !== (me.user.lastName ?? "")) patch.lastName = lastName || null;
+    // Both together: the server writes the name the app shows from these two.
+    if (firstName.trim() !== (me.user.firstName ?? "") || lastName.trim() !== (me.user.lastName ?? "")) {
+      patch.firstName = firstName.trim();
+      patch.lastName = lastName.trim() || null;
+    }
 
     if (Object.keys(patch).length === 0) {
       toast({ title: t("noChanges") });
@@ -310,62 +359,40 @@ export function XpotSettings() {
     profileMutation.mutate(patch);
   };
 
-  const handleChangePassword = async () => {
-    if (!newPassword) {
-      toast({ title: t("passwordRequired"), variant: "destructive" });
-      return;
-    }
-    if (newPassword.length < 8) {
-      toast({ title: t("passwordTooShort"), variant: "destructive" });
-      return;
-    }
-    if (newPassword !== confirmPassword) {
-      toast({ title: t("passwordsMismatch"), variant: "destructive" });
-      return;
-    }
-    passwordMutation.mutate({ currentPassword, newPassword });
-  };
-
   if (meQuery.isLoading) return <AppLoader />;
   // A failed /api/xpot/me must not mount the layout below: its children ask for /me again, which restarts the loader above, forever.
   if (!me) return <SessionGate error={meQuery.error} />;
 
-  const profileDirty = !!me && (
-    displayName !== me.rep.displayName ||
-    phone !== (me.rep.phone ?? "") ||
-    firstName !== (me.user.firstName ?? "") ||
-    lastName !== (me.user.lastName ?? "")
-  );
+  const savedName = { firstName: me.user.firstName ?? "", lastName: me.user.lastName ?? "" };
+  const profileDirty = phone !== (me.rep.phone ?? "") || firstName.trim() !== savedName.firstName || lastName.trim() !== savedName.lastName;
   const resetProfile = () => {
-    if (!me) return;
-    setDisplayName(me.rep.displayName);
-    setFirstName(me.user.firstName ?? "");
-    setLastName(me.user.lastName ?? "");
+    setFirstName(savedName.firstName);
+    setLastName(savedName.lastName);
     setPhone(me.rep.phone ?? "");
-  };
-  const passwordDirty = Boolean(currentPassword || newPassword || confirmPassword);
-  const resetPassword = () => {
-    setCurrentPassword("");
-    setNewPassword("");
-    setConfirmPassword("");
   };
 
   const isSaving = profileMutation.isPending;
 
   const name = me ? me.rep.displayName || [me.user.firstName, me.user.lastName].filter(Boolean).join(" ").trim() : "";
   const initials = name.split(" ").map((n) => n[0]).slice(0, 2).join("").toUpperCase();
-  // The password is only for the legacy email sign-in: an account without an email has none.
-  const hasEmailLogin = Boolean(me?.user.email);
-  const signInPhone = me?.user.phone ? formatPhone(me.user.phone) : null;
-  // My company: the one the person works in (a team before their own one-person workspace), and their role in it.
+  // My company: the ones the person works in (a team before their own one-person workspace), each with their role in it.
   const myOrganizations = (me?.organizations ?? [])
     .map((organization) => ({ organization, membership: me?.organizationMemberships?.find((item) => item.organizationId === organization.id && item.isActive && !item.blockedAt) }))
     .filter((item) => item.membership);
-  const mine = myOrganizations.find((item) => !item.organization.personal) ?? myOrganizations[0];
-  const isOwner = mine?.membership?.role === "admin";
-  // Someone in several teams (an owner of two organizations) sees every one with their role in it, not just the first.
   const teams = myOrganizations.filter((item) => !item.organization.personal);
-  const several = teams.length > 1;
+  const companies = teams.length ? teams : myOrganizations.slice(0, 1);
+  const ownedCompanies = companies.filter((item) => item.membership?.role === "admin");
+  const namedCompanies = companies.length > 1;
+  const menu: Array<{ title: string; items: Array<{ id: SettingsSection; icon: LucideIcon }> }> = [
+    { title: t("groupAccount"), items: [{ id: "profile", icon: User }, { id: "signin", icon: KeyRound }, { id: "language", icon: Languages }] },
+    ...(companies.length ? [{
+      title: tp("sectionTitle"),
+      items: [{ id: "company" as const, icon: Building2 }, ...(ownedCompanies.length ? [{ id: "people" as const, icon: Users }] : [])],
+    }] : []),
+  ];
+  const openable = (id: SettingsSection | null) => !!id && menu.some((group) => group.items.some((item) => item.id === id));
+  // A link to something this person does not have (People, for an employee) opens the menu's start instead.
+  const openSection = openable(linkedSection) ? linkedSection : null;
   // One section's content. On a phone it is the inner screen, whose header
   // already carries the title (`titled` false); on desktop the stacked page.
   const renderSection = (id: SettingsSection, titled: boolean) => {
@@ -404,32 +431,20 @@ export function XpotSettings() {
               </div>
             </div>
             <div className="grid gap-4 sm:grid-cols-2">
-              {/* One name, not three: the name shown to the team follows the first and last name until it is set by hand below. */}
               <Field label={t("firstName")}>
-                <Input value={firstName} onChange={(e) => { setFirstName(e.target.value); followName(e.target.value, lastName); }} placeholder={t("firstNamePlaceholder")} />
+                <Input value={firstName} onChange={(e) => setFirstName(e.target.value)} placeholder={t("firstNamePlaceholder")} />
               </Field>
               <Field label={t("lastName")}>
-                <Input value={lastName} onChange={(e) => { setLastName(e.target.value); followName(firstName, e.target.value); }} placeholder={t("lastNamePlaceholder")} />
+                <Input value={lastName} onChange={(e) => setLastName(e.target.value)} placeholder={t("lastNamePlaceholder")} />
               </Field>
               <div className="sm:col-span-2">
                 <Field label={tn("contactPhone")}>
                   <CountryPhoneInput value={phone} onChange={setPhone} />
                 </Field>
               </div>
-              <details className="group sm:col-span-2" data-testid="settings-more-name">
-                <summary className="flex min-h-10 cursor-pointer list-none items-center gap-1.5 text-sm font-medium text-white/55 hover:text-white [&::-webkit-details-marker]:hidden">
-                  {tn("moreProfile")}
-                  <ChevronDown className="h-4 w-4 transition-transform group-open:rotate-180" aria-hidden="true" />
-                </summary>
-                <div className="pt-2">
-                  <Field label={t("displayName")}>
-                    <Input value={displayName} onChange={(e) => setDisplayName(e.target.value)} placeholder={t("displayNamePlaceholder")} />
-                  </Field>
-                </div>
-              </details>
             </div>
             <FormFooter dirty={profileDirty} onCancel={profileDirty ? resetProfile : undefined}>
-              <Button variant="brand" onClick={handleSaveProfile} disabled={!profileDirty || !displayName.trim()} loading={isSaving}>
+              <Button variant="brand" onClick={handleSaveProfile} disabled={!profileDirty || !firstName.trim()} loading={isSaving}>
                 <Save />
                 {t("saveProfile")}
               </Button>
@@ -437,94 +452,34 @@ export function XpotSettings() {
           </Section>
         );
 
-      case "organization":
-        if (!mine) return null;
+      case "company":
         return (
-          <Section key={id} id={id} title={tp("sectionTitle")} titled={titled}>
-            {(several ? teams : [mine]).map(({ organization, membership }) => (
-              <div key={organization.id} className="flex flex-wrap items-center gap-3" data-testid="settings-organization">
-                <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white/[0.06] text-white/70"><Building2 className="h-5 w-5" aria-hidden="true" /></span>
-                <div className="min-w-[9rem] flex-1">
-                  <p className="truncate text-sm font-semibold text-white" data-testid="settings-organization-name">{organization.name}</p>
-                  <p className="text-xs text-white/45">{tp("yourRole")}</p>
-                </div>
-                <Pill tone="slate" data-testid="settings-organization-role">{tp(membership?.role === "admin" ? "roleOwner" : "roleEmployee")}</Pill>
-                {several && membership?.role === "admin" ? (
-                  <Button asChild variant="secondary" size="sm"><Link href={`/organizations/${organization.id}?tab=team`} data-testid="settings-open-team">{tp("openTeam")}</Link></Button>
-                ) : null}
-              </div>
+          <div key={id} className="space-y-6">
+            {companies.map(({ organization, membership }) => (
+              <Section key={organization.id} id={id} title={namedCompanies ? organization.name : tp("companyDetails")} titled={titled || namedCompanies}>
+                <CompanyDetails key={organization.id} organization={organization} role={membership?.role} />
+              </Section>
             ))}
-            {!several && <p className="text-sm leading-relaxed text-white/50">{tp(isOwner ? (mine.organization.personal ? "soloHint" : "ownerHint") : "employeeHint")}</p>}
-            {/* Someone selling alone adds the first colleague here; a team is managed in Team. */}
-            {!several && isOwner && !runsATeam(me?.organizations) && <AddPersonForm organizationId={mine.organization.id} hint={false} />}
-            {!several && isOwner && runsATeam(me?.organizations) && (
-              <Button asChild variant="secondary"><Link href={`/organizations/${mine.organization.id}?tab=team`} data-testid="settings-open-team"><Building2 className="h-4 w-4" />{tp("openTeam")}</Link></Button>
-            )}
-          </Section>
+          </div>
+        );
+
+      case "people":
+        return (
+          <div key={id} className="space-y-6">
+            {ownedCompanies.map(({ organization }) => (
+              <Section key={organization.id} id={id} title={namedCompanies ? organization.name : tp("people")} titled={titled || namedCompanies}>
+                <CompanyPeople organization={organization} viewerRepId={me?.rep.id} />
+              </Section>
+            ))}
+          </div>
         );
 
       case "signin":
         return (
           <div key={id} className="space-y-8">
             <Section id={id} title={tn("tabSignIn")} titled={titled}>
-              <div>
-                <p className={EYEBROW}>{tn("signInPhone")}</p>
-                <p className="mt-1.5 text-base font-semibold text-white" data-testid="settings-sign-in-phone">{signInPhone ?? tn("signInPhoneNone")}</p>
-                <p className="mt-1 text-xs text-white/45">
-                  {access.profile === "platform" ? <Link href="/admin/reps" className="underline underline-offset-2">{tn("signInPhoneAdminHint")}</Link> : tn("signInPhoneHint")}
-                </p>
-              </div>
-              {hasEmailLogin && (
-                <Field label={tn("signInEmail")}>
-                  <Input value={me?.user.email ?? ""} readOnly disabled />
-                </Field>
-              )}
-              {isDesktop && <InstallAppRow />}
+              <SignInMethods />
             </Section>
-
-            {hasEmailLogin && (
-              <Section title={tn("password")}>
-                <p className="text-sm text-white/45">{tn("passwordHint")}</p>
-                <Field label={t("currentPassword")}>
-                  <div className="relative">
-                    <Input
-                      type={showPwd ? "text" : "password"}
-                      value={currentPassword}
-                      onChange={(e) => setCurrentPassword(e.target.value)}
-                      placeholder={t("currentPasswordPlaceholder")}
-                      className="pr-12"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setShowPwd(!showPwd)}
-                      className="absolute right-1 top-1/2 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-lg text-white/30 hover:text-white/60"
-                      aria-label={showPwd ? t("hidePassword") : t("showPassword")}
-                    >
-                      {showPwd ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                    </button>
-                  </div>
-                </Field>
-                <Field label={t("newPassword")}>
-                  <Input type="password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} placeholder={t("newPasswordPlaceholder")} />
-                </Field>
-                <Field
-                  label={t("confirmPassword")}
-                  error={newPassword && confirmPassword && newPassword !== confirmPassword ? t("passwordsMismatch") : undefined}
-                >
-                  <Input type="password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} placeholder={t("confirmPasswordPlaceholder")} />
-                </Field>
-                <FormFooter dirty={passwordDirty} onCancel={passwordDirty ? resetPassword : undefined}>
-                  <Button
-                    variant="brand"
-                    onClick={handleChangePassword}
-                    disabled={!currentPassword || !newPassword || newPassword !== confirmPassword}
-                    loading={passwordMutation.isPending}
-                  >
-                    {t("changePassword")}
-                  </Button>
-                </FormFooter>
-              </Section>
-            )}
           </div>
         );
 
@@ -540,44 +495,69 @@ export function XpotSettings() {
 
   const sectionTitle: Record<SettingsSection, string> = {
     profile: t("sectionProfile"),
-    organization: tp("sectionTitle"),
     signin: tn("tabSignIn"),
     language: tc("language"),
+    company: tp("companyDetails"),
+    people: tp("people"),
   };
 
-  // Desktop: the whole page, top to bottom.
+  // Desktop: the menu beside the open item.
   if (isDesktop) {
+    const open = openSection ?? "profile";
     return (
-      <AppLayout title={t("title")} size="wide">
-        <div className="mx-auto w-full max-w-2xl space-y-8">
-          {SETTINGS_SECTIONS.map((id) => renderSection(id, true))}
+      <AppLayout title={t("title")} size="full" desktopColumnClassName="lg:px-0 lg:pb-12 lg:pt-6" topBarActions={<InstallAppHeaderButton />}>
+        <div className="grid w-full grid-cols-[15rem_minmax(0,1fr)] items-start gap-8">
+          <nav aria-label={t("title")} className="sticky top-24 space-y-6 px-3" data-testid="settings-menu">
+
+            {menu.map((group) => (
+              <div key={group.title}>
+                <p className={`${EYEBROW} mb-2 px-3`}>{group.title}</p>
+                <div className="space-y-1">
+                  {group.items.map(({ id, icon: Icon }) => (
+                    <button
+                      key={id}
+                      type="button"
+                      onClick={() => navigateGuarded(`/settings?tab=${id}`, setLocation)}
+                      aria-current={id === open ? "page" : undefined}
+                      className={`flex min-h-10 w-full items-center gap-3 rounded-xl px-3 py-2 text-left text-sm font-medium transition-colors ${id === open ? `${ACCENT_SELECTED.account.row} text-white` : "text-white/55 hover:bg-white/[0.05] hover:text-white"}`}
+                      data-testid={`settings-open-${id}`}
+                    >
+                      <Icon className="h-4 w-4 shrink-0" aria-hidden="true" />
+                      <span className="truncate">{sectionTitle[id]}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </nav>
+          <div className="min-w-0 pr-8">{renderSection(open, true)}</div>
         </div>
       </AppLayout>
     );
   }
 
   // Phone, inside a section: its own screen; Back returns to the list.
-  if (linkedSection) {
+  if (openSection) {
     return (
-      <AppLayout title={sectionTitle[linkedSection]} mobileMaxWidth="max-w-lg" mobileColumnClassName="pb-20 pt-6">
+      <AppLayout title={sectionTitle[openSection]} mobileMaxWidth="max-w-lg" mobileColumnClassName="pb-20 pt-6">
         <PageHeader
           onBack={() => setLocation("/settings")}
           backLabel={tc("back")}
           eyebrow={t("title")}
-          title={sectionTitle[linkedSection]}
+          title={sectionTitle[openSection]}
           className="mb-6"
         />
-        {renderSection(linkedSection, false)}
+        {renderSection(openSection, false)}
       </AppLayout>
     );
   }
 
   // Phone: the list, like a phone's own settings. Each row says where it stands.
-  const rows: Array<{ id: SettingsSection; icon: typeof Languages; value?: string }> = [
-    ...(mine ? [{ id: "organization" as const, icon: Building2, value: several ? tp.plural("companiesCount", teams.length) : mine.organization.name }] : []),
-    { id: "signin", icon: KeyRound, value: signInPhone ?? undefined },
-    { id: "language", icon: Languages, value: LANG_LABELS[lang] },
-  ];
+  const rowValue: Partial<Record<SettingsSection, string>> = {
+    signin: me.user.phone ? formatPhone(me.user.phone) : me.user.email ?? undefined,
+    language: LANG_LABELS[lang],
+    company: namedCompanies ? tp.plural("companiesCount", companies.length) : companies[0]?.organization.name,
+  };
 
   return (
     <AppLayout title={t("title")} mobileMaxWidth="max-w-lg" mobileColumnClassName="pb-20 pt-6">
@@ -610,24 +590,72 @@ export function XpotSettings() {
           <ChevronRight className="h-5 w-5 shrink-0 text-white/35" />
         </button>
 
-        <nav aria-label={t("title")} className={`divide-y divide-white/[0.06] overflow-hidden rounded-2xl ${GLASS_CLASS}`}>
-          {rows.map(({ id, icon: Icon, value }) => (
+        {menu.map((group) => (
+          <div key={group.title}>
+            <p className={`${EYEBROW} mb-2 px-1`}>{group.title}</p>
+            <nav aria-label={group.title} className={`divide-y divide-white/[0.06] overflow-hidden rounded-2xl ${GLASS_CLASS}`}>
+              {group.items.filter(({ id }) => id !== "profile").map(({ id, icon: Icon }) => (
+                <button
+                  key={id}
+                  type="button"
+                  onClick={() => setLocation(`/settings?tab=${id}`)}
+                  className="flex min-h-14 w-full items-center gap-3 px-4 py-3 text-left transition-colors active:bg-white/[0.06]"
+                  data-testid={`settings-open-${id}`}
+                >
+                  <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-white/[0.06] text-white/70">
+                    <Icon className="h-4 w-4" />
+                  </span>
+                  <span className="min-w-0 flex-1 truncate text-[15px] font-medium text-white">{sectionTitle[id]}</span>
+                  {rowValue[id] && <span className="max-w-[45%] shrink-0 truncate text-sm text-white/45">{rowValue[id]}</span>}
+                  <ChevronRight className="h-4 w-4 shrink-0 text-white/30" />
+                </button>
+              ))}
+            </nav>
+          </div>
+        ))}
+
+        {academy && (
+          <nav aria-label={ta("title")} className={`overflow-hidden rounded-2xl ${GLASS_CLASS}`}>
             <button
-              key={id}
               type="button"
-              onClick={() => setLocation(`/settings?tab=${id}`)}
+              onClick={() => setLocation("/academy")}
               className="flex min-h-14 w-full items-center gap-3 px-4 py-3 text-left transition-colors active:bg-white/[0.06]"
-              data-testid={`settings-open-${id}`}
+              data-testid="settings-open-academy"
             >
               <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-white/[0.06] text-white/70">
-                <Icon className="h-4 w-4" />
+                <GraduationCap className="h-4 w-4" />
               </span>
-              <span className="min-w-0 flex-1 truncate text-[15px] font-medium text-white">{sectionTitle[id]}</span>
-              {value && <span className="max-w-[45%] shrink-0 truncate text-sm text-white/45">{value}</span>}
+              <span className="min-w-0 flex-1 truncate text-[15px] font-medium text-white">{ta("title")}</span>
               <ChevronRight className="h-4 w-4 shrink-0 text-white/30" />
             </button>
-          ))}
-        </nav>
+          </nav>
+        )}
+
+        {otherPanels.length > 0 && (
+          <div>
+            <p className={`${EYEBROW} mb-2 px-1`}>{tw("panelsHeading")}</p>
+            <nav aria-label={tw("switchPanel")} className={`divide-y divide-white/[0.06] overflow-hidden rounded-2xl ${GLASS_CLASS}`} data-testid="settings-panels">
+              {otherPanels.map((panel) => {
+                const Icon = PANEL_ICON[panel];
+                return (
+                  <button
+                    key={panel}
+                    type="button"
+                    onClick={() => panelSwitch.go(panel)}
+                    className="flex min-h-14 w-full items-center gap-3 px-4 py-3 text-left transition-colors active:bg-white/[0.06]"
+                    data-testid={`settings-panel-${panel}`}
+                  >
+                    <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-white/[0.06] text-white/70">
+                      <Icon className="h-4 w-4" />
+                    </span>
+                    <span className="min-w-0 flex-1 truncate text-[15px] font-medium text-white">{panelSwitch.label(panel)}</span>
+                    <ChevronRight className="h-4 w-4 shrink-0 text-white/30" />
+                  </button>
+                );
+              })}
+            </nav>
+          </div>
+        )}
 
         <button
           type="button"

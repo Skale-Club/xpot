@@ -18,6 +18,7 @@ import { ADMIN_TAGS_KEY, STALE_MS, errorMessage, formatDateTime, getJson, invali
 import { usePieces } from "./batches-shared";
 import { Loading, LoadError } from "./pieces-shared";
 import { PieceTable } from "./piece-table";
+import { TagModelChips } from "@/components/xpot/TagProductThumbnail";
 import { useTagLabels } from "./labels";
 import { describeGroups, useStockLabel, type StockDestination } from "./take-back-destination";
 import { ListPager, usePagedList } from "@/components/xpot/pagination";
@@ -98,13 +99,13 @@ export function PackingListDialog({ kit, onOpenChange }: { kit: TagKitItem | nul
                 key: "product",
                 label: t("fieldProduct"),
                 cellClassName: "text-white/70",
-                render: (p: TagKitPiece) => [labels.product(p.productType), p.face ? labels.face(p.face) : null].filter(Boolean).join(" · "),
+                render: (p: TagKitPiece) => <span className="inline-flex items-center gap-1.5">{p.productType ? <TagModelChips productType={p.productType} face={p.face} /> : null}{p.face ? labels.face(p.face) : null}</span>,
               },
               {
                 key: "batch",
                 label: tm("colBatch"),
                 cellClassName: "whitespace-nowrap font-mono text-xs text-white/50",
-                render: (p: TagKitPiece) => (p.batchCode ? `${p.batchCode}${p.serialNumber ? ` #${p.serialNumber}` : ""}` : "—"),
+                render: (p: TagKitPiece) => (p.batchCode ? `${p.batchCode}${p.serialNumber ? ` #${p.serialNumber}` : ""}` : "-"),
               },
               { key: "state", label: tm("colStatus"), render: (p: TagKitPiece) => <Pill tone={PIECE_STATE_TONE[p.state]}>{tf(PIECE_STATE_KEY[p.state])}</Pill> },
             ]}

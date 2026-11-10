@@ -20,6 +20,12 @@ const en = {
 
   // My organization (Settings)
   sectionTitle: "My company",
+  companyDetails: "Company details",
+  companyName: "Company name",
+  saveCompany: "Save company",
+  companySaved: "Company saved",
+  people: "People",
+  you: "You",
   organization: "Organization",
   yourRole: "Your role",
   roleOwner: "Owner",
@@ -49,6 +55,12 @@ export const addPersonMessages: Dictionary<typeof en> = {
     addedExisting: "{name} entrou na organização.",
 
     sectionTitle: "Minha empresa",
+    companyDetails: "Dados da empresa",
+    companyName: "Nome da empresa",
+    saveCompany: "Salvar empresa",
+    companySaved: "Empresa salva",
+    people: "Pessoas",
+    you: "Você",
     organization: "Organização",
     yourRole: "Seu papel",
     roleOwner: "Dono",
@@ -75,6 +87,12 @@ export const addPersonMessages: Dictionary<typeof en> = {
     addedExisting: "{name} entró en la organización.",
 
     sectionTitle: "Mi empresa",
+    companyDetails: "Datos de la empresa",
+    companyName: "Nombre de la empresa",
+    saveCompany: "Guardar empresa",
+    companySaved: "Empresa guardada",
+    people: "Personas",
+    you: "Tú",
     organization: "Organización",
     yourRole: "Tu rol",
     roleOwner: "Dueño",

@@ -219,7 +219,7 @@ function EntryGroup({ entries, showScope }: { entries: TagJourneyEntryItem[]; sh
       <p className="break-words font-medium text-white">{journeyTitle(newest.title)}</p>
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-white/40">
         <span>
-          {formatTime(oldest.occurredAt)} – {formatTime(newest.occurredAt)}
+          {formatTime(oldest.occurredAt)} - {formatTime(newest.occurredAt)}
         </span>
         <ActorLabel entry={newest} />
         <span className="ml-auto">

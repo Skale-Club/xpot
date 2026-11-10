@@ -1,19 +1,19 @@
 import { useState } from "react";
 import { useMutation } from "@tanstack/react-query";
-import { AlertTriangle, ChevronRight, Play, Printer, RotateCcw } from "lucide-react";
+import { AlertTriangle, ChevronRight, Printer, RotateCcw } from "lucide-react";
 import { type PrintJobItem, type PrintModelItem, type PrintRequestItem } from "@shared/printProduction";
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/xpot/ConfirmDialog";
 import { ProductionWizard } from "./production-wizard";
 import { EmptyState } from "@/components/xpot/EmptyState";
-import { BOARD_GROUPS, boardGroups, buildState, collapsedPlates, plateActions, productionNeedsAction, qrFailedCodes, redoEffect, showPlateNumber, type BoardGroup, type PlateAction } from "./production-workflow";
+import { BOARD_GROUPS, boardGroups, buildState, collapsedPlates, plateActions, productionNeedsAction, qrFailedCodes, redoEffect, serializedRequests, showPlateNumber, type BoardGroup, type PlateAction } from "./production-workflow";
 import { useToast } from "@/hooks/use-toast";
 import { useT } from "@/i18n";
 import { productionMessages } from "@/i18n/messages/production";
 import { errorMessage, formatDate, invalidateAdminTags, sendJson } from "./api";
 import { Loading, LoadError } from "./pieces-shared";
 import { Pill } from "@/components/xpot/StatusPill";
-import { DownloadFileButton, JobStatusPill, PRODUCTION_BASE, plateDownloads, useBuildSentence, usePlateMoves, usePrintComputers, usePrintModels, usePrintRequests, useProductionAccess, type JobFilter } from "./production-shared";
+import { DownloadFileButton, JobStatusPill, PRODUCTION_BASE, plateDownloads, useBuildSentence, usePrintComputers, usePrintModels, usePrintRequests, useProductionAccess, type JobFilter } from "./production-shared";
 import { ProductionIdentity } from "./production-identity";
 import { PrintedDialog } from "./production-printed-dialog";
 
@@ -58,22 +58,22 @@ export function RedoDialog({ job, onClose, onDone }: { job: PrintJobItem | null;
 }
 
 /** Whose request and when, plus what it asked for: "8 pieces · 2 print jobs". */
-function RequestHeader({ request, models, showOrganization, showIdentity, go }: { request: PrintRequestItem; models: Map<string, PrintModelItem>; showOrganization: boolean; showIdentity: boolean; go: Go }) {
+function RequestHeader({ request, models, showOrganization, showIdentity, compact = false, go }: { request: PrintRequestItem; models: Map<string, PrintModelItem>; showOrganization: boolean; showIdentity: boolean; /** The queue: no date and no note on the card (the note stays on the plate's page and in the name's tooltip). */ compact?: boolean; go: Go }) {
   const t = useT(productionMessages);
   const jobs = new Set(request.plates.map((plate) => plate.plateNumber)).size;
   return (
     <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1.5 border-b border-white/[0.06] px-3 py-2.5">
       {showIdentity ? (
-        <button type="button" className="min-w-0 text-left text-sm font-semibold text-white hover:underline" onClick={() => go(`${PRODUCTION_BASE}/models/${request.modelSlug}`)}>
-          <ProductionIdentity model={models.get(request.modelId) ?? { title: request.modelTitle }} />
+        <button type="button" title={compact && request.notes ? t("noteLine", { note: request.notes }) : undefined} className="min-w-0 text-left text-sm font-semibold text-white hover:underline" onClick={() => go(`${PRODUCTION_BASE}/models/${request.modelSlug}`)}>
+          <ProductionIdentity model={models.get(request.modelId) ?? { title: request.modelTitle }} compact={compact} />
         </button>
       ) : <span />}
       <span className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-white/45">
         {showOrganization ? <Pill tone="slate">{request.organizationName}</Pill> : null}
         {jobs > 1 ? <span>{[t.plural("pieceCount", request.quantity), t.plural("printJobCount", jobs)].join(" · ")}</span> : null}
-        {new Date(request.createdAt).toDateString() === new Date().toDateString() ? null : <span>{formatDate(request.createdAt)}</span>}
+        {compact || new Date(request.createdAt).toDateString() === new Date().toDateString() ? null : <span>{formatDate(request.createdAt)}</span>}
       </span>
-      {request.notes ? <p className="w-full truncate text-xs text-white/50">{t("noteLine", { note: request.notes })}</p> : null}
+      {request.notes && !compact ? <p className="w-full truncate text-xs text-white/50">{t("noteLine", { note: request.notes })}</p> : null}
     </div>
   );
 }
@@ -144,8 +144,8 @@ function CollapsedPrints({ plates, waiting, children }: { plates: PrintJobItem[]
 }
 
 /**
- * What the operator prints now: the open and failed print jobs by what each needs, failed first. A group with nothing
- * in it is not shown.
+ * What was sent to print and still waits for an answer: the open and failed print jobs of pieces with a serial, by what
+ * each needs, failed first. A group with nothing in it is not shown.
  */
 export function ToPrintList({ go, emptyHint }: { go: Go; emptyHint: string }) {
   const t = useT(productionMessages);
@@ -156,7 +156,7 @@ export function ToPrintList({ go, emptyHint }: { go: Go; emptyHint: string }) {
   const rows = useRowActions();
   if (error && !data) return <LoadError what={t("queueWhat")} error={error} onRetry={() => void refetch()} />;
   if (isLoading) return <Loading rows={4} />;
-  const groups = boardGroups(data ?? []);
+  const groups = boardGroups(serializedRequests(data ?? []));
   if (!groups.length) return <EmptyState tone="tags" icon={Printer} title={t("nothingToPrint")} hint={emptyHint} />;
   return (
     <div className="space-y-5" data-testid="production-to-print">
@@ -164,18 +164,20 @@ export function ToPrintList({ go, emptyHint }: { go: Go; emptyHint: string }) {
         const group = groups.find((g) => g.group === key);
         if (!group) return null;
         const count = group.requests.reduce((sum, entry) => sum + entry.plates.length, 0);
+        // A group's name tells groups apart, or warns: alone and calm, it says nothing the queue's title does not.
+        const named = groups.length > 1 || key === "attention";
         return (
           <section key={key} className="space-y-2" aria-label={t(GROUP_TITLE[key] as never)} data-testid={`production-group-${key}`}>
-            <h3 className={`flex items-center gap-2 text-xs font-semibold uppercase tracking-wide ${key === "attention" ? "text-red-300" : "text-white/55"}`}>
+            {named ? <h3 className={`flex items-center gap-2 text-xs font-semibold uppercase tracking-wide ${key === "attention" ? "text-red-300" : "text-white/55"}`}>
               {t(GROUP_TITLE[key] as never)}
               <span className="rounded-full bg-white/10 px-1.5 py-0.5 text-[11px] font-medium normal-case tracking-normal text-white/70">{count}</span>
-            </h3>
+            </h3> : null}
             <ul className="space-y-3">
               {group.requests.map(({ request, plates }) => (
                 <li key={`${request.id}-${key}`} className="rounded-2xl border border-white/[0.08] bg-white/[0.03]" data-testid="production-request">
-                  <RequestHeader request={request} models={modelById} showOrganization={organizations.length > 1} showIdentity go={go} />
+                  <RequestHeader request={request} models={modelById} showOrganization={organizations.length > 1} showIdentity compact go={go} />
                   <CollapsedPrints plates={plates} waiting={key === "waiting"}>
-                    {plates.map((plate) => <PlateRow key={plate.id} plate={plate} go={go} showStatus={false} rows={rows} />)}
+                    {plates.map((plate) => <PlateRow key={plate.id} plate={plate} go={go} showStatus={false} queue rows={rows} />)}
                   </CollapsedPrints>
                 </li>
               ))}
@@ -188,15 +190,19 @@ export function ToPrintList({ go, emptyHint }: { go: Go; emptyHint: string }) {
   );
 }
 
-/** The dialogs a row's buttons open (Did it come off well, Print again) and the one-click moves, shared by every row of a list. */
+/** The dialogs a row's buttons open (Did it come off well, Print again), shared by every row of a list. */
 function useRowActions() {
   const [printing, setPrinting] = useState<PrintJobItem | null>(null);
   const [redoing, setRedoing] = useState<PrintJobItem | null>(null);
-  const moves = usePlateMoves();
   const { loaded, computers } = usePrintComputers();
   const sentence = useBuildSentence();
+  // Downloading a plate that is ready puts it on the printer: the row's next step becomes marking it printed.
+  const onPrinter = useMutation({
+    mutationFn: (id: string) => sendJson<PrintJobItem>("POST", `/api/xpot/admin/print-jobs/${id}/transition`, { action: "start" }),
+    onSettled: () => invalidateAdminTags(),
+  });
   return {
-    moves,
+    downloaded: (plate: PrintJobItem) => { if (plate.status === "ready") onPrinter.mutate(plate.id); },
     build: (plate: PrintJobItem) => { const state = buildState(plate, loaded ? computers : null); return state ? { state, text: sentence(plate, state) } : null; },
     markPrinted: setPrinting,
     printAgain: setRedoing,
@@ -209,7 +215,7 @@ function useRowActions() {
   };
 }
 
-function PlateRow({ plate, go, showStatus, rows }: { plate: PrintJobItem; go: Go; showStatus: boolean; rows: ReturnType<typeof useRowActions> }) {
+function PlateRow({ plate, go, showStatus, queue = false, rows }: { plate: PrintJobItem; go: Go; showStatus: boolean; /** On the queue: what to do takes the row's width and needs no arrow. */ queue?: boolean; rows: ReturnType<typeof useRowActions> }) {
   const t = useT(productionMessages);
   const { project, sliced } = plateDownloads(plate);
   const file = sliced ?? project;
@@ -221,17 +227,10 @@ function PlateRow({ plate, go, showStatus, rows }: { plate: PrintJobItem; go: Go
     const primary = index === 0;
     switch (action) {
       case "download":
-        return file ? <DownloadFileButton key={action} id={file.id} label={t("downloadSliced")} quiet={!primary} /> : null;
-      case "start":
-        return (
-          <Button key={action} type="button" variant={primary ? "brand" : "secondary"} accent="tags" size="sm" loading={rows.moves.starting === plate.id} onClick={() => rows.moves.start(plate.id)} data-testid="production-plate-start">
-            <Play />
-            {t("startPrinting")}
-          </Button>
-        );
+        return file ? <DownloadFileButton key={action} id={file.id} label={t("downloadSliced")} quiet={!primary} className={queue && primary ? "flex-1" : undefined} onDownloaded={() => rows.downloaded(plate)} /> : null;
       case "markPrinted":
         return (
-          <Button key={action} type="button" variant="brand" accent="tags" size="sm" onClick={() => rows.markPrinted(plate)} data-testid="production-plate-printed">
+          <Button key={action} type="button" variant={primary ? "brand" : "ghost"} accent="tags" size="sm" className={queue && primary ? "flex-1" : undefined} onClick={() => rows.markPrinted(plate)} data-testid="production-plate-printed">
             <Printer />
             {t("markPrinted")}
           </Button>
@@ -253,7 +252,8 @@ function PlateRow({ plate, go, showStatus, rows }: { plate: PrintJobItem; go: Go
           {showStatus ? <JobStatusPill status={plate.status} /> : null}
           <span className="text-xs text-white/45">{t.plural("pieceCount", plate.quantity)}</span>
           {plate.menuFont ? <span className="text-xs text-white/45">{plate.menuFont}</span> : null}
-          {showStatus && plate.batchCode ? <span className="whitespace-nowrap font-mono text-xs text-white/45">{plate.batchCode}</span> : null}
+          {plate.batchCode ? <span className="whitespace-nowrap font-mono text-xs text-white/45">{plate.batchCode}</span> : null}
+          {plate.serialFrom !== null ? <span className="whitespace-nowrap font-mono text-xs text-white/60" data-testid="production-plate-serials">{plate.serialFrom === plate.serialTo ? t("serialOne", { serial: plate.serialFrom }) : t("serialRange", { from: plate.serialFrom, to: plate.serialTo ?? plate.serialFrom })}</span> : null}
           {plate.pieceCount !== null && plate.status === "printed" ? <span className="text-xs text-white/45">{t("received", { received: plate.receivedCount ?? 0, total: plate.pieceCount })}</span> : null}
         </span>
         {building ? (
@@ -264,9 +264,9 @@ function PlateRow({ plate, go, showStatus, rows }: { plate: PrintJobItem; go: Go
         ) : null}
         {plate.status === "failed" ? <span className="line-clamp-2 block text-xs text-red-200/80" data-testid="production-plate-reason">{plate.errorMessage || t("failedNoReason")}</span> : null}
       </button>
-      <span className="flex flex-wrap items-center gap-1.5">
+      <span className={`flex flex-wrap items-center gap-1.5 ${queue ? "w-full" : ""}`}>
         {actions.map(renderAction)}
-        <ChevronRight className="h-4 w-4 shrink-0 text-white/30" aria-hidden="true" />
+        {queue ? null : <ChevronRight className="h-4 w-4 shrink-0 text-white/30" aria-hidden="true" />}
       </span>
     </li>
   );

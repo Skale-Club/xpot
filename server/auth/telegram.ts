@@ -1,6 +1,6 @@
 export interface SignupLeadTelegram {
   name: string;
-  phone: string;
+  phone: string | null;
   email: string;
   workCity: string;
   workRegion: string;
@@ -19,7 +19,7 @@ export function formatSignupLeadTelegram(lead: SignupLeadTelegram): string {
     "",
     "<b>Contato</b>",
     `Nome: ${escapeTelegramHtml(lead.name)}`,
-    `Telefone: ${escapeTelegramHtml(lead.phone)}`,
+    `Telefone: ${lead.phone ? escapeTelegramHtml(lead.phone) : "entrou com Google, sem telefone"}`,
     `E-mail: ${escapeTelegramHtml(lead.email)}`,
     "",
     "<b>Área de atuação</b>",

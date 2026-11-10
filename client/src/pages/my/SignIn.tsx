@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { ArrowLeft, ArrowRight, Phone } from "lucide-react";
-import { formatPhone } from "@shared/phone";
+import { formatPhone, phonePlaceholderFor } from "@shared/phone";
 import { phoneCountryCodeFromLocales } from "@shared/phoneCountry";
 import { Button } from "@/components/ui/button";
 import { CountryCodePicker } from "@/components/CountryCodePicker";
@@ -10,6 +10,7 @@ import { useT } from "@/i18n";
 import { myPlatesMessages } from "@/i18n/messages/myPlates";
 import { MyApiError, myApi, SIGN_IN_ERROR_KEYS } from "./api";
 import { cleanPlateCode, plateCodeReady } from "./format";
+import { cancelGooglePhoneChallenge, sendGooglePhoneCode, confirmGooglePhoneCode } from '@/lib/googleIdentity';
 
 // Entry to the customer panel: the code printed on one of the plates and a phone, then the code texted to it. The
 // screens never say whether a plate or a phone was recognised until the texted code has been typed.
@@ -35,6 +36,9 @@ export function SignIn({ onSignedIn }: { onSignedIn: () => void | Promise<unknow
   const [resendAt, setResendAt] = useState(0);
   const [now, setNow] = useState(Date.now());
   const otpRef = useRef<HTMLInputElement>(null);
+  const pending = useRef(false);
+  const googleChallenge = useRef(false);
+  useEffect(() => () => cancelGooglePhoneChallenge(), []);
 
   useEffect(() => {
     if (step !== "otp") return;
@@ -49,10 +53,14 @@ export function SignIn({ onSignedIn }: { onSignedIn: () => void | Promise<unknow
   };
 
   const ask = async () => {
+    if (pending.current) return;
+    pending.current = true;
     setBusy(true);
     setError(null);
     try {
       const sent = await myApi.askCode({ code: plateCode, phone: phoneInput, countryCode, lang: t.lang });
+      googleChallenge.current = sent.provider === 'google';
+      if (sent.google) await sendGooglePhoneCode(sent.google,sent.phone);
       setPhone(sent.phone);
       setOtp("");
       setResendAt(Date.now() + RESEND_SECONDS * 1000);
@@ -61,20 +69,24 @@ export function SignIn({ onSignedIn }: { onSignedIn: () => void | Promise<unknow
     } catch (err) {
       fail(err);
     } finally {
+      pending.current = false;
       setBusy(false);
     }
   };
 
   const verify = async (value: string) => {
+    if (pending.current) return;
+    pending.current = true;
     setBusy(true);
     setError(null);
     try {
-      await myApi.verify({ phone, otp: value });
+      await myApi.verify(googleChallenge.current ? {idToken:await confirmGooglePhoneCode(phone,value)} : { phone, otp: value });
       await onSignedIn();
     } catch (err) {
       fail(err);
       setOtp("");
     } finally {
+      pending.current = false;
       setBusy(false);
     }
   };
@@ -94,7 +106,7 @@ export function SignIn({ onSignedIn }: { onSignedIn: () => void | Promise<unknow
         className="space-y-4"
         data-testid="my-otp"
       >
-        <button type="button" onClick={() => { setStep("details"); setError(null); }} className="flex min-h-10 items-center gap-2 text-sm text-white/60 hover:text-white">
+        <button type="button" disabled={busy} onClick={() => { cancelGooglePhoneChallenge(); setStep("details"); setError(null); }} className="flex min-h-10 items-center gap-2 text-sm text-white/60 hover:text-white">
           <ArrowLeft className="h-4 w-4" />
           {t("changeDetails")}
         </button>
@@ -167,7 +179,7 @@ export function SignIn({ onSignedIn }: { onSignedIn: () => void | Promise<unknow
               type="tel"
               inputMode="tel"
               autoComplete="tel-national"
-              placeholder={t("phonePlaceholder")}
+              placeholder={phonePlaceholderFor(countryCode)}
               className={`${FIELD} pl-10`}
               data-testid="my-input-phone"
             />

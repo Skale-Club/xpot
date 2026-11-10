@@ -103,10 +103,10 @@ function ResellerCard({ rep }: { rep: Reseller }) {
 }
 
 /**
- * Distribution › Hand out: pieces from house stock to a reseller, step by step. (1) the reseller, with their cost rule
- * and whether they can receive; (2) consignment or a purchase, defaulting to the rule; (3) the exact pieces, scanned,
- * typed or "next N of a batch", each checked by the server's dry run as the list builds; (4) confirm: the kit is
- * recorded and its packing list opens. `?batch=<id>` (Batch detail › Hand out) starts on that batch.
+ * Distribution › Without an order: pieces from house stock to a person, step by step. (1) who, and whether they can
+ * receive; (2) the exact pieces, scanned, typed or "next N of a batch", each checked by the server's dry run as the list
+ * builds; (3) confirm: payment follows their cost rule and only opens when a price is needed or someone changes it; the
+ * kit is recorded and its packing list opens. `?batch=<id>` (Batch detail › Hand out) starts on that batch.
  */
 export function HandOutFlow() {
   const { toast } = useToast();
@@ -120,6 +120,7 @@ export function HandOutFlow() {
   const [repId, setRepId] = useState<number | null>(null);
   const [ownershipChoice, setOwnershipChoice] = useState<KitOwnership | null>(null);
   const [unitCost, setUnitCost] = useState("");
+  const [paymentOpen, setPaymentOpen] = useState(false);
   const [note, setNote] = useState("");
   const priceRef = useRef<HTMLInputElement>(null);
   const [mode, setMode] = useState<PieceMode>(url.values.batch ? "batch" : "scan");
@@ -133,9 +134,10 @@ export function HandOutFlow() {
   const rep = reps.find((r) => r.id === repId) ?? null;
   const policy = rep?.costPolicy ?? "acquisition";
   // A new reseller resets the choice to their rule.
-  useEffect(() => setOwnershipChoice(null), [repId]);
+  useEffect(() => { setOwnershipChoice(null); setPaymentOpen(false); }, [repId]);
   const ownership: KitOwnership = ownershipChoice ?? kitOwnership(policy);
   const costRequired = kitCostRequired(policy, ownership);
+  const showPayment = paymentOpen || costRequired;
   // A price typed for a purchase is not kept when the choice goes back to "they pay when they sell".
   const cost = parseKitUnitCost(costRequired ? unitCost : "", costRequired);
   const blockers = rep ? receiveBlockers(rep).filter((b) => b !== "tags_off") : [];
@@ -216,52 +218,7 @@ export function HandOutFlow() {
         {rep ? <ResellerCard rep={rep} /> : null}
       </Step>
 
-      <Step n={2} title={t("stepOwnership")} done={!!rep && cost.ok} disabled={!rep} testId="handout-step-ownership">
-        <div className="grid gap-2 sm:grid-cols-2" role="radiogroup" aria-label={t("stepOwnership")}>
-          {(["company", "rep"] as const).map((value) => (
-            <div
-              key={value}
-              className={`rounded-xl border p-3 transition-colors ${ownership === value ? "border-violet-400/40 bg-violet-500/[0.1]" : "border-white/10 hover:bg-white/[0.03]"}`}
-            >
-            <label className="block cursor-pointer">
-              <span className="flex items-center gap-2 text-sm font-semibold text-white">
-                <input type="radio" name="ownership" value={value} checked={ownership === value} onChange={() => setOwnershipChoice(value)} className="h-4 w-4 accent-violet-500" />
-                {value === "company" ? <Building2 className="h-4 w-4 text-white/50" /> : <ShoppingBag className="h-4 w-4 text-white/50" />}
-                {value === "company" ? t("ownershipCompany") : t("ownershipRep")}
-                {value === kitOwnership(policy) ? <span className="text-xs font-normal text-white/40">{t("ownershipDefault", { name: repName })}</span> : null}
-              </span>
-              <span className="mt-1 block text-xs text-white/45">
-                {value === "company" ? (kitCostRequired(policy, "company") ? t("ownershipCompanyNeedsPrice", { name: repName }) : t("ownershipCompanyHint")) : t("ownershipRepHint", { name: repName })}
-              </span>
-            </label>
-            {/* The price belongs to the option it is for: it opens inside the one chosen. */}
-            {ownership === value && costRequired ? (
-          <Field
-            className="mt-3"
-            label={`${t("pricePerPiece", { name: repName })} (${KIT_COST_CURRENCY})`}
-            error={!cost.ok && cost.reason === "invalid" ? tb("unitCostInvalid") : needPrice ? t("costMissing") : undefined}
-          >
-            <Input
-              ref={priceRef}
-              type="number"
-              min="0"
-              step="0.01"
-              inputMode="decimal"
-              value={unitCost}
-              onChange={(e) => setUnitCost(e.target.value)}
-              placeholder="0.00"
-              required
-              className="tabular-nums"
-              data-testid="input-kit-unit-cost"
-            />
-          </Field>
-            ) : null}
-            </div>
-          ))}
-        </div>
-      </Step>
-
-      <Step n={3} title={t("stepPieces")} done={okCodes.length > 0} disabled={!rep} testId="handout-step-pieces">
+      <Step n={2} title={t("stepPieces")} done={okCodes.length > 0} disabled={!rep} testId="handout-step-pieces">
         <Segmented<PieceMode>
           items={[
             { id: "scan", label: <span className={MODE_LABEL}><ScanLine className="h-3.5 w-3.5" />{t("modeScan")}</span> },
@@ -327,7 +284,55 @@ export function HandOutFlow() {
         </div>
       </Step>
 
-      <Step n={4} title={t("stepConfirm")} disabled={!rep} testId="handout-step-confirm">
+      <Step n={3} title={t("stepConfirm")} disabled={!rep} testId="handout-step-confirm">
+        {/* Payment follows the person's usual rule: it only asks when a price is missing or someone wants to change it. */}
+        {showPayment ? (
+          <div className="mb-4" data-testid="handout-step-ownership">
+            <h4 className="mb-2 text-xs font-semibold text-white/60">{t("stepOwnership")}</h4>
+            <div className="grid gap-2 sm:grid-cols-2" role="radiogroup" aria-label={t("stepOwnership")}>
+              {(["company", "rep"] as const).map((value) => (
+                <div
+                  key={value}
+                  className={`rounded-xl border p-3 transition-colors ${ownership === value ? "border-violet-400/40 bg-violet-500/[0.1]" : "border-white/10 hover:bg-white/[0.03]"}`}
+                >
+                <label className="block cursor-pointer">
+                  <span className="flex items-center gap-2 text-sm font-semibold text-white">
+                    <input type="radio" name="ownership" value={value} checked={ownership === value} onChange={() => setOwnershipChoice(value)} className="h-4 w-4 accent-violet-500" />
+                    {value === "company" ? <Building2 className="h-4 w-4 text-white/50" /> : <ShoppingBag className="h-4 w-4 text-white/50" />}
+                    {value === "company" ? t("ownershipCompany") : t("ownershipRep")}
+                    {value === kitOwnership(policy) ? <span className="text-xs font-normal text-white/40">{t("ownershipDefault", { name: repName })}</span> : null}
+                  </span>
+                  <span className="mt-1 block text-xs text-white/45">
+                    {value === "company" ? (kitCostRequired(policy, "company") ? t("ownershipCompanyNeedsPrice", { name: repName }) : t("ownershipCompanyHint")) : t("ownershipRepHint", { name: repName })}
+                  </span>
+                </label>
+                {/* The price belongs to the option it is for: it opens inside the one chosen. */}
+                {ownership === value && costRequired ? (
+              <Field
+                className="mt-3"
+                label={`${t("pricePerPiece", { name: repName })} (${KIT_COST_CURRENCY})`}
+                error={!cost.ok && cost.reason === "invalid" ? tb("unitCostInvalid") : needPrice ? t("costMissing") : undefined}
+              >
+                <Input
+                  ref={priceRef}
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  inputMode="decimal"
+                  value={unitCost}
+                  onChange={(e) => setUnitCost(e.target.value)}
+                  placeholder="0.00"
+                  required
+                  className="tabular-nums"
+                  data-testid="input-kit-unit-cost"
+                />
+              </Field>
+                ) : null}
+                </div>
+              ))}
+            </div>
+          </div>
+        ) : null}
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="min-w-0 text-sm text-white/70">
             <p className="font-semibold text-white">
@@ -337,6 +342,7 @@ export function HandOutFlow() {
               {ownership === "company" ? t("ownershipCompany") : t("ownershipRep")}
               {cost.ok && cost.cents !== undefined ? ` · ${t("costEach", { cost: formatMoney(cost.cents, KIT_COST_CURRENCY) })}` : ""}
               {left > 0 ? <span className={MODULE_ACCENT.tags.text}>{` · ${t.plural("confirmLeftOut", left)}`}</span> : null}
+              {!showPayment ? <>{" · "}<button type="button" onClick={() => setPaymentOpen(true)} className="underline underline-offset-2 hover:text-white" data-testid="handout-change-payment">{t("paymentChange")}</button></> : null}
             </p>
           </div>
           {/* Without the price the button says what is missing and takes the person to it. */}

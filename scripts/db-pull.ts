@@ -1,5 +1,5 @@
 // npm run db:pull — refresh the local database with a copy of production.
-// `npm run local` runs it on its own when the last pull is over 6 hours old.
+// `npm run local` refreshes stale snapshots only with XPOT_REFRESH_DEV_SNAPSHOT=true.
 //
 // 1. Over SSH, find the xpot-db container's address and credentials. They stay
 //    in memory; the database is never exposed to the internet.
@@ -21,10 +21,11 @@ import { createConnection } from "net";
 import { join, resolve } from "path";
 import pg from "pg";
 import { isXpotDataTable, missingRequiredColumns, type DatabaseColumn } from "./db-pull-schema.js";
+import { resolveDatabaseUrl } from "../server/lib/database-target.js";
 
 const PROD_SSH = process.env.XPOT_PROD_SSH;
 const PROD_CONTAINER = process.env.XPOT_PROD_DB_CONTAINER || "7l8mjbkk16mk0ss9dviw9lzj";
-const LOCAL_URL = process.env.DATABASE_URL || process.env.POSTGRES_URL;
+const LOCAL_URL = resolveDatabaseUrl({ ...process.env, NODE_ENV: "development" });
 const TUNNEL_PORT = 55432;
 const BACKUP_DIR = resolve(process.cwd(), "..", "xpot-db-backups");
 /** When the last pull succeeded; `npm run local` reads it to pull at most every few hours. */
@@ -89,7 +90,7 @@ async function backupLocal(local: pg.Client) {
   console.log(`✓ local backup ${file}`);
 }
 
-/** Parents before children, following foreign keys. */
+/** Parents before children, following foreign keys. A cycle (print_models and customer_order_lines) is left in any order: the load checks the keys at the end. */
 async function fkOrder(c: pg.Client, names: string[]) {
   const { rows } = await c.query(`
     select tc.table_name child, ccu.table_name parent
@@ -103,7 +104,7 @@ async function fkOrder(c: pg.Client, names: string[]) {
   const seen = new Set<string>();
   const visit = (n: string, stack = new Set<string>()) => {
     if (seen.has(n)) return;
-    if (stack.has(n)) fail(`foreign key cycle at ${n}`);
+    if (stack.has(n)) return;
     stack.add(n);
     for (const p of Array.from(deps.get(n)!)) visit(p, stack);
     stack.delete(n);
@@ -128,6 +129,23 @@ async function userForeignKeys(c: pg.Client, names: string[]) {
   const result = new Map(names.map((name) => [name, new Set<string>()]));
   for (const { table_name, column_name } of rows) result.get(table_name)?.add(column_name);
   return result;
+}
+
+/** Every foreign key of the copied tables still points at a row: the load switches the checks off, so this is the check. */
+async function assertForeignKeys(local: pg.Client, tables: string[]) {
+  const { rows } = await local.query(`
+    select con.conrelid::regclass::text child, child_col.attname child_col, con.confrelid::regclass::text parent, parent_col.attname parent_col
+    from pg_constraint con
+    join pg_attribute child_col on child_col.attrelid = con.conrelid and child_col.attnum = con.conkey[1]
+    join pg_attribute parent_col on parent_col.attrelid = con.confrelid and parent_col.attnum = con.confkey[1]
+    where con.contype = 'f' and array_length(con.conkey, 1) = 1
+      and con.connamespace = 'public'::regnamespace and con.conrelid::regclass::text = any($1)`, [tables.flatMap((t) => [t, `"${t}"`])]);
+  for (const { child, child_col, parent, parent_col } of rows) {
+    const { rows: [{ n }] } = await local.query(`
+      select count(*)::int n from ${child} c
+      where c."${child_col}" is not null and not exists (select 1 from ${parent} p where p."${parent_col}" = c."${child_col}")`);
+    if (n) throw new Error(`${n} row(s) of ${child}.${child_col} point at nothing in ${parent}`);
+  }
 }
 
 async function copy(prod: pg.Client, local: pg.Client) {
@@ -171,6 +189,8 @@ async function copy(prod: pg.Client, local: pg.Client) {
 
   await local.query("BEGIN");
   try {
+    // Only inside this transaction: the keys cannot be checked row by row across a cycle.
+    await local.query("SET LOCAL session_replication_role = replica");
     const { rows: productionUsers } = await prod.query(`select ${userColumns.map((column) => `"${column}"`).join(",")} from "users"`);
     const { rows: localUsers } = await local.query(`select "id", lower("email") email, "phone" from "users"`);
     const localIds = new Set(localUsers.map((row) => String(row.id)));
@@ -229,6 +249,7 @@ async function copy(prod: pg.Client, local: pg.Client) {
       }
       if (rows.length) counts.push(`${t}=${rows.length}`);
     }
+    await assertForeignKeys(local, order);
     // Serial counters continue after the copied ids.
     const { rows: seqs } = await local.query(`
       select c.table_name, c.column_name, pg_get_serial_sequence(format('%I', c.table_name), c.column_name) seq
@@ -268,7 +289,7 @@ async function main() {
     await prod.query("COMMIT");
     mkdirSync(resolve(PULL_STAMP, ".."), { recursive: true });
     writeFileSync(PULL_STAMP, JSON.stringify({ pulledAt: new Date().toISOString() }));
-    console.log("✓ done: localhost now shows production data (a snapshot; npm run local refreshes it every 6 hours)");
+    console.log("✓ done: the Supabase development database now contains the snapshot; local startup refreshes it only when explicitly enabled");
   } finally {
     await prod.end().catch(() => undefined);
     await local.end().catch(() => undefined);

@@ -75,7 +75,7 @@ jobs:
             tests/tags/resellerCustomers.integration.test.ts tests/tags/organizationKits.integration.test.ts tests/leadPieceAccess.integration.test.ts \
             tests/tags/organizationFilter.integration.test.ts \
             tests/tags/wholesale-fulfill.integration.test.ts tests/tags/takeBackOrigin.integration.test.ts \
-            tests/lead-delete.integration.test.ts tests/payment-status.integration.test.ts tests/customerOrders.integration.test.ts
+            tests/lead-delete.integration.test.ts tests/payment-status.integration.test.ts tests/customerOrders.integration.test.ts tests/google-login.integration.test.ts tests/customer-panel.integration.test.ts
 
       - name: Build
         run: npm run build

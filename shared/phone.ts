@@ -53,3 +53,18 @@ export function maskPhone(e164: string): string {
   const country = e164.startsWith("+1") ? "+1" : e164.slice(0, 3);
   return `${country} •••• ${e164.slice(-4)}`;
 }
+
+/**
+ * Example for an empty phone field: zeros in the national format of the selected country
+ * ("(000) 000-0000" for +1), so no real number or area code is suggested.
+ */
+export function phonePlaceholderFor(countryCode: string = DEFAULT_COUNTRY_CODE): string {
+  switch (countryCode.replace(/D/g, "")) {
+    case "55": return "(00) 00000-0000";
+    case "52": return "00 0000 0000";
+    case "57": return "000 000 0000";
+    case "351": return "000 000 000";
+    case "34": return "000 00 00 00";
+    default: return "(000) 000-0000";
+  }
+}

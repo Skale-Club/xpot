@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
 import {
+  PRINT_PIECE_PROBLEMS,
+  UNSPECIFIED_PRINT_PROBLEM_REASON,
+  printProblemOfReason,
+  printProblemRate,
+  printProblemReason,
+  problemsByCode,
   materialsForNfc,
   nfcMountsOf,
   preferredNfcMount,
@@ -137,6 +143,33 @@ describe("marking a plate printed", () => {
     expect(printJobStockSchema.safeParse({ badPieces: [""] }).success).toBe(false);
   });
 
+  it("takes what went wrong with a piece only from the known problems, and only with printed", () => {
+    expect(printJobUpdateSchema.parse({ action: "printed", badPieces: ["AAAA0002"], pieceProblems: { AAAA0002: "warped" } }).pieceProblems).toEqual({ AAAA0002: "warped" });
+    expect(printJobUpdateSchema.safeParse({ action: "printed", pieceProblems: { AAAA0002: "cursed" } }).success).toBe(false);
+    expect(printJobUpdateSchema.safeParse({ action: "fail", reason: "Lifted", pieceProblems: { AAAA0002: "warped" } }).success).toBe(false);
+    expect(printJobStockSchema.parse({ pieceProblems: { AAAA0002: "broke" } }).pieceProblems).toEqual({ AAAA0002: "broke" });
+  });
+
+  it("reads every problem back from what the piece's history says, and an old reason as not specified", () => {
+    for (const problem of PRINT_PIECE_PROBLEMS) expect(printProblemOfReason(printProblemReason(problem))).toBe(problem);
+    expect(new Set(PRINT_PIECE_PROBLEMS.map(printProblemReason)).size).toBe(PRINT_PIECE_PROBLEMS.length);
+    expect(printProblemReason(undefined)).toBe(UNSPECIFIED_PRINT_PROBLEM_REASON);
+    expect(printProblemOfReason(UNSPECIFIED_PRINT_PROBLEM_REASON)).toBe("unspecified");
+    expect(printProblemOfReason(null)).toBe("unspecified");
+  });
+
+  it("matches a problem to its piece however the code was typed", () => {
+    expect(problemsByCode({ " aaaa0002 ": "warped" }).get("AAAA0002")).toBe("warped");
+    expect(problemsByCode().size).toBe(0);
+  });
+
+  it("gives the problem rate to one decimal, and none with nothing printed", () => {
+    expect(printProblemRate({ pieces: 120, withProblem: 3 })).toBe(2.5);
+    expect(printProblemRate({ pieces: 3, withProblem: 1 })).toBe(33.3);
+    expect(printProblemRate({ pieces: 4, withProblem: 0 })).toBe(0);
+    expect(printProblemRate({ pieces: 0, withProblem: 0 })).toBeNull();
+  });
+
   it("puts every pending piece in stock unless it is listed as bad", () => {
     expect(splitPrintedPieces(pieces)).toEqual({ good: ["AAAA0001", "AAAA0002", "AAAA0003"], bad: [], unknown: [] });
     expect(splitPrintedPieces(pieces, ["AAAA0002"])).toEqual({ good: ["AAAA0001", "AAAA0003"], bad: ["AAAA0002"], unknown: [] });
@@ -203,6 +236,15 @@ describe("the Production page's choices", () => {
     };
   };
 
+  it("does not offer unapproved body colors or mutate historical model records", () => {
+    const previous = model({ slug: "stand-large-google-navy", theme: "Navy" });
+    const options = printGenerateOptions([model({ slug: "white" }), model({ slug: "black", theme: "black" }), previous]);
+    expect(options[0].colours.map((colour) => colour.theme)).toEqual(["white", "black"]);
+    expect(pickGenerateFace(options, { productType: "large_stand", theme: "navy", face: "google_review" })).toBeNull();
+    expect(previous.theme).toBe("Navy");
+    expect(previous.status).toBe("ready");
+  });
+
   it("offers per product the colours and faces that have a generator, white before black", () => {
     const options = printGenerateOptions([
       model({ slug: "plate-small-google-white", productType: "small_plate", builder: "plate.google" }),
@@ -228,6 +270,19 @@ describe("the Production page's choices", () => {
     expect(pickGenerateFace(mixedCase, { productType: "large_stand", theme: "WHITE", face: "google_review" })?.slug).toBe("a");
     expect(pickGenerateFace(options, { productType: "large_stand", theme: "Black", face: "instagram" })?.slug).toBe("stand-large-instagram-black");
     expect(pickGenerateFace(options, { productType: "large_stand", theme: "white", face: "venmo" })).toBeNull();
+  });
+
+  it("keeps every menu style and resolves the exact model only inside its face, colour and product", () => {
+    const classic = model({ slug: "menu-classic", face: "menu", currentVersion: { ...version("plate.service", [{ label: "x4", copies: 4 }]), params: { style: "classic" } } });
+    const italic = model({ slug: "menu-italic", face: "menu", currentVersion: { ...classic.currentVersion!, params: { style: "italic" } } });
+    const options = printGenerateOptions([classic, italic, model({ slug: "cashapp", face: "cashapp" }), model({ slug: "paypal", face: "paypal" }), model({ slug: "zelle", face: "zelle" }), model({ slug: "wifi", face: "wifi" })]);
+    const menu = options[0].colours[0].faces.find((face) => face.face === "menu")!;
+    expect(menu.styles?.map((style) => [style.slug, style.style])).toEqual([["menu-classic", "classic"], ["menu-italic", "italic"]]);
+    const input = { productType: "large_stand", theme: "white", face: "menu" };
+    expect(pickGenerateFace(options, { ...input, modelSlug: "menu-italic" })?.slug).toBe("menu-italic");
+    expect(pickGenerateFace(options, { ...input, modelSlug: "cashapp" })).toBeNull();
+    expect(pickGenerateFace(options, { ...input, theme: "black", modelSlug: "menu-italic" })).toBeNull();
+    expect(options[0].colours[0].faces.map((face) => face.face)).toEqual(expect.arrayContaining(["cashapp", "paypal", "zelle", "wifi"]));
   });
 
   it("shows the parts that come off the printer as always ready, not the bought ones", () => {

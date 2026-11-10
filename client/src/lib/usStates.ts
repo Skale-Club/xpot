@@ -73,5 +73,5 @@ export function findUsStateCode(value: string): string | null {
 
 export function usStateLabel(code: string, lang: UsStateLanguage) {
   const state = US_STATES.find((option) => option.code === code);
-  return state ? `${state.code} — ${state[lang]}` : code;
+  return state ? `${state.code}: ${state[lang]}` : code;
 }

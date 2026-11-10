@@ -1,14 +1,20 @@
 import type { Express } from "express";
+import { registerDevLogin } from "./auth/devLogin.js";
 import { registerCustomerRoutes } from "./customer/routes.js";
+import { registerDesktopRoutes } from "./desktopRoutes.js";
 import { registerMcpRoutes } from "./mcp/routes.js";
 import { registerXpotRoutes } from "./routes/xpot/index.js";
 import { registerTagRoutes } from "./tags/routes.js";
 import { registerWholesaleRoutes } from "./wholesale/index.js";
 
 export async function registerRoutes(app: Express) {
+  // Localhost-only sign-in for development (no-op in any other NODE_ENV).
+  registerDevLogin(app);
+
   // Tags first: public /q and /n redirects, and /api/xpot/tags* / /api/xpot/admin/tag*
   // must be matched before the Xpot routers: those mount guards on /api/xpot prefixes (requireXpotUser in
   // every router, requirePlatformAdmin on /admin) that would answer first with their own 401/403.
+  registerDesktopRoutes(app);
   registerTagRoutes(app);
   // MCP endpoint (/mcp) and its token admin API (/api/xpot/admin/mcp-tokens):
   // same ordering reason, and /mcp must beat the SPA catch-all added in index.ts.

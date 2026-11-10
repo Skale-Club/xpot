@@ -77,7 +77,7 @@ export async function checkTwilioConfig(
       return result(
         false,
         "twilio_number_not_owned",
-        `${notes[0]} But ${from} is not a number on this account. Use a number from Phone Numbers > Manage > Active numbers, in E.164 format (+15085550100).`,
+        `${notes[0]} But ${from} is not a number on this account. Use a number from Phone Numbers > Manage > Active numbers, in E.164 format (+10000000000).`,
         { ...params, from },
       );
     }

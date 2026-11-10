@@ -4,6 +4,7 @@ import { createServer, type Server } from "http";
 import { legacyHostRedirect } from "./canonicalHost.js";
 import { registerRoutes } from "./routes.js";
 import { apiErrorHandler } from "./errorHandler.js";
+import { assertProductionFileStores } from "./lib/files.js";
 
 declare module "http" {
   interface IncomingMessage {
@@ -22,17 +23,23 @@ export function log(message: string, source = "express") {
 }
 
 /**
- * PLT-04: only DATABASE_URL used to be checked; SESSION_SECRET was used with a
- * non-null assertion and the Supabase keys failed on the first request that
- * needed them, so a deploy with an incomplete environment came up green.
+ * Fail before accepting traffic if database/session configuration is missing.
+ * Production also requires Google identity and both R2 stores, with no managed
+ * Auth/Storage fallback; development keeps its explicit Supabase database.
  */
 export function assertRequiredEnv(env: NodeJS.ProcessEnv = process.env): void {
-  const required = ["SESSION_SECRET", "SUPABASE_URL", "SUPABASE_ANON_KEY", "SUPABASE_SERVICE_ROLE_KEY"];
-  if (!env.DATABASE_URL && !env.POSTGRES_URL) required.unshift("DATABASE_URL (or POSTGRES_URL)");
-  const missing = required.filter((name) => name.startsWith("DATABASE_URL") || !env[name]);
+  const required = ["SESSION_SECRET"];
+  if (env.NODE_ENV === "production") {
+    required.push("GOOGLE_AUTH_PROJECT_ID", "FIREBASE_API_KEY", "FIREBASE_AUTH_DOMAIN", "GOOGLE_WEB_CLIENT_ID");
+    if (env.GOOGLE_AUTH_ENABLED !== "true") throw new Error("Production requires Google phone/Google authentication to be enabled.");
+  }
+  const hasDatabase = env.NODE_ENV === "development" ? !!env.DEV_DATABASE_URL : !!(env.DATABASE_URL || env.POSTGRES_URL);
+  if (!hasDatabase) required.unshift(env.NODE_ENV === "development" ? "DEV_DATABASE_URL" : "DATABASE_URL (or POSTGRES_URL)");
+  const missing = required.filter((name) => name === "DATABASE_URL (or POSTGRES_URL)" || !env[name]);
   if (missing.length) {
     throw new Error(`Missing required environment: ${missing.join(", ")}`);
   }
+  assertProductionFileStores(env);
 }
 
 export async function createApp(): Promise<{ app: express.Express; httpServer: Server }> {
@@ -71,6 +78,10 @@ export async function createApp(): Promise<{ app: express.Express; httpServer: S
   await setupSupabaseAuth(app);
   const { registerPhoneAuthRoutes } = await import("./auth/phoneAuth.js");
   registerPhoneAuthRoutes(app);
+  const { registerGoogleLoginRoutes } = await import("./auth/googleLogin.js");
+  registerGoogleLoginRoutes(app);
+  const { registerAccountLinkRoutes } = await import("./auth/accountLinks.js");
+  registerAccountLinkRoutes(app);
 
   const httpServer = createServer(app);
   await registerRoutes(app);

@@ -1,10 +1,11 @@
 import { drizzle } from "drizzle-orm/node-postgres";
 import pg from "pg";
 import * as schema from "#shared/schema.js";
+import { resolveDatabaseUrl } from "./lib/database-target.js";
 
 const { Pool } = pg;
 
-const rawDatabaseUrl = process.env.DATABASE_URL || process.env.POSTGRES_URL;
+const rawDatabaseUrl = resolveDatabaseUrl();
 
 if (!rawDatabaseUrl) {
   throw new Error(
@@ -43,5 +44,16 @@ export const pool = new Pool({
       }
     : false,
   max: 20,
+  // The Supabase pooler and home routers silently drop sockets that sit idle. Retiring idle connections early and
+  // keeping TCP keepalive on means a query rarely picks up a socket that is already dead (read ECONNRESET).
+  idleTimeoutMillis: 30_000,
+  keepAlive: true,
+  keepAliveInitialDelayMillis: 10_000,
+});
+
+// An idle connection the database drops (a network blip, a restart) is replaced on the next query. Without a listener
+// this event has no handler and takes the whole process down.
+pool.on("error", (err) => {
+  console.error("[db] idle connection lost:", err.message);
 });
 export const db = drizzle(pool, { schema });

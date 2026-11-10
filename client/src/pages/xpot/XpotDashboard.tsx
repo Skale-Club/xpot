@@ -533,7 +533,7 @@ function DashboardOverview() {
       <KpiTile label={t("metricVisitsToday")} value={metrics?.visitsToday ?? 0} icon={MapPinned} accent="blue" detail={t.plural("metricVisitsRemaining", metrics?.remainingVisitsToday ?? 0)} loading={dashboardQuery.isLoading} onClick={() => setLocation("/route")} />
       <KpiTile label={t("metricCompletedToday")} value={metrics?.completedVisitsToday ?? 0} icon={Check} accent="blue" detail={t.plural("metricVisitsCompleted", metrics?.completedVisitsToday ?? 0)} loading={dashboardQuery.isLoading} onClick={() => setLocation("/dashboard/history?view=day")} />
       <KpiTile label={t("metricTasksToday")} value={metrics?.tasksToday ?? 0} icon={ListTodo} accent="amber" detail={t.plural("metricTasksOverdue", metrics?.overdueTasks ?? 0)} loading={dashboardQuery.isLoading} onClick={() => setLocation("/tasks")} />
-      <KpiTile label={t("metricSalesToday")} value={salesSummary.data ? formatCents(salesSummary.data.revenue.todayCents) : "—"} icon={DollarSign} accent="emerald" detail={salesSummary.data && showProfit ? t("metricSalesProfit", { amount: formatCents(salesSummary.data.profit?.todayCents ?? 0) }) : undefined} loading={salesSummary.isLoading} onClick={() => setLocation("/sales")} />
+      <KpiTile label={t("metricSalesToday")} value={salesSummary.data ? formatCents(salesSummary.data.revenue.todayCents) : "-"} icon={DollarSign} accent="emerald" detail={salesSummary.data && showProfit ? t("metricSalesProfit", { amount: formatCents(salesSummary.data.profit?.todayCents ?? 0) }) : undefined} loading={salesSummary.isLoading} onClick={() => setLocation("/sales")} />
     </div>
   );
 

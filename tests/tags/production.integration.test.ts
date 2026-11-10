@@ -111,6 +111,20 @@ async function firstPlate(app: express.Express, body: Record<string, unknown>) {
   return (await request(app, "GET", `/api/xpot/admin/print-jobs/${created.body.plates[0].id}`)).body;
 }
 
+/** Seed the shape of an order created before single-plate generation, so its history stays supported. */
+async function legacyMultiPlateRequest(app: express.Express, body: { model: string; quantity: number }): Promise<Reply> {
+  const first = await request(app, "POST", "/api/xpot/admin/print-jobs", { model: body.model, quantity: 4 });
+  const second = await request(app, "POST", "/api/xpot/admin/print-jobs", { model: body.model, quantity: body.quantity - 4 });
+  expect(first.status).toBe(201);
+  expect(second.status).toBe(201);
+  await q("UPDATE print_jobs SET request_id=$1, plate_number=2 WHERE request_id=$2", [first.body.id, second.body.id]);
+  await q("UPDATE print_requests SET quantity=$1 WHERE id=$2", [body.quantity, first.body.id]);
+  await q("DELETE FROM print_requests WHERE id=$1", [second.body.id]);
+  const result = await request(app, "GET", `/api/xpot/admin/print-requests/${first.body.id}`);
+  expect(result.status).toBe(200);
+  return { ...result, status: 201 };
+}
+
 /** A device paired through the real flow (admin pairing code → /api/provisioner/pair). */
 async function pairDevice(app: express.Express, name: string, capabilities?: string[]) {
   const pairing = await request(app, "POST", "/api/xpot/admin/tag-provisioners", { deviceName: name });
@@ -146,6 +160,44 @@ beforeEach(async () => {
 });
 
 describe("print catalog", () => {
+  it("installs the whole flyer matrix without changing an old recipe, issuing codes or duplicating versions", async () => {
+    const app = admin();
+    const old = (await createSerializedModel(app)).body;
+    const originalVersion = old.currentVersion;
+    for (const sku of ["stand-large", "stand-small", "plate-large", "plate-small"]) {
+      await q("INSERT INTO sales_products(sku,name,kind,base_price_cents,is_active) VALUES($1,$1,'physical',3500,true)", [sku]);
+    }
+    const migration = readFileSync(join(process.cwd(), "migrations/0080_flyer_design_catalog.sql"), "utf8");
+    await pg.client.exec(migration);
+    const models = (await request(app, "GET", "/api/xpot/admin/print-models")).body;
+    expect(models.filter((m: any) => m.kind === "serialized")).toHaveLength(160);
+    for (const product of ["large_stand", "small_stand", "large_plate", "small_plate"]) {
+      const ready = models.filter((m: any) => m.productType === product);
+      expect(ready).toHaveLength(40);
+      for (const m of ready) {
+        expect(m.status).toBe("ready");
+        expect(Object.keys(m.currentVersion.nfcVariants)).toHaveLength(3);
+        expect(m.currentVersion.beds).toHaveLength(1);
+      }
+    }
+    const updated = (await request(app, "GET", "/api/xpot/admin/print-models/plate-large-menu-white")).body;
+    expect(updated.currentVersion.id).not.toBe(originalVersion.id);
+    expect(updated.versions.find((v: any) => v.id === originalVersion.id).recipe).toEqual(originalVersion.recipe);
+    expect((await q("SELECT count(*)::int AS n FROM tags"))[0].n).toBe(0);
+    await pg.client.exec(migration);
+    expect((await q("SELECT count(*)::int AS n FROM print_model_versions"))[0].n).toBe(164);
+    const made = await request(app, "POST", "/api/xpot/admin/print-generate", { productType: "large_plate", theme: "white", face: "menu", modelSlug: "plate-large-menu-white-rounded", nfcMount: "sticker_10x20", quantity: 2 });
+    expect(made.status).toBe(201);
+    expect(made.body).toMatchObject({ modelSlug: "plate-large-menu-white-rounded", nfcMount: "sticker_10x20", quantity: 2 });
+    const production = await import("../../server/tags/production.js");
+    expect((await production.jobTicket(made.body.plates[0].id, null)).version.params).toMatchObject({ face: "menu", style: "rounded", nfc_mount: "sticker_10x20" });
+    const legacy = await request(app, "POST", "/api/xpot/admin/print-generate", { productType: "large_plate", theme: "white", face: "menu", menuFont: "Metropolis Bold", nfcMount: "sticker_round_25", quantity: 1 });
+    expect(legacy.status).toBe(201);
+    expect((await production.jobTicket(legacy.body.plates[0].id, null)).version.params).toMatchObject({ face: "menu", style: "bold", font: "Metropolis Bold" });
+    const wrong = await request(app, "POST", "/api/xpot/admin/print-generate", { productType: "large_plate", theme: "white", face: "menu", modelSlug: "plate-large-cashapp-white", nfcMount: "sticker_10x20", quantity: 2 });
+    expect(wrong.body.code).toBe("print_choice_unavailable");
+  });
+
   it("is the global admin's only", async () => {
     expect((await request(appFor("print-manager"), "GET", "/api/xpot/admin/print-models")).status).toBe(403);
     expect((await request(appFor(null), "GET", "/api/xpot/admin/print-jobs")).status).toBe(401);
@@ -391,6 +443,44 @@ describe("serialized print orders", () => {
     expect((await q("SELECT count(*)::int AS n FROM tag_batches"))[0].n).toBe(1);
   });
 
+  it("retires a cancelled plate's codes out of the stock numbers, and brings the same codes back when printed again", async () => {
+    const app = admin();
+    await createSerializedModel(app);
+    const order = await firstPlate(app, { model: "plate-large-menu-white" });
+    const codes = (await q("SELECT public_code FROM tags WHERE batch_id = $1 ORDER BY serial_number", [order.batchId])).map((r) => r.public_code);
+    const notReceived = async () => (await request(app, "GET", "/api/xpot/admin/tags/overview")).body.funnel.notReceived;
+    expect(await notReceived()).toBe(4);
+
+    await request(app, "POST", `/api/xpot/admin/print-jobs/${order.id}/transition`, { action: "cancel" });
+    expect(await q("SELECT status, stock_status FROM tags WHERE batch_id = $1", [order.batchId])).toEqual(Array(4).fill({ status: "retired", stock_status: "retired" }));
+    expect((await q("SELECT status FROM tag_batches WHERE id = $1", [order.batchId]))[0].status).toBe("cancelled");
+    expect(await notReceived()).toBe(0);
+    // The batch shows them as never printed, not received.
+    const listed = (await request(app, "GET", "/api/xpot/admin/tag-batches")).body.find((b: any) => b.id === order.batchId);
+    expect(listed).toMatchObject({ tagCount: 4, pendingCount: 0, receivedCount: 0, retiredCount: 4 });
+    const [entry] = await q("SELECT after_value, metadata FROM tag_journey_entries WHERE batch_id = $1 AND action = 'batch_status_changed'", [order.batchId]);
+    expect(entry).toMatchObject({ after_value: "cancelled", metadata: { printJobId: order.id, retired: 4 } });
+
+    // It had been printed after all: printed again on the same batch, the same codes are pending again, then stocked.
+    const redo = await request(app, "POST", `/api/xpot/admin/print-jobs/${order.id}/redo`);
+    expect(redo.status).toBe(201);
+    expect(redo.body).toMatchObject({ batchId: order.batchId, batchCode: order.batchCode, pendingCount: 4 });
+    expect((await q("SELECT public_code FROM tags WHERE batch_id = $1 AND stock_status = 'pending' AND status = 'inventory' ORDER BY serial_number", [order.batchId])).map((r) => r.public_code)).toEqual(codes);
+    expect((await q("SELECT status FROM tag_batches WHERE id = $1", [order.batchId]))[0].status).toBe("open");
+    const printed = await request(app, "POST", `/api/xpot/admin/print-jobs/${redo.body.id}/transition`, { action: "printed" });
+    expect(printed.body).toMatchObject({ status: "printed", receivedCount: 4, pendingCount: 0 });
+  });
+
+  it("leaves a cancelled plate's batch alone once any of its pieces was received", async () => {
+    const app = admin();
+    await createSerializedModel(app);
+    const order = await firstPlate(app, { model: "plate-large-menu-white" });
+    await q("UPDATE tags SET stock_status = 'available' WHERE batch_id = $1 AND serial_number = (SELECT min(serial_number) FROM tags WHERE batch_id = $1)", [order.batchId]);
+    await request(app, "POST", `/api/xpot/admin/print-jobs/${order.id}/transition`, { action: "cancel" });
+    expect((await q("SELECT status FROM tag_batches WHERE id = $1", [order.batchId]))[0].status).not.toBe("cancelled");
+    expect((await q("SELECT count(*)::int AS n FROM tags WHERE batch_id = $1 AND stock_status = 'pending'", [order.batchId]))[0].n).toBe(3);
+  });
+
   it("prints a plate that failed its QR check again with fresh codes, and retires the old ones", async () => {
     const app = admin();
     await createSerializedModel(app);
@@ -461,42 +551,28 @@ describe("serialized print orders", () => {
 });
 
 describe("print requests", () => {
-  it("splits a quantity into full plates and a partial last one, each with its own batch", async () => {
+  it("creates exactly one printer plate and rejects larger generations without issuing codes", async () => {
     const app = admin();
     await createSerializedModel(app);
-    const asked = await request(app, "POST", "/api/xpot/admin/print-jobs", { model: "plate-large-menu-white", quantity: 10, notes: "For the fair" });
+    for (const body of [{ quantity: 5 }, { quantity: 80 }, { plates: 2 }]) {
+      const refused = await request(app, "POST", "/api/xpot/admin/print-jobs", { model: "plate-large-menu-white", ...body });
+      expect(refused.status).toBe(400);
+      expect(refused.body).toMatchObject({ code: "print_single_plate_only", params: { max: 4 } });
+    }
+    expect((await q("SELECT count(*)::int AS n FROM tags"))[0].n).toBe(0);
+    const asked = await request(app, "POST", "/api/xpot/admin/print-jobs", { model: "plate-large-menu-white", quantity: 3 });
     expect(asked.status).toBe(201);
-    expect(asked.body).toMatchObject({ quantity: 10, notes: "For the fair", open: true });
-    expect(asked.body.plates.map((p: any) => [p.plateNumber, p.plateCount, p.quantity, p.batchCode, p.status])).toEqual([
-      [1, 3, 4, `TPLATE-${year}-001`, "requested"],
-      [2, 3, 4, `TPLATE-${year}-002`, "requested"],
-      [3, 3, 2, `TPLATE-${year}-003`, "requested"],
-    ]);
-    const partial = (await request(app, "GET", `/api/xpot/admin/print-jobs/${asked.body.plates[2].id}`)).body;
-    expect(partial.pieces.map((p: any) => [p.serialNumber, p.position])).toEqual([[1, "front-left"], [2, "front-right"]]);
-    const batch = (await request(app, "GET", "/api/xpot/admin/tag-batches")).body.find((b: any) => b.id === partial.batchId);
-    expect(batch.name).toBe("Plate Large · Menu · White · print job 3/3");
-
-    const bench = await pairDevice(app, "Bench PC", ["print"]);
-    const tickets = [];
-    for (let i = 0; i < 3; i++) tickets.push((await request(app, "POST", "/api/provisioner/print-jobs/claim", {}, bench)).body);
-    expect(tickets.map((ticket) => [ticket.job.id, ticket.tags.length])).toEqual(asked.body.plates.map((p: any) => [p.id, p.quantity]));
-
-    const byOne = await request(app, "POST", "/api/xpot/admin/print-jobs", { model: "plate-large-menu-white", quantity: 1 });
-    expect(byOne.body.plates.map((p: any) => p.quantity)).toEqual([1]);
-    const wholeBeds = await request(app, "POST", "/api/xpot/admin/print-jobs", { model: "plate-large-menu-white", plates: 2 });
-    expect(wholeBeds.body).toMatchObject({ quantity: 8 });
-    expect(wholeBeds.body.plates.map((p: any) => p.quantity)).toEqual([4, 4]);
-
-    const tooMany = await request(app, "POST", "/api/xpot/admin/print-jobs", { model: "plate-large-menu-white", quantity: 81 });
-    expect(tooMany.status).toBe(400);
-    expect(tooMany.body).toMatchObject({ code: "print_too_many_plates", params: { max: 80 } });
+    expect(asked.body.plates).toHaveLength(1);
+    expect(asked.body.plates[0]).toMatchObject({ quantity: 3, plateCount: 1, plateNumber: 1 });
+    const detail = (await request(app, "GET", `/api/xpot/admin/print-jobs/${asked.body.plates[0].id}`)).body;
+    expect(detail.pieces.map((p: any) => p.serialNumber)).toEqual([1, 2, 3]);
+    expect(new Set(detail.pieces.map((p: any) => p.publicCode)).size).toBe(3);
   });
 
   it("keeps a request open until every plate is printed, while failed/cancelled plates do not block completion", async () => {
     const app = admin();
     await createSerializedModel(app);
-    const asked = (await request(app, "POST", "/api/xpot/admin/print-jobs", { model: "plate-large-menu-white", quantity: 6 })).body;
+    const asked = (await legacyMultiPlateRequest(app, { model: "plate-large-menu-white", quantity: 6 })).body;
     const [one, two] = asked.plates;
     await request(app, "POST", `/api/xpot/admin/print-jobs/${one.id}/files?filename=plate.3mf`, bytes("3mf"));
     await request(app, "POST", `/api/xpot/admin/print-jobs/${one.id}/transition`, { action: "complete" });
@@ -547,6 +623,30 @@ describe("print requests", () => {
     expect((await q("SELECT count(*)::int AS n FROM tag_journey_entries WHERE batch_id = $1 AND action = 'piece_damaged'", [order.batchId]))[0].n).toBe(1);
   });
 
+  it("records what went wrong with each bad piece and adds it up in the problem rate", async () => {
+    const app = admin();
+    await createSerializedModel(app);
+    const order = await firstPlate(app, { model: "plate-large-menu-white" });
+    expect((await request(app, "GET", `/api/xpot/admin/print-jobs/${order.id}`)).body.serialFrom).toEqual(expect.any(Number));
+    await request(app, "POST", `/api/xpot/admin/print-jobs/${order.id}/files?filename=plate.3mf`, bytes("3mf"));
+    await request(app, "POST", `/api/xpot/admin/print-jobs/${order.id}/transition`, { action: "complete" });
+    const [warped, plain] = [order.pieces[0].publicCode as string, order.pieces[1].publicCode as string];
+
+    expect((await request(app, "GET", "/api/xpot/admin/print-quality")).body).toMatchObject({ days: 90, pieces: 0, withProblem: 0, byProblem: [], failedPrints: 0 });
+    const printed = await request(app, "POST", `/api/xpot/admin/print-jobs/${order.id}/transition`, { action: "printed", badPieces: [warped, plain], pieceProblems: { [warped]: "warped" } });
+    expect(printed.status).toBe(200);
+    expect(printed.body).toMatchObject({ receivedCount: 2, pendingCount: 0 });
+
+    const reasons = Object.fromEntries((await q("SELECT t.public_code, m.reason FROM tag_stock_movements m JOIN tags t ON t.id = m.tag_id WHERE m.movement_type = 'damage' AND t.batch_id = $1", [order.batchId])).map((row) => [row.public_code, row.reason]));
+    expect(reasons).toEqual({ [warped]: "Printer problem: warped", [plain]: "Came out bad on the printer plate" });
+    const [entry] = await q("SELECT e.content FROM tag_journey_entries e JOIN tags t ON t.id = e.tag_id WHERE e.action = 'piece_damaged' AND t.public_code = $1", [warped]);
+    expect(entry.content).toBe("Printer problem: warped");
+
+    const quality = await request(app, "GET", "/api/xpot/admin/print-quality?days=30");
+    expect(quality.body).toMatchObject({ days: 30, pieces: 4, withProblem: 2, failedPrints: 0, failedPieces: 0 });
+    expect(quality.body.byProblem).toEqual(expect.arrayContaining([{ problem: "warped", count: 1 }, { problem: "unspecified", count: 1 }]));
+  });
+
   it("puts the pending pieces of a plate printed before this change in stock, and only once", async () => {
     const app = admin();
     await createSerializedModel(app);
@@ -576,7 +676,7 @@ describe("print requests", () => {
     const app = admin();
     await createSerializedModel(app);
     const bench = await pairDevice(app, "Bench PC", ["print"]);
-    const asked = (await request(app, "POST", "/api/xpot/admin/print-jobs", { model: "plate-large-menu-white", quantity: 6 })).body;
+    const asked = (await legacyMultiPlateRequest(app, { model: "plate-large-menu-white", quantity: 6 })).body;
     for (const plate of asked.plates) {
       await request(app, "POST", "/api/provisioner/print-jobs/claim", { jobId: plate.id }, bench);
       await request(app, "POST", `/api/provisioner/print-jobs/${plate.id}/files?filename=plate.3mf`, bytes("3mf"), bench);
@@ -906,7 +1006,7 @@ describe("production per organization", () => {
     const ids = await branches();
     await createSerializedModel(admin());
 
-    const ny = await request(appFor("ny-admin"), "POST", "/api/xpot/admin/print-jobs", { model: "plate-large-menu-white", quantity: 6 });
+    const ny = await legacyMultiPlateRequest(appFor("ny-admin"), { model: "plate-large-menu-white", quantity: 6 });
     expect(ny.status).toBe(201);
     expect(ny.body).toMatchObject({ organizationId: ids.ny, organizationName: "Xpot New York" });
     expect(ny.body.plates.map((p: any) => [p.quantity, p.organizationId])).toEqual([[4, ids.ny], [2, ids.ny]]);
@@ -1137,27 +1237,25 @@ describe("the Production page", () => {
     await createModel(app, "stand-large-instagram-black", "black", "instagram", "stand.instagram");
     await createModel(app, "stand-large-venmo-black", "black", "venmo", null);
 
-    const made = await request(app, "POST", "/api/xpot/admin/print-generate", { productType: "large_stand", theme: "White", face: "google_review", quantity: 6 });
+    const made = await request(app, "POST", "/api/xpot/admin/print-generate", { productType: "large_stand", theme: "White", face: "google_review", quantity: 4 });
     expect(made.status).toBe(201);
-    expect(made.body).toMatchObject({ modelSlug: "stand-large-google-white", quantity: 6, open: true });
+    expect(made.body).toMatchObject({ modelSlug: "stand-large-google-white", quantity: 4, open: true });
     expect(made.body.plates.map((p: any) => [p.quantity, p.status, p.batchCode])).toEqual([
       [4, "requested", `TREV-${year}-001`],
-      [2, "requested", `TREV-${year}-002`],
     ]);
     const pieces = await q("SELECT public_code, stock_status FROM tags");
-    expect(pieces).toHaveLength(6);
-    expect(new Set(pieces.map((p) => p.public_code)).size).toBe(6);
+    expect(pieces).toHaveLength(4);
+    expect(new Set(pieces.map((p) => p.public_code)).size).toBe(4);
     expect(pieces.every((p) => p.stock_status === "pending")).toBe(true);
 
-    const [first, second] = made.body.plates;
+    const [first] = made.body.plates;
     expect((await request(app, "POST", `/api/xpot/admin/print-jobs/${first.id}/transition`, { action: "printed" })).status).toBe(200);
     const byBatch = await q("SELECT batch_id, stock_status, count(*)::int AS n FROM tags GROUP BY batch_id, stock_status ORDER BY n DESC");
     expect(byBatch).toEqual([
       { batch_id: first.batchId, stock_status: "available", n: 4 },
-      { batch_id: second.batchId, stock_status: "pending", n: 2 },
     ]);
     const open = (await request(app, "GET", "/api/xpot/admin/print-requests?status=open")).body;
-    expect(open.map((r: any) => r.plates.map((p: any) => p.status))).toEqual([["printed", "requested"]]);
+    expect(open).toEqual([]);
   });
 
   it("refuses a colour or face the house does not make, and anything outside the known values", async () => {
@@ -1305,23 +1403,23 @@ describe("consistency of the piece creation", () => {
   it("writes a request and all its plates together, or none of them", async () => {
     const app = admin();
     await createSerializedModel(app);
-    await q(`CREATE FUNCTION refuse_second_plate() RETURNS trigger LANGUAGE plpgsql AS $$
-      BEGIN IF NEW.plate_number = 2 THEN RAISE EXCEPTION 'plate 2 refused'; END IF; RETURN NEW; END $$`);
-    await q("CREATE TRIGGER refuse_second_plate BEFORE INSERT ON print_jobs FOR EACH ROW EXECUTE FUNCTION refuse_second_plate()");
+    await q(`CREATE FUNCTION refuse_plate() RETURNS trigger LANGUAGE plpgsql AS $$
+      BEGIN IF NEW.plate_number = 1 THEN RAISE EXCEPTION 'plate refused'; END IF; RETURN NEW; END $$`);
+    await q("CREATE TRIGGER refuse_plate BEFORE INSERT ON print_jobs FOR EACH ROW EXECUTE FUNCTION refuse_plate()");
     try {
-      const failed = await request(app, "POST", "/api/xpot/admin/print-jobs", { model: "plate-large-menu-white", quantity: 8 });
+      const failed = await request(app, "POST", "/api/xpot/admin/print-jobs", { model: "plate-large-menu-white", quantity: 4 });
       expect(failed.status).toBe(500);
       for (const table of ["print_requests", "print_jobs", "tag_batches", "tags", "tag_journey_entries"]) {
         expect((await q(`SELECT count(*)::int AS n FROM ${table}`))[0].n).toBe(0);
       }
     } finally {
-      await q("DROP TRIGGER refuse_second_plate ON print_jobs");
-      await q("DROP FUNCTION refuse_second_plate()");
+      await q("DROP TRIGGER refuse_plate ON print_jobs");
+      await q("DROP FUNCTION refuse_plate()");
     }
-    // Without the failure, the same request makes both plates with consecutive batch codes, and their journey.
-    const asked = await request(app, "POST", "/api/xpot/admin/print-jobs", { model: "plate-large-menu-white", quantity: 8 });
-    expect(asked.body.plates.map((p: any) => p.batchCode)).toEqual([`TPLATE-${year}-001`, `TPLATE-${year}-002`]);
-    expect((await q("SELECT count(*)::int AS n FROM tag_journey_entries WHERE action = 'batch_created'"))[0].n).toBe(2);
+    // Without the failure, the same request creates one plate, its batch and its journey atomically.
+    const asked = await request(app, "POST", "/api/xpot/admin/print-jobs", { model: "plate-large-menu-white", quantity: 4 });
+    expect(asked.body.plates.map((p: any) => p.batchCode)).toEqual([`TPLATE-${year}-001`]);
+    expect((await q("SELECT count(*)::int AS n FROM tag_journey_entries WHERE action = 'batch_created'"))[0].n).toBe(1);
   });
 
   it("generates a model whatever case its colour was typed in", async () => {

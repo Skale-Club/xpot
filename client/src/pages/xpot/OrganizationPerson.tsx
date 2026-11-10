@@ -9,6 +9,7 @@ import { PageHeader } from "@/components/xpot/PageHeader";
 import { Pill } from "@/components/xpot/StatusPill";
 import { GLASS_SUBTLE_CLASS } from "@/components/xpot/surface";
 import { useViewerAccess } from "@/lib/adminMode";
+import { currentSearch } from "@/hooks/use-url-filters";
 import { describeApiError } from "@/lib/apiErrors";
 import { formatDate, formatMoney, formatPhone } from "@/lib/format";
 import { useT } from "@/i18n";
@@ -69,7 +70,9 @@ export function OrganizationPerson({ organizationId, repId }: { organizationId: 
   const tasks = useQuery<SalesTask[]>({ queryKey: [`/api/xpot/tasks?repId=${repId}&status=${OPEN_TASK_STATUSES}`], enabled: listsOn });
   const sales = useQuery<SaleWithItems[]>({ queryKey: [`/api/xpot/sales?repId=${repId}&limit=100`], enabled: listsOn });
 
-  const back = `/organizations/${organizationId}?tab=team`;
+  const backParams = new URLSearchParams(currentSearch(["view", "tab"]));
+  backParams.set("tab", "team");
+  const back = `/organizations/${organizationId}?${backParams}`;
   const header = (description?: ReactNode, actions?: ReactNode) => (
     <PageHeader
       backHref={back}
@@ -152,7 +155,7 @@ export function OrganizationPerson({ organizationId, repId }: { organizationId: 
               >
                 <Icon className={`h-5 w-5 shrink-0 ${on ? "text-blue-300" : "text-white/45"}`} aria-hidden="true" />
                 <span className="min-w-0">
-                  <span className="block text-xl font-bold leading-none tabular-nums text-white">{badge ?? "–"}</span>
+                  <span className="block text-xl font-bold leading-none tabular-nums text-white">{badge ?? "-"}</span>
                   <span className={`mt-1 block truncate text-xs font-medium ${on ? "text-blue-200" : "text-white/55"}`}>{label}</span>
                 </span>
               </button>
@@ -182,7 +185,7 @@ export function OrganizationPerson({ organizationId, repId }: { organizationId: 
             rows={(visits.data ?? []).map((visit) => ({
               key: visit.id,
               href: `/admin/work/leads/${visit.leadId}`,
-              title: visit.lead?.name ?? "—",
+              title: visit.lead?.name ?? "-",
               detail: formatDate(visit.checkedInAt ?? visit.scheduledAt ?? visit.createdAt),
               trailing: <StatusBadge status={visit.status} />,
             }))}
@@ -212,7 +215,7 @@ export function OrganizationPerson({ organizationId, repId }: { organizationId: 
             rows={(sales.data ?? []).map(({ sale, lead }) => ({
               key: sale.id,
               href: `/admin/work${salesPath("sales", sale.id)}`,
-              title: lead?.name ?? "—",
+              title: lead?.name ?? "-",
               detail: formatDate(sale.soldAt),
               trailing: <span className="text-sm font-semibold tabular-nums text-white">{formatMoney(sale.totalCents)}</span>,
             }))}

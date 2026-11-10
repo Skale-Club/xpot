@@ -1,13 +1,12 @@
 import { profileOf } from "#shared/profiles.js";
 import { Router } from "express";
 import { z } from "zod";
-import { createClient } from "@supabase/supabase-js";
 import { storage, type SalesRepProfilePatch } from "../../storage.js";
 import { requireXpotUser, ensureXpotRep } from "./middleware.js";
-import { getSupabaseAdmin } from "../../lib/supabase.js";
-import { discardFiles, isRepAvatarUrl } from "../../lib/files.js";
+import { discardFiles, isRepAvatarUrl, publicUploadsConfigured, putPublicFile } from "../../lib/files.js";
 import { randomUUID } from "crypto";
 import { listOrganizations, membershipsForRep } from "../../organizations/service.js";
+import { profileNameParts } from "#shared/profileName.js";
 import { eq } from "drizzle-orm";
 import { db } from "../../db.js";
 import { users } from "#shared/schema.js";
@@ -35,7 +34,8 @@ export function createAuthRouter() {
         : null;
       res.json({
         // The sign-in phone (users.phone) is not the profile's contact phone (rep.phone); Settings shows both.
-        user: { ...actor!.user, phone: account?.phone ?? null },
+        // The name is the one the app shows everywhere: the session only holds what it was at sign-in.
+        user: { ...actor!.user, ...profileNameParts(actor!.rep.displayName, actor!.user.firstName, actor!.user.lastName), phone: account?.phone ?? null },
         rep: actor!.rep,
         // Which of the four panels this person gets (shared/profiles.ts).
         profile: profileOf({ user: actor!.user, organizations }),
@@ -56,7 +56,6 @@ export function createAuthRouter() {
   });
 
   const updateProfileSchema = z.object({
-    displayName: z.string().min(1).max(100).optional(),
     phone: z.string().max(30).optional().nullable(),
     avatarUrl: z.string().url().optional().nullable(),
     firstName: z.string().max(100).optional().nullable(),
@@ -96,7 +95,6 @@ export function createAuthRouter() {
         }
         repPatch.routeReturnHome = routeReturnHome;
       }
-      if (repData.displayName !== undefined) repPatch.displayName = repData.displayName;
       if (repData.phone !== undefined) repPatch.phone = repData.phone ?? undefined;
       if (repData.avatarUrl !== undefined) {
         // Only clearing it, or the rep's own uploaded picture (POST /me/avatar
@@ -112,9 +110,10 @@ export function createAuthRouter() {
       if (firstName !== undefined) userPatch.firstName = firstName;
       if (lastName !== undefined) userPatch.lastName = lastName;
 
-      // Auto-update rep.displayName from firstName/lastName when displayName isn't explicitly sent.
-      if (repData.displayName === undefined && (firstName !== undefined || lastName !== undefined)) {
-        const fullName = [firstName ?? actor!.user.firstName, lastName ?? actor!.user.lastName]
+      // A person has one name: the one the app shows is always their first and last name.
+      if (firstName !== undefined || lastName !== undefined) {
+        // `null` clears a name, so it must not fall back to the saved one.
+        const fullName = [firstName !== undefined ? firstName : actor!.user.firstName, lastName !== undefined ? lastName : actor!.user.lastName]
           .filter(Boolean).join(" ").trim() || actor!.rep.displayName;
         if (fullName) repPatch.displayName = fullName;
       }
@@ -146,7 +145,7 @@ export function createAuthRouter() {
         return res.status(400).json({ message: "imageData is required" });
       }
 
-      if (!process.env.SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
+      if (!publicUploadsConfigured()) {
         return res.status(503).json({ message: "Storage not configured" });
       }
 
@@ -157,19 +156,13 @@ export function createAuthRouter() {
       }
       const mimeType = match[1];
       const ext = mimeType.split("/")[1] || "jpg";
+      if (!["image/png", "image/jpeg", "image/webp", "image/gif", "image/avif"].includes(mimeType)) {
+        return res.status(400).json({ message: "Unsupported image format" });
+      }
       const buffer = Buffer.from(match[2], "base64");
 
-      const supabase = getSupabaseAdmin();
       const filename = `avatars/${actor!.rep.id}/${Date.now()}_${randomUUID()}.${ext}`;
-
-      const { error: uploadError } = await supabase.storage
-        .from("uploads")
-        .upload(filename, buffer, { contentType: mimeType, upsert: true });
-
-      if (uploadError) throw new Error(uploadError.message);
-
-      const { data: urlData } = supabase.storage.from("uploads").getPublicUrl(filename);
-      const avatarUrl = urlData.publicUrl;
+      const avatarUrl = await putPublicFile(filename, buffer, mimeType);
 
       const previous = actor!.rep.avatarUrl;
       const [updated] = await Promise.all([
@@ -187,54 +180,7 @@ export function createAuthRouter() {
     }
   });
 
-  router.post("/me/change-password", async (req, res) => {
-    try {
-      const actor = (req as any).xpotActor as Awaited<ReturnType<typeof ensureXpotRep>>;
-      const parsed = z.object({
-        currentPassword: z.string().min(1),
-        newPassword: z.string().min(8).max(128),
-      }).safeParse(req.body);
-      if (!parsed.success) {
-        return res.status(400).json({ message: "Invalid input", errors: parsed.error.flatten() });
-      }
-      const { currentPassword, newPassword } = parsed.data;
-
-      if (!actor!.user.email) {
-        return res.status(400).json({ message: "No email on file for password reset" });
-      }
-
-      if (currentPassword === newPassword) {
-        return res.status(400).json({ message: "New password must differ from current password" });
-      }
-
-      const anonClient = createClient(
-        process.env.SUPABASE_URL!,
-        process.env.SUPABASE_ANON_KEY!,
-        { auth: { autoRefreshToken: false, persistSession: false } },
-      );
-
-      const { error: signInError } = await anonClient.auth.signInWithPassword({
-        email: actor!.user.email,
-        password: currentPassword,
-      });
-
-      if (signInError) {
-        return res.status(401).json({ message: "Current password is incorrect" });
-      }
-
-      const admin = getSupabaseAdmin();
-      const { error: updateError } = await admin.auth.admin.updateUserById(actor!.user.userId, { password: newPassword });
-
-      if (updateError) {
-        return res.status(500).json({ message: "Failed to update password" });
-      }
-
-      res.json({ success: true });
-    } catch (err) {
-      console.error("[POST /api/xpot/me/change-password]", err);
-      res.status(500).json({ message: "Internal server error" });
-    }
-  });
+  router.post('/me/change-password', (_req, res) => res.status(410).json({ code: 'passwordless_login_required' }));
 
   return router;
 }

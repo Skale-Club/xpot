@@ -1958,6 +1958,7 @@ interface BatchRow {
   face: string | null; vendor: string | null; quantity: number; status: string; code_source: string; print_job_id: string | null;
   notes: string | null; created_at: Date; tag_count: number; pending_count: number; house_count: number; hand_out_count: number;
   with_resellers_count: number; sold_count: number; damaged_count: number; active_count: number; nfc_verified_count: number;
+  retired_count: number;
   last_production_action: string | null; organization_id: number; organization_name: string | null;
   print_job_status: string | null; print_job_error: string | null;
 }
@@ -1967,6 +1968,7 @@ const BATCH_SELECT = sql`
     b.status, b.code_source, b.print_job_id, b.notes, b.created_at, b.created_by_user_id, b.updated_at,
     count(t.id)::int AS tag_count,
     ${countMetricSql("notReceived")} AS pending_count,
+    count(t.id) FILTER (WHERE t.stock_status = 'retired')::int AS retired_count,
     count(t.id) FILTER (WHERE ${stockMetricSql("house")} AND t.organization_id = b.organization_id)::int AS house_count,
     count(t.id) FILTER (WHERE ${stockMetricSql("handOut")} AND t.organization_id = b.organization_id)::int AS hand_out_count,
     ${countMetricSql("withResellers")} AS with_resellers_count,
@@ -1984,6 +1986,8 @@ const BATCH_SELECT = sql`
 function batchItem(b: BatchRow): TagBatchItem {
   const tagCount = Number(b.tag_count);
   const pendingCount = Number(b.pending_count);
+  // A retired code never became a piece (its plate was cancelled or printed again with fresh codes).
+  const retiredCount = Number(b.retired_count ?? 0);
   return {
     id: b.id,
     batchCode: b.batch_code,
@@ -2008,7 +2012,8 @@ function batchItem(b: BatchRow): TagBatchItem {
     createdAt: iso(b.created_at)!,
     tagCount,
     pendingCount,
-    receivedCount: tagCount - pendingCount,
+    receivedCount: tagCount - pendingCount - retiredCount,
+    retiredCount,
     houseCount: Number(b.house_count),
     handOutCount: Number(b.hand_out_count),
     withResellersCount: Number(b.with_resellers_count),
@@ -2209,6 +2214,24 @@ export async function getAnalytics(scope: AnalyticsScope, from: Date, to: Date):
       leadName: t.lead_name, repName: t.rep_name, qr: Number(t.qr), nfc: Number(t.nfc),
     })),
   };
+}
+
+/**
+ * What each person holds and what they sold, within the viewer's scope. `held` is the stock they still have
+ * (available, reserved, internal use); `sold` is the pieces sold. Damaged, lost, retired and pending pieces count in
+ * neither. People with neither are absent.
+ */
+export async function countPiecesByPerson(scope: OrganizationScope): Promise<Array<{ repId: number; held: number; sold: number }>> {
+  const found = await rows<{ rep_id: number; held: number; sold: number }>(sql`
+    SELECT t.rep_id,
+           (count(*) FILTER (WHERE t.stock_status IN ('available', 'reserved', 'internal_use')))::int AS held,
+           (count(*) FILTER (WHERE t.stock_status = 'sold'))::int AS sold
+    FROM tags t
+    WHERE t.rep_id IS NOT NULL AND ${inOrganizations(sql`t.organization_id`, scope)}
+    GROUP BY t.rep_id
+    HAVING count(*) FILTER (WHERE t.stock_status IN ('available', 'reserved', 'internal_use', 'sold')) > 0
+  `);
+  return found.map((r) => ({ repId: Number(r.rep_id), held: Number(r.held), sold: Number(r.sold) }));
 }
 
 export async function getOverview(now: Date = new Date(), timezoneOffsetMinutes = 0, scope: OrganizationScope = null): Promise<TagOverview> {

@@ -3,7 +3,9 @@ import { Wifi } from "lucide-react";
 import { PieceThumb3D, PieceThumbLoader, usePieceModel } from "@/components/xpot/PieceThumb3D";
 import { TagFaceIcon } from "@/components/xpot/TagFaceIcon";
 import { useT } from "@/i18n";
+import { productionBoardMessages } from "@/i18n/messages/productionBoard";
 import { tagsMessages } from "@/i18n/messages/tags";
+import { shortModelText, shortSizeText, themeChipLook, type TagChipText } from "./tagChips";
 
 const PLAQUE_PRODUCT_TYPES = new Set([
   "large_stand",
@@ -91,47 +93,104 @@ export function tagPlaqueSpec(
   return { size: plaqueSize(productType, batchCode), model: plaqueModel(productType, face) };
 }
 
+/** Every pill of a piece is this shape, whatever it says. */
+const CHIP = "inline-flex h-4 items-center rounded px-1 text-[10px] font-bold uppercase leading-none tracking-wide";
+/** A pill with one letter or none, square. */
+const CHIP_SQUARE = "w-4 justify-center px-0";
+
+const THEME_LOOK = {
+  black: "bg-black text-white ring-1 ring-white/25",
+  white: "bg-white text-zinc-900",
+  mixed: "bg-white/10 text-white/70",
+  neutral: "bg-white/10 text-white/70",
+} as const;
+
+/** A colour's name in the language in use ("black", "white", "mixed"); any other value as it is. */
+export function useThemeName() {
+  const b = useT(productionBoardMessages);
+  return (value: string) => {
+    const key = value.trim().toLowerCase();
+    if (key === "mixed") return b("themeName_mixed");
+    return key === "white" || key === "black" ? b(`theme_${key}` as "theme_white") : value;
+  };
+}
+
 /**
- * Model and size as compact chips ("STAND" plus a coloured "L" or "S"), kept
- * beside the plaque drawing rather than on it. Products that are not plaques
- * show `fallback`.
+ * A piece's colour as a pill: its name ("BLACK"), or with `text="short"` a square of the colour itself, because the
+ * first letters of the names collide between languages. `label` gives a colour a name of its own.
+ */
+export function TagThemeChip({ theme, text = "long", label, className = "" }: { theme: string; text?: TagChipText; label?: string; className?: string }) {
+  const themeName = useThemeName();
+  const name = label ?? themeName(theme);
+  const look = themeChipLook(theme);
+  if (text === "short") {
+    return (
+      <span
+        className={`${CHIP} ${CHIP_SQUARE} ${THEME_LOOK[look]} ${className}`}
+        style={look === "mixed" ? { background: "linear-gradient(135deg, #fff 50%, #000 50%)" } : undefined}
+        title={name}
+        aria-label={name}
+        role="img"
+        data-testid="tag-theme-chip"
+      />
+    );
+  }
+  return <span className={`${CHIP} ${THEME_LOOK[look]} ${className}`} data-testid="tag-theme-chip">{name}</span>;
+}
+
+/**
+ * The piece's pills, the one template of the whole app: model ("STAND"), size ("L") and, when it is known, colour
+ * ("BLACK"). The look never changes; each place picks how much each pill writes: `modelText="short"` is "ST",
+ * `sizeText="long"` is "LARGE", `themeText="short"` a square of the colour. Products that are not plaques show `fallback`.
  */
 export function TagModelChips({
   productType,
   face,
   batchCode,
+  theme,
+  modelText = "long",
+  sizeText = "short",
+  themeText = "long",
   fallback,
   className = "",
 }: {
   productType: string;
   face: string | null | undefined;
   batchCode?: string | null;
+  theme?: string | null;
+  modelText?: TagChipText;
+  sizeText?: TagChipText;
+  themeText?: TagChipText;
   fallback?: ReactNode;
   className?: string;
 }) {
   const t = useT(tagsMessages);
   const { size, model } = tagPlaqueSpec(productType, face, batchCode);
-  const chip = "inline-flex h-4 items-center rounded px-1 text-[10px] font-bold uppercase leading-none tracking-wide";
+  const colour = theme ? <TagThemeChip theme={theme} text={themeText} /> : null;
   if (!size && !model) {
     return (
-      <span className={`${chip} bg-white/10 text-white/75 ring-1 ring-white/15 ${className}`} data-testid="tag-model-chips">
-        {fallback ?? t(`product_${productType}` as "product_custom")}
+      <span className={`inline-flex items-center gap-1 align-middle ${className}`} data-testid="tag-model-chips">
+        <span className={`${CHIP} bg-white/10 text-white/75 ring-1 ring-white/15`}>{fallback ?? t(`product_${productType}` as "product_custom")}</span>
+        {colour}
       </span>
     );
   }
+  const modelName = model ? t(`plaqueModel_${model}`) : "";
+  const sizeName = size ? t(`plaqueSize_${size}`) : "";
   return (
     <span className={`inline-flex items-center gap-1 align-middle ${className}`} data-testid="tag-model-chips">
-      {model ? <span className={`${chip} bg-white/[0.08] text-white/70`}>{t(`plaqueModel_${model}`)}</span> : null}
+      {model ? <span className={`${CHIP} bg-white/[0.08] text-white/70`} title={modelText === "short" ? modelName : undefined} aria-label={modelText === "short" ? modelName : undefined}>{modelText === "short" ? shortModelText(modelName) : modelName}</span> : null}
       {/* A size, not a state: Large in the Tags accent, Small neutral (amber would read as "needs a step"). */}
       {size ? (
         <span
-          className={`${chip} w-4 justify-center px-0 ${size === "Large" ? "bg-violet-500/20 text-violet-200" : "bg-white/10 text-white/70"}`}
-          title={t(`plaqueSize_${size}`)}
-          aria-label={t(`plaqueSize_${size}`)}
+          className={`${CHIP} ${sizeText === "short" ? CHIP_SQUARE : ""} ${size === "Large" ? "bg-violet-500/20 text-violet-200" : "bg-white/10 text-white/70"}`}
+          title={sizeText === "short" ? sizeName : undefined}
+          aria-label={sizeText === "short" ? sizeName : undefined}
         >
-          {t(`plaqueSize_${size}`).charAt(0)}
+          {sizeText === "short" ? shortSizeText(sizeName) : sizeName}
         </span>
       ) : null}
+      {colour}
     </span>
   );
 }
@@ -308,10 +367,13 @@ export function TagProductThumbnail({
   const model = plaqueModel(productType, face);
   const stand = model === "Stand";
   const plate = model === "Plate";
-  const dark = /^(black|preto|preta|negro|negra)(?:$|[\s_-])/i.test(theme?.trim() ?? "");
+  const colouredBody: Record<string, string> = { navy: "#16324F", forest: "#164A3B", burgundy: "#702C3E", sand: "#DCCDB3" };
+  const bodyColour = colouredBody[theme?.trim().toLowerCase() ?? ""];
+  const dark = /^(black|preto|preta|negro|negra|navy|forest|burgundy)(?:$|[\s_-])/i.test(theme?.trim() ?? "");
   return (
     <span className={`inline-flex shrink-0 flex-col items-center ${className}`} aria-hidden="true">
       <span
+        style={bodyColour ? { background: bodyColour } : undefined}
         className={`flex flex-col items-center ${dark ? "bg-gradient-to-b from-neutral-700 to-neutral-900 text-white ring-1 ring-white/20" : "bg-gradient-to-b from-white to-[#ecebe7] text-neutral-800"} shadow-[0_1px_3px_rgba(0,0,0,0.35)] ${plate ? s.plateBody : s.body} ${stand ? s.standCorners : s.corners}`}
       >
         <span className="flex w-full items-center justify-between">

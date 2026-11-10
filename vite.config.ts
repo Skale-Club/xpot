@@ -72,5 +72,12 @@ export default defineConfig({
     // server (see server/vite.ts), so everything runs on one port — there is no
     // standalone dev port or /api proxy to configure here.
     fs: { strict: true, deny: ["**/.*"] },
+    // Nothing outside the project is watched, whatever asks for it: watching the whole disk stops the server.
+    watch: {
+      ignored: (file: string) => {
+        const relative = path.relative(import.meta.dirname, file);
+        return relative.startsWith("..") || path.isAbsolute(relative);
+      },
+    },
   },
 });

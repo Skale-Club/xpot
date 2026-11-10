@@ -15,7 +15,6 @@ import { useToast } from "@/hooks/use-toast";
 import { useT } from "@/i18n";
 import { commonMessages } from "@/i18n/messages/common";
 import { productionMessages } from "@/i18n/messages/production";
-import { productionBoardMessages } from "@/i18n/messages/productionBoard";
 import { unifiedProductionMessages } from "@/i18n/messages/unifiedProduction";
 import { errorMessage, invalidateAdminTags, sendJson } from "./api";
 import { catalogOptions, useTagCatalog } from "./batches-shared";
@@ -32,19 +31,18 @@ import { PendingBatches } from "./production-pending-batches";
 import { batchPrefixFromTitle, canPrintModel, orderedPath, productionPath, productionTabFor, slugFromTitle } from "./production-workflow";
 import { ProductionIdentity, useModelName } from "./production-identity";
 
-// Manage › Production (the Xpot admin's, docs/PRINT_EXECUTION_PLAN.md). The first screen is the board
-// (production-board.tsx): always-ready pieces to download, pieces to generate and the plates waiting to print. Then
-// the catalog of models. Paths: /admin/tags/production[/queue | /models[/<slug>] | /jobs/<id> |
-// /batches/<id>] (/queue is the full orders list, history included, reached from the board's "All orders"; it lights Produce) (marking a plate printed puts its pieces in stock, so there is no receiving list).
+// The Production panel's views (docs/PANELS_EXECUTION_PLAN.md). Each has its own URL and its own item of the menu
+// (components/xpot/moduleNav.ts): Make is one screen (production-board.tsx): what to print on one side, and on the other
+// the queue of what was sent to print, to mark printed. Models is a view of its own. Paths:
+// /admin/tags/production[/queue | /models[/<slug>] | /jobs/<id> | /batches/<id>] (/queue is the full orders list, history
+// included, reached from the queue's "All orders"; it lights Make. The old /printing link opens the one screen) (marking
+// a plate printed puts its pieces in stock, so there is no receiving list).
 // A printing branch's Rep Admin sees the same page for that branch: generating and printing its pieces, without
 // always-ready parts, supplier batches or editing models (useProductionAccess; the server scopes every call).
 
 type Go = (path: string) => void;
 
 export function ProductionTab({ rest, go }: { rest: string[]; go: Go }) {
-  const t = useT(productionMessages);
-  const u = useT(unifiedProductionMessages);
-  const b = useT(productionBoardMessages);
   const { isAdmin } = useProductionAccess();
   // Supplier codes and pieces that already have codes: the wizard's other ways, behind a small link on the board.
   const [external, setExternal] = useState(false);
@@ -55,23 +53,11 @@ export function ProductionTab({ rest, go }: { rest: string[]; go: Go }) {
   if (view === "jobs" && id) return <PrintJobPage id={id} go={navigate} />;
   if (view === "batches" && id) return <BatchDetail id={id} go={navigate} />;
   const tab = productionTabFor(view);
-  // The lists behind the board have no tabs: a way back and their own name.
+  // The lists behind the board: a way back and their own name.
   if (view === "batches" && params.get("pending") === "1") return <div className="space-y-4" data-testid="admin-production"><PendingBatches go={navigate} /></div>;
   if (view === "queue") return <div className="space-y-4" data-testid="admin-production"><QueueView go={navigate} /></div>;
   return (
     <div className="space-y-4" data-testid="admin-production">
-      <Tabs
-        tabs={[
-          { id: "board", label: b("produce"), testId: "production-tab-board" },
-          { id: "catalog", label: u("models"), testId: "production-tab-catalog" },
-        ]}
-        value={tab}
-        onChange={(next) => navigate(next === "catalog" ? `${PRODUCTION_BASE}/models` : PRODUCTION_BASE)}
-        ariaLabel={t("productionNav")}
-        idPrefix="production"
-        fill={false}
-        accent="tags"
-      />
       {tab === "catalog" ? <CatalogView go={navigate} /> : <ProductionBoard go={navigate} onOtherWays={isAdmin ? () => setExternal(true) : undefined} />}
       {external ? <ProductionWizard external onClose={() => setExternal(false)} onCreated={(batchId) => navigate(`/batches/${batchId}?tab=receive`)} /> : null}
     </div>
@@ -177,7 +163,6 @@ function ModelCard({ model, onOpen, onPrint }: { model: PrintModelItem; onOpen: 
           <ProductionIdentity model={model} />
           <span className="flex flex-wrap items-center gap-1.5 text-xs text-white/45">
             {badge}
-            {model.lowStock ? <Pill tone="amber">{t("lowStock", { count: model.partReorderAt ?? 0 })}</Pill> : null}
             {model.onHand > 0 ? <span>{t("onHand", { count: model.onHand })}</span> : null}
             {model.openJobs ? <span>{t.plural("openOrders", model.openJobs)}</span> : null}
           </span>

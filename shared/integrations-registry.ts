@@ -12,7 +12,7 @@
 export type IntegrationTable = "chat" | "settings";
 
 /** Field keys stored in the `config` jsonb column of integration_settings (no dedicated column). */
-export const CONFIG_FIELD_KEYS = ["accountSid", "fromNumber", "messagingServiceSid"] as const;
+export const CONFIG_FIELD_KEYS = ["accountSid", "fromNumber", "messagingServiceSid", "coursesDatabaseId", "lessonsDatabaseId"] as const;
 export type ConfigFieldKey = (typeof CONFIG_FIELD_KEYS)[number];
 
 export function isConfigFieldKey(key: string): key is ConfigFieldKey {
@@ -37,7 +37,7 @@ export interface IntegrationProviderDef {
   description: string;
   table: IntegrationTable;
   /** "Used for" badge in the UI. */
-  category: "Maps" | "Voice" | "AI" | "Pipeline" | "Messaging";
+  category: "Maps" | "Voice" | "AI" | "Pipeline" | "Messaging" | "Content";
   fields: IntegrationFieldDef[];
   /** Primary or fallback for its job (voice transcription, AI text): shown as a hint on the card. */
   role?: "primary" | "fallback";
@@ -65,7 +65,7 @@ export const INTEGRATION_PROVIDERS: IntegrationProviderDef[] = [
   },
   {
     provider: "groq",
-    label: "Groq — Whisper (voice)",
+    label: "Groq: Whisper (voice)",
     description: "Primary for visit voice notes: turns the recording into text.",
     table: "chat",
     category: "Voice",
@@ -74,7 +74,7 @@ export const INTEGRATION_PROVIDERS: IntegrationProviderDef[] = [
   },
   {
     provider: "openai",
-    label: "OpenAI — Whisper (voice fallback)",
+    label: "OpenAI: Whisper (voice fallback)",
     description: "Fallback for visit voice notes: used when Groq is off or fails.",
     table: "chat",
     category: "Voice",
@@ -83,7 +83,7 @@ export const INTEGRATION_PROVIDERS: IntegrationProviderDef[] = [
   },
   {
     provider: "openrouter",
-    label: "OpenRouter — LLM",
+    label: "OpenRouter: LLM",
     description: "Primary for AI text: visit summaries and suggested follow-ups.",
     table: "chat",
     category: "AI",
@@ -114,7 +114,7 @@ export const INTEGRATION_PROVIDERS: IntegrationProviderDef[] = [
   },
   {
     provider: "gemini",
-    label: "Gemini — LLM (fallback)",
+    label: "Gemini: LLM (fallback)",
     description: "Fallback for AI text: used when OpenRouter is off or has no key.",
     table: "chat",
     category: "AI",
@@ -163,8 +163,21 @@ export const INTEGRATION_PROVIDERS: IntegrationProviderDef[] = [
     fields: [
       { key: "accountSid", label: "Account SID", placeholder: "AC..." },
       { key: "apiKey", label: "Auth Token", secret: true },
-      { key: "fromNumber", label: "From number (E.164)", placeholder: "+15085550100", optional: true },
+      { key: "fromNumber", label: "From number (E.164)", placeholder: "+10000000000", optional: true },
       { key: "messagingServiceSid", label: "Messaging Service SID", placeholder: "MG...", optional: true },
+    ],
+  },
+  {
+    provider: "notion",
+    label: "Notion (Academy)",
+    description: "Courses and lessons of the in-app Academy. Needs an integration token and the ids of the Courses and Lessons databases.",
+    table: "settings",
+    category: "Content",
+    envMode: "fallback",
+    fields: [
+      { key: "apiKey", label: "Integration token", secret: true, placeholder: "ntn_..." },
+      { key: "coursesDatabaseId", label: "Courses database ID" },
+      { key: "lessonsDatabaseId", label: "Lessons database ID" },
     ],
   },
 ];
@@ -205,7 +218,8 @@ export type IntegrationProblemCode =
   | "missing_location_id"
   | "missing_account_sid"
   | "missing_auth_token"
-  | "missing_sender";
+  | "missing_sender"
+  | "missing_database";
 
 const PROBLEM_MESSAGES: Record<IntegrationProblemCode, string> = {
   missing_api_key: "No API key on file, so calls will fail. Paste a key and click Save.",
@@ -213,6 +227,7 @@ const PROBLEM_MESSAGES: Record<IntegrationProblemCode, string> = {
   missing_account_sid: "Account SID is missing.",
   missing_auth_token: "Auth Token is missing.",
   missing_sender: "Set a From number or a Messaging Service SID.",
+  missing_database: "Set both database IDs (Courses and Lessons).",
 };
 
 type ProblemState = { hasApiKey: boolean; config: Partial<Record<ConfigFieldKey, string>>; locationId?: string | null };
@@ -226,6 +241,7 @@ export function integrationProblemCode(provider: string, state: ProblemState): I
     return null;
   }
   if (!state.hasApiKey) return "missing_api_key";
+  if (provider === "notion" && (!state.config.coursesDatabaseId || !state.config.lessonsDatabaseId)) return "missing_database";
   if (provider === "gohighlevel" && !state.locationId?.trim()) return "missing_location_id";
   return null;
 }
@@ -262,7 +278,7 @@ export function integrationStatusKey(s: Pick<IntegrationStatus, "enabled" | "pro
 // (server/observability/services.ts), so the two screens never disagree.
 
 /** The job a service does, in the order the Integrations page shows them. */
-export const SERVICE_JOBS = ["signIn", "maps", "voice", "ai", "crm", "assistants", "infra"] as const;
+export const SERVICE_JOBS = ["signIn", "maps", "voice", "ai", "crm", "content", "assistants", "infra"] as const;
 export type ServiceJob = (typeof SERVICE_JOBS)[number];
 
 /** Services that live only in the server environment: shown, never edited, values never sent. */
@@ -279,6 +295,7 @@ export const SERVICES_BY_JOB: Record<ServiceJob, readonly string[]> = {
   voice: ["groq", "openai"],
   ai: ["openrouter", "gemini"],
   crm: ["xphere", "gohighlevel"],
+  content: ["notion"],
   assistants: ["mcp"],
   infra: INFRA_SERVICES,
 };

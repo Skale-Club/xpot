@@ -211,7 +211,7 @@ export function XpotVisits({ basePath = "/dashboard/history" }: { basePath?: str
     <div className="space-y-4">
       <FilterBar
         testId="visits-filters"
-        controls={<>
+        controls={<div className="col-span-2 flex min-w-0 flex-1 flex-wrap items-center gap-2">
           <FilterToggle
             pressed={viewMode === "day"}
             onChange={(on) => filters.set({ view: on ? "day" : "all", day: on ? filters.values.day : null })}
@@ -239,20 +239,20 @@ export function XpotVisits({ basePath = "/dashboard/history" }: { basePath?: str
               testId="visits-filter-seller"
             />
           ) : null}
-        </>}
-        secondary={
-          <div className="space-y-2.5">
-            {viewMode === "day" ? (
+          {viewMode === "day" ? (
+            <div className="min-w-0 basis-full sm:basis-auto">
               <FilterDay
                 value={selectedDate}
                 onChange={(next) => filters.set({ day: toDayKey(next) === toDayKey(new Date()) ? null : toDayKey(next) })}
                 counts={countsByDay}
                 detail={t.plural("visitCount", visitsForDay.length)}
               />
-            ) : null}
+            </div>
+          ) : null}
+          <div className="min-w-0 flex-1 basis-[20rem]">
             <FilterChips items={statusChips} value={statusFilter} onChange={(status) => filters.set({ status })} ariaLabel={t("filterByStatus")} />
           </div>
-        }
+        </div>}
         summary={{
           shown: visitsToRender.length,
           total: viewVisits.length,

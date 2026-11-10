@@ -22,7 +22,8 @@ import type {
 } from "@shared/customerOrdersApi";
 import { TAG_PRODUCT_TYPES } from "@shared/tags";
 import { TAG_FACES } from "@shared/tagFace";
-import { PRINT_DEFAULT_NFC_MOUNT, PRINT_MAX_PLATES, PRINT_NFC_MOUNTS } from "@shared/printProduction";
+import { PRINT_DEFAULT_NFC_MOUNT, PRINT_NFC_MOUNTS, type PrintNfcMount } from "@shared/printProduction";
+import { NfcMountChoice } from "@/pages/admin/tags/production-nfc";
 import { tagsMessages } from "@/i18n/messages/tags";
 import { TagPieceVisual } from "@/components/xpot/TagProductThumbnail";
 import { useXpotModules } from "@/components/ModuleSwitch";
@@ -81,6 +82,7 @@ async function api<T>(url: string, body?: unknown, key?: string): Promise<T> {
 function errorText(error: unknown, t: T) {
   const code = error instanceof RequestError ? error.code : "";
   if (code === "order_revision_conflict") return t("conflict");
+  if (code === "order_production_pending") return t("productionPending");
   if (/forbidden|owner_required|not_found/.test(code)) return t("forbidden");
   if (/credit|payment|cost_required/.test(code)) return t("moneyError");
   if (/design_locked|release_before|price_locked/.test(code))
@@ -823,6 +825,7 @@ function OrderDetail({ id }: { id: string }) {
                         <Button
                           disabled={
                             !order.sellerActive ||
+                            line.pending > 0 ||
                             (line.custom === "custom" &&
                               (!line.approved || !line.modelId))
                           }
@@ -1221,6 +1224,7 @@ function ActionForm({
 }) {
   const { kind, line } = action;
   const nfc = useT(printNfcMessages);
+  const [nfcMount, setNfcMount] = useState<PrintNfcMount>(PRINT_DEFAULT_NFC_MOUNT);
   const formRef = useRef<HTMLFormElement>(null);
   useEffect(() => {
     formRef.current?.scrollIntoView({ block: "nearest" });
@@ -1382,27 +1386,24 @@ function ActionForm({
           <p className="text-sm text-white/55">
             {line?.description} · {t("missing")}: {line?.toProduce}
           </p>
+          <p className="text-sm text-white/55">{t("onePlate", { max: line?.plateCapacity ?? 1 })}</p>
           <Field label={t("quantity")}>
             <input
               required
               name="quantity"
               type="number"
               min={1}
-              max={Math.min(line!.toProduce, PRINT_MAX_PLATES)}
-              defaultValue={Math.min(line!.toProduce, PRINT_MAX_PLATES)}
+              max={Math.min(line!.toProduce, line!.plateCapacity ?? 1)}
+              defaultValue={Math.min(line!.toProduce, line!.plateCapacity ?? 1)}
               className={INPUT}
             />
           </Field>
           {line?.custom !== "custom" && (
-            <Field label={nfc("question")}>
-              <select name="nfcMount" defaultValue={PRINT_DEFAULT_NFC_MOUNT} className={INPUT}>
-                {PRINT_NFC_MOUNTS.map((mount) => (
-                  <option key={mount} value={mount}>
-                    {nfc(`name_${mount}` as "name_sticker_round_25")}
-                  </option>
-                ))}
-              </select>
-            </Field>
+            <div className="space-y-2">
+              <p className="text-sm text-white/70">{nfc("question")}</p>
+              <input type="hidden" name="nfcMount" value={nfcMount} />
+              <NfcMountChoice mounts={PRINT_NFC_MOUNTS} value={nfcMount} onChange={setNfcMount} />
+            </div>
           )}
         </>
       )}

@@ -56,6 +56,8 @@ interface BatchDetailData {
   tagCount: number;
   pendingCount: number;
   receivedCount: number;
+  /** Codes retired before they became pieces (shared/tagsApi.ts TagBatchItem). */
+  retiredCount: number;
   notes: string | null;
   createdAt: string;
   updatedAt?: string;
@@ -310,9 +312,10 @@ export function BatchDetail({ id, go }: { id: string; go: (path: string) => void
   // A batch from a print job is named after the piece and its place in the request: the name it was filed under says how it was ordered.
   const parsed = parseBatchName(batch.name);
   const colour = parsed.title.split(" · ").pop()?.trim().toLowerCase() ?? "";
-  const title = fromPrint ? nameOf({ title: parsed.title, productType: batch.productType, face, theme: (PRINT_THEMES as readonly string[]).includes(colour) ? colour : null }) : batch.name;
+  const batchTheme = fromPrint && (PRINT_THEMES as readonly string[]).includes(colour) ? colour : null;
+  const title = fromPrint ? nameOf({ title: parsed.title, productType: batch.productType, face, theme: batchTheme }) : batch.name;
   const good = Math.max(batch.receivedCount - damaged, 0);
-  const receivedDetail = !total ? t("noPiecesYet") : batch.pendingCount ? tf.plural("stillToReceive", batch.pendingCount) : damaged ? tf.plural("goodAndDamaged", damaged) : tf("allReceived");
+  const receivedDetail = !total ? t("noPiecesYet") : !batch.receivedCount && batch.retiredCount ? tf.plural("neverPrinted", batch.retiredCount) : batch.pendingCount ? tf.plural("stillToReceive", batch.pendingCount) : damaged ? tf.plural("goodAndDamaged", damaged) : tf("allReceived");
   const needsReceiving = !fromPrint && batch.status === "open" && (batch.pendingCount > 0 || total === 0);
 
   const closing = batch.status === "open";
@@ -350,7 +353,7 @@ export function BatchDetail({ id, go }: { id: string; go: (path: string) => void
                 {title} <span className="ml-1 whitespace-nowrap font-mono text-xs font-normal text-white/45">{batch.batchCode}</span>
               </h2>
               <p className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-white/50">
-                <TagModelChips productType={batch.productType} face={face} batchCode={batch.batchCode} />
+                <TagModelChips productType={batch.productType} face={face} batchCode={batch.batchCode} theme={batchTheme} />
                 <BatchProgressPill batch={batch} />
                 {!fromPrint && batch.status !== "open" ? <Pill tone="muted">{labels.batchStatus(batch.status)}</Pill> : null}
                 {fromPrint && parsed.plate ? <span className="whitespace-nowrap">{tp("plateOf", { number: parsed.plate.number, total: parsed.plate.total })}</span> : null}

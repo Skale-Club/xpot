@@ -54,6 +54,11 @@ export function useUrlFilters<K extends string>(defaults: Record<K, string>) {
 }
 
 /** The current query string, to carry the filters along when opening a row. */
-export function currentSearch(): string {
-  return typeof window === "undefined" ? "" : window.location.search;
+export function currentSearch(omit: readonly string[] = []): string {
+  if (typeof window === "undefined") return "";
+  if (omit.length === 0) return window.location.search;
+  const params = new URLSearchParams(window.location.search);
+  for (const key of omit) params.delete(key);
+  const search = params.toString();
+  return search ? `?${search}` : "";
 }

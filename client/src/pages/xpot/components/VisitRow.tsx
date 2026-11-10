@@ -224,7 +224,7 @@ export function VisitSummaryPage({ visit, onBack, onDelete }: { visit: VisitLike
       {/* The sales tile only when something was sold: "$0.00 · 0 sales" on every visit said nothing. */}
       <div className={`grid overflow-hidden rounded-2xl sm:grid-cols-2 ${hasSale ? "xl:grid-cols-4" : "xl:grid-cols-3"} ${GLASS_SUBTLE_CLASS}`}>
         <VisitMetric className="border-b sm:border-r xl:border-b-0" icon={<CalendarClock className="h-3.5 w-3.5" />} label={t("checkIn")} value={formatTime(visit.checkedInAt ?? visit.scheduledAt)} />
-        <VisitMetric className="border-b xl:border-b-0 xl:border-r" icon={<CalendarClock className="h-3.5 w-3.5" />} label={t("checkOut")} value={visit.expiredAt ? "—" : formatTime(visit.checkedOutAt)} />
+        <VisitMetric className="border-b xl:border-b-0 xl:border-r" icon={<CalendarClock className="h-3.5 w-3.5" />} label={t("checkOut")} value={visit.expiredAt ? "-" : formatTime(visit.checkedOutAt)} />
         <VisitMetric className={hasSale ? "border-b sm:border-b-0 sm:border-r" : ""} icon={<Clock3 className="h-3.5 w-3.5" />} label={t("duration")} value={formatDuration(visit.durationSeconds)} />
         {hasSale ? (
           <VisitMetric icon={<DollarSign className="h-3.5 w-3.5" />} label={t("visitSales")} value={formatCents(visit.visitSales?.totalCents ?? 0)} detail={`${t.plural("visitSalesN", visit.visitSales?.transactions ?? 0)} · ${t.plural("visitItemsN", visit.visitSales?.items ?? 0)}`} />
@@ -371,7 +371,7 @@ export function VisitRow({ visit, onOpen }: { visit: VisitLike; onOpen?: () => v
         }}
         subtitle={
           <div className="text-[11px] tabular-nums text-white/40">
-            {when ? `${when.date} · ${when.time}` : "—"}
+            {when ? `${when.date} · ${when.time}` : "-"}
           </div>
         }
         right={<div className="flex flex-col items-end gap-1"><StatusBadge status={visit.status} expiredAt={visit.expiredAt} /><LocationExceptionBadge visit={visit} /><VisitNoteMarks visit={visit} /></div>}

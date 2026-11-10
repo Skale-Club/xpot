@@ -803,6 +803,15 @@ export function registerTagRoutes(app: Express) {
     }
   });
 
+  // Pieces held per person, for the chips on the stock list. Same scope as the list; counted in SQL, never from a page.
+  app.get(`${adminBase}/by-person`, requireTagManager, async (req, res) => {
+    try {
+      res.json(await repo.countPiecesByPerson(tagScopeOf(req)));
+    } catch (err) {
+      fail(res, err, "Failed to count pieces per person");
+    }
+  });
+
   // Aggregated analytics, optionally scoped to a customer, batch, reseller or product type.
   app.get(`${adminBase}/analytics`, requireTagManager, async (req, res) => {
     try {

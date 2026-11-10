@@ -40,6 +40,7 @@ import { Loading, LoadError, organizationFilterOptions, uniqueOptions, useBatchO
 import { PieceDetail } from "./PieceDetail";
 import { useTagLabels } from "./labels";
 import { PieceTable } from "./piece-table";
+import { ProductionResults } from "./production-results";
 import { AnalyticsPanel, RangePicker, useDeviceLabel, type AnalyticsRange } from "./pieces-analytics";
 import {
   ACTIVITY_FILTERS,
@@ -200,7 +201,7 @@ export function OverviewQueue({ queue, go }: { queue: TagPieceQueue; go: Go }) {
   const tc = useT(commonMessages);
   const [, navigate] = useLocation();
   const card = pieceQueueCard(queue);
-  const { canManage } = useViewerAccess();
+  const { canManage, profile } = useViewerAccess();
   const { data: organizations = [] } = useOrganizations(canManage);
   const filters = useUrlFilters({ org: "" });
   const org = filters.values.org;
@@ -254,7 +255,7 @@ export function OverviewQueue({ queue, go }: { queue: TagPieceQueue; go: Go }) {
   );
   return (
     <div className="min-w-0 space-y-4" data-testid={`admin-tags-queue-${queue}`}>
-      <BackLink onBack={() => navigate("/admin")}>{tw("todayTitle")}</BackLink>
+      <BackLink onBack={() => navigate("/admin")}>{tw(profile === "owner" ? "companyOverview" : "todayTitle")}</BackLink>
       {isDesktop ? (
         <MasterDetail popup closeLabel={tc("close")} onClose={() => setPane(null)} list={list} detail={paneId ? <PieceDetail key={paneId} id={paneId} go={go} onClose={() => setPane(null)} /> : null} />
       ) : (
@@ -290,6 +291,7 @@ export function OverviewTab({ go }: { go: Go }) {
 
   return (
     <div className="min-w-0 space-y-4" data-testid="admin-tags-overview">
+      <ProductionResults activated={data.counts.active} />
       <FleetAnalytics go={go} />
       <ActivityFeed overview={data} go={go} />
     </div>

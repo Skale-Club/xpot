@@ -40,6 +40,7 @@ import { backLeavesSection } from "@/lib/inAppHistory";
 import { GLASS_CLASS } from "@/components/xpot/surface";
 import { EmptyState } from "@/components/xpot/EmptyState";
 import { ListSkeleton } from "@/components/xpot/ListSkeleton";
+import { PageHeader } from "@/components/xpot/PageHeader";
 import { RetryButton } from "@/components/xpot/RetryButton";
 import { FilterBar, FilterChips, FilterDay, FilterSearch, FilterSelect, FilterToggle, fromDayKey, toDayKey } from "@/components/xpot/filters";
 import { currentSearch, useUrlFilters } from "@/hooks/use-url-filters";
@@ -208,7 +209,7 @@ export function XpotLeads() {
   const tc = useT(commonMessages);
   const deletionText = useLeadDeletionText();
   const { setLocation, me } = useXpotQueries();
-  // The panel is for looking at the portfolio, My work is for working it: the first tab is named for that.
+  // The management panel supplies its own page heading.
   const inPanel = useRouter().base.startsWith("/admin");
   const activeVisitLeadId = me?.activeVisit?.leadId ?? null;
   const checkIn = (lead: FullSalesLead) => setLocation(`/route/check-in?leadId=${lead.id}`);
@@ -220,7 +221,7 @@ export function XpotLeads() {
   const queryClient = useQueryClient();
   const isDesktop = useIsDesktop();
   // Management mode: the piece chips count every rep's pieces (getLeadTagSummaries).
-  const { canManage, adminMode } = useViewerAccess();
+  const { canManage } = useViewerAccess();
   const [routeMatch, routeParams] = useRoute("/leads/:id");
   const routeId = routeMatch && /^\d+$/.test(routeParams.id) ? Number(routeParams.id) : null;
   // ?status=customer&day=2026-10-12&q=bakery&org=4 — survives reloads and opening a company.
@@ -233,7 +234,7 @@ export function XpotLeads() {
   const toVisitTab = filters.values.status === "prospect";
   const leadFilter: LeadFilter = (LEAD_FILTERS as readonly string[]).includes(filters.values.status) ? (filters.values.status as LeadFilter) : "all";
   const search = filters.values.q;
-  const day = fromDayKey(filters.values.day);
+  const day = toVisitTab ? null : fromDayKey(filters.values.day);
   // Selling from the company card, outside any visit — the second entry point.
   const [salesLead, setSalesLead] = useState<FullSalesLead | null>(null);
   const [leadPendingDelete, setLeadPendingDelete] = useState<FullSalesLead | null>(null);
@@ -400,17 +401,50 @@ export function XpotLeads() {
     count: worked.filter((lead) => matchesLeadFilter(lead, id, lastOutcomeFor(lead.id))).length,
   }));
   const companyTabs = [
-    // "My companies" is the owner's organizations; this tab is the saved companies: the person's own, or in the panel everyone's in scope.
-    { id: "mine", label: t(adminMode ? "tabAllCompanies" : "tabMine"), count: worked.length },
+    { id: "mine", label: t("tabPortfolio"), count: worked.length },
     { id: "tovisit", label: t("tabProspects"), count: narrow(prospects).length },
   ];
   const nothingSaved = !leadsQuery.isLoading && !leadsQuery.isError && allLeads.length === 0;
 
+  const companyViewSwitch = (
+    <Segmented
+      ariaLabel={t("tabLeads")}
+      className="w-full lg:w-80"
+      itemClassName="min-h-10 px-3"
+      value={toVisitTab ? "tovisit" : "mine"}
+      onChange={(tab) => filters.set({ status: tab === "tovisit" ? "prospect" : null, ...(tab === "tovisit" ? { day: null } : {}) })}
+      items={companyTabs}
+    />
+  );
+  const newCompanyButton = (
+    <Button
+      type="button"
+      variant="brand"
+      onClick={() => openAdd()}
+      data-shortcut="new"
+      className="shrink-0"
+    >
+      <Plus aria-hidden="true" /> {t("newLead")}
+    </Button>
+  );
+
   const filterBar = (
+    <div className="space-y-4">
+      {inPanel || isDesktop ? (
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          {companyViewSwitch}
+          {newCompanyButton}
+        </div>
+      ) : (
+        <>
+          <PageHeader safeArea={false} className="!mb-0 !items-center [&>div:last-child]:pt-0 [&_h1]:mt-0" accent="visits" title={t("tabLeads")} actions={newCompanyButton} />
+          {companyViewSwitch}
+        </>
+      )}
     <FilterBar
       testId="leads-filters"
       search={<FilterSearch value={search} onChange={(q) => filters.set({ q })} placeholder={t("searchLeads")} />}
-      controls={
+      controls={!toVisitTab || (canManage && organizationOptions.length > 0) ? (
         <>
           {canManage && organizationOptions.length > 0 ? (
             <FilterSelect
@@ -422,31 +456,22 @@ export function XpotLeads() {
               testId="leads-filter-organization"
             />
           ) : null}
-          <FilterToggle
+          {toVisitTab ? null : <FilterToggle
             pressed={Boolean(day)}
             onChange={(on) => filters.set({ day: on ? toDayKey(new Date()) : null })}
-            label={t("filterDate")}
+            label={t("filterVisitDate")}
             icon={CalendarDays}
             testId="leads-filter-day"
-          />
+          />}
         </>
-      }
-      actions={
-        <Button
-          type="button"
-          variant="brand"
-          onClick={() => openAdd()}
-          title={t("newLead")}
-          aria-label={t("newLead")}
-          data-shortcut="new"
-          className="w-11 shrink-0 px-0 lg:w-auto lg:px-4"
-        >
-          <Plus aria-hidden="true" />
-          <span className="hidden lg:inline">{t("newLead")}</span>
-        </Button>
-      }
-      secondary={
-        <div className="space-y-2.5">
+      ) : undefined}
+      secondary={!toVisitTab || day ? (
+        <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-3 border-t border-white/[0.06] pt-3">
+          {toVisitTab ? null : (
+            <div className="w-full min-w-0 lg:w-auto">
+              <FilterChips layout="grid" items={filterChips} value={leadFilter} onChange={(status) => filters.set({ status })} ariaLabel={t("filterByStatus")} />
+            </div>
+          )}
           {day ? (
             <FilterDay
               value={day}
@@ -455,19 +480,16 @@ export function XpotLeads() {
               detail={t.plural("companyCount", displayList.length)}
             />
           ) : null}
-          <Segmented
-            ariaLabel={t("tabLeads")}
-            className="w-full lg:max-w-md"
-            itemClassName="min-h-10 px-1"
-            value={toVisitTab ? "tovisit" : "mine"}
-            onChange={(tab) => filters.set({ status: tab === "tovisit" ? "prospect" : null })}
-            items={companyTabs}
-          />
-          {toVisitTab ? null : <FilterChips items={filterChips} value={leadFilter} onChange={(status) => filters.set({ status })} ariaLabel={t("filterByStatus")} />}
         </div>
-      }
-      summary={{ shown: displayList.length, total: pool.length, active: filters.activeCount() > 0, onClear: () => filters.reset() }}
+      ) : undefined}
+      summary={{
+        shown: displayList.length,
+        total: pool.length,
+        active: filters.activeCount(["q", "org"]) > 0 || Boolean(day) || (!toVisitTab && leadFilter !== "all"),
+        onClear: () => filters.reset(toVisitTab ? ["status"] : []),
+      }}
     />
+    </div>
   );
 
   // Loading and failure come before any "nothing here" message, which used to

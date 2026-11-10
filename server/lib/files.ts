@@ -17,9 +17,8 @@
 // The prefix in each reference says where it lives, so switching backends
 // never strands a row (the migration script moves them over).
 //
-// Avatars and branding logos stay in the public "uploads" bucket: they are
-// shown all over the app chrome and on public pages, and a profile picture is
-// something the person chose to show. Avatars are deleted with the account.
+// Public avatars/branding use a separate public R2 bucket when configured;
+// legacy uploads stay readable until their references have been migrated.
 
 import { AwsClient } from "aws4fetch";
 import { getSupabaseAdmin } from "./supabase.js";
@@ -92,6 +91,8 @@ export function uploaderRepId(ref: string): number | null {
  * stored on a profile may be deleted on the rep's behalf.
  */
 export function isRepAvatarUrl(ref: string | null | undefined, repId: number): boolean {
+  const r2Key = ref ? publicR2Key(ref) : null;
+  if (r2Key) return new RegExp(`^avatars/${repId}/[A-Za-z0-9_-][A-Za-z0-9._-]*$`).test(r2Key);
   const parsed = parseRef(ref);
   if (parsed?.kind !== "legacy" || !parsed.publicPath || !process.env.SUPABASE_URL) return false;
   try {
@@ -129,8 +130,8 @@ export function parseAudioDataUrl(data: string): { buffer: Buffer; contentType: 
 
 // ─── Backends ────────────────────────────────────────────────────────────────
 
-function r2Config() {
-  const { R2_ACCOUNT_ID, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY, R2_BUCKET, R2_ENDPOINT } = process.env;
+function r2Config(env: NodeJS.ProcessEnv = process.env) {
+  const { R2_ACCOUNT_ID, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY, R2_BUCKET, R2_ENDPOINT } = env;
   if (!R2_ACCESS_KEY_ID || !R2_SECRET_ACCESS_KEY || !R2_BUCKET || !(R2_ACCOUNT_ID || R2_ENDPOINT)) return null;
   const endpoint = (R2_ENDPOINT || `https://${R2_ACCOUNT_ID}.r2.cloudflarestorage.com`).replace(/\/+$/, "");
   return { accessKeyId: R2_ACCESS_KEY_ID, secretAccessKey: R2_SECRET_ACCESS_KEY, bucket: R2_BUCKET, endpoint };
@@ -141,7 +142,7 @@ export function isR2Configured(): boolean {
 }
 
 function isSupabaseConfigured(): boolean {
-  return Boolean(process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY);
+  return process.env.NODE_ENV !== "production" && Boolean(process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY);
 }
 
 const xmlDecode = (s: string) =>
@@ -244,7 +245,7 @@ export function createSupabaseStore(bucket: string): FileStore {
 }
 
 // Tests swap the backends for in-memory doubles.
-let overrides: Partial<Record<Backend | "public", FileStore | null>> | null = null;
+let overrides: Partial<Record<Backend | "public" | "publicR2", FileStore | null>> | null = null;
 export function setFileStoresForTests(stores: typeof overrides) {
   overrides = stores;
 }
@@ -265,8 +266,80 @@ export function publicStore(): FileStore | null {
   return isSupabaseConfigured() ? createSupabaseStore(PUBLIC_BUCKET) : null;
 }
 
-/** Where new private uploads go: R2 when configured, else the private Supabase bucket. */
+const PUBLIC_KEY_PATTERN = /^(?:avatars\/\d+|branding)\/[A-Za-z0-9_-][A-Za-z0-9._-]*\.(?:png|jpe?g|webp|svg|ico|gif|avif)$/i;
+
+/** Public assets must never expose the private photo/audio bucket. */
+function publicR2Config(env: NodeJS.ProcessEnv = process.env) {
+  const bucket = env.R2_PUBLIC_BUCKET;
+  const base = env.R2_PUBLIC_BASE_URL;
+  if (!bucket && !base) return null;
+  const config = r2Config(env);
+  if (!bucket || !base || !config || bucket === config.bucket) {
+    throw new Error("Public R2 assets require a separate R2_PUBLIC_BUCKET, R2_PUBLIC_BASE_URL and complete R2 credentials.");
+  }
+  let url: URL;
+  try { url = new URL(base); }
+  catch { throw new Error("R2_PUBLIC_BASE_URL must be an HTTPS URL."); }
+  if (url.protocol !== "https:" || url.username || url.password || url.search || url.hash) {
+    throw new Error("R2_PUBLIC_BASE_URL must be an HTTPS URL without credentials, query or fragment.");
+  }
+  return { ...config, bucket, baseUrl: url.toString().replace(/\/+$/, "") };
+}
+
+/** Production cannot boot with a hidden managed-storage fallback. */
+export function assertProductionFileStores(env: NodeJS.ProcessEnv = process.env): void {
+  if (env.NODE_ENV !== "production") return;
+  if (!r2Config(env) || !publicR2Config(env)) {
+    throw new Error("Production requires private R2 storage and a separate public R2 bucket/domain.");
+  }
+}
+
+export function publicR2Store(): FileStore | null {
+  if (overrides && "publicR2" in overrides) return overrides.publicR2 ?? null;
+  const config = publicR2Config();
+  return config ? createR2Store(config) : null;
+}
+
+export function publicUploadsConfigured(): boolean {
+  return publicR2Config() !== null || isSupabaseConfigured();
+}
+
+/** Recognize only this deployment's public asset URLs, never private keys. */
+export function publicR2Key(ref: string): string | null {
+  try {
+    const config = publicR2Config();
+    if (!config) return null;
+    const url = new URL(ref);
+    const base = new URL(`${config.baseUrl}/`);
+    if (url.origin !== base.origin || !url.pathname.startsWith(base.pathname) || url.search || url.hash) return null;
+    const key = decodeURIComponent(url.pathname.slice(base.pathname.length));
+    return PUBLIC_KEY_PATTERN.test(key) ? key : null;
+  } catch { return null; }
+}
+
+/** Prefer public R2 when enabled; keep legacy reads and cleanup during rollout. */
+export async function putPublicFile(key: string, body: Uint8Array, contentType: string): Promise<string> {
+  if (!PUBLIC_KEY_PATTERN.test(key)) throw new Error("Invalid public asset key");
+  const config = publicR2Config();
+  if (config) {
+    const store = publicR2Store();
+    if (!store) throw new FileStorageUnavailableError();
+    await store.put(key, body, contentType);
+    return `${config.baseUrl}/${key.split("/").map(encodeURIComponent).join("/")}`;
+  }
+  const store = publicStore();
+  if (!store) throw new FileStorageUnavailableError();
+  await store.put(key, body, contentType);
+  return getSupabaseAdmin().storage.from(PUBLIC_BUCKET).getPublicUrl(key).data.publicUrl;
+}
+
+/**
+ * Where new private uploads go: R2 when configured, else the private Supabase bucket.
+ * R2_READ_ONLY=true (development with a read-only key to production's bucket):
+ * R2 files still open, new uploads stay in Supabase and never reach production.
+ */
 export function activeStore(): FileStore | null {
+  if (process.env.R2_READ_ONLY === "true") return storeFor("supabase");
   return storeFor("r2") ?? storeFor("supabase");
 }
 
@@ -315,9 +388,10 @@ export async function discardFiles(refs: Array<string | null | undefined>, conte
   const groups = new Map<FileStore, string[]>();
   let failed = 0;
   for (const ref of Array.from(new Set(refs.filter((r): r is string => Boolean(r))))) {
+    const publicKey = publicR2Key(ref);
     const parsed = parseRef(ref);
-    const store = parsed?.kind === "stored" ? storeFor(parsed.backend) : parsed?.publicPath ? publicStore() : null;
-    const key = parsed?.kind === "stored" ? parsed.key : parsed?.publicPath;
+    const store = publicKey ? publicR2Store() : parsed?.kind === "stored" ? storeFor(parsed.backend) : parsed?.publicPath ? publicStore() : null;
+    const key = publicKey ?? (parsed?.kind === "stored" ? parsed.key : parsed?.publicPath);
     if (!store || !key) {
       // Not ours (an external URL) or the backend is gone: nothing we can delete.
       if (parsed?.kind === "stored") {
@@ -346,7 +420,7 @@ export async function discardFiles(refs: Array<string | null | undefined>, conte
 export async function sweepRepFiles(repId: number, context: string): Promise<{ deleted: number; failed: number }> {
   let deleted = 0;
   let failed = 0;
-  const stores = [storeFor("r2"), storeFor("supabase"), publicStore()].filter((s): s is FileStore => Boolean(s));
+  const stores = [storeFor("r2"), storeFor("supabase"), publicStore(), publicR2Store()].filter((s): s is FileStore => Boolean(s));
   for (const store of stores) {
     for (const prefix of [`audio/${repId}/`, `photos/${repId}/`, `avatars/${repId}/`]) {
       try {

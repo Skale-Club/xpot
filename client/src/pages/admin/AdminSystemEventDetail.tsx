@@ -6,6 +6,7 @@ import { EmptyState, ErrorState } from "@/components/xpot/EmptyState";
 import { ListSkeleton } from "@/components/xpot/ListSkeleton";
 import { PaneBar } from "@/components/xpot/MasterDetail";
 import { BackLink } from "@/components/xpot/PageHeader";
+import { currentSearch } from "@/hooks/use-url-filters";
 import { Pill } from "@/components/xpot/StatusPill";
 import { getHttpStatus } from "@/lib/pwa";
 import { formatDateTime } from "@/lib/dates";
@@ -18,7 +19,7 @@ import { eventScreenPath } from "./platform/servicesUi";
 
 /** Context values the panel can show as plain text; nested ones keep their JSON. */
 function contextValue(value: unknown) {
-  if (value === null || value === undefined || value === "") return "—";
+  if (value === null || value === undefined || value === "") return "-";
   if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") return String(value);
   return JSON.stringify(value);
 }
@@ -41,8 +42,8 @@ export function AdminSystemEventDetail({ id, onClose, onOpen }: { id: number; on
   }, [query.data]);
 
   const back = onClose
-    ? <PaneBar fullHref={`/admin/health/events/${id}`} onClose={onClose} testId="system-event-pane" />
-    : <BackLink href="/admin/health">{t("backToHealth")}</BackLink>;
+    ? <PaneBar fullHref={`/admin/health/events/${id}${currentSearch(["event"])}`} onClose={onClose} testId="system-event-pane" />
+    : <BackLink href={`/admin/health${currentSearch(["event"])}`}>{t("backToHealth")}</BackLink>;
 
   if (query.isLoading) {
     return (
@@ -127,7 +128,7 @@ export function AdminSystemEventDetail({ id, onClose, onOpen }: { id: number; on
             {[...occurrences].sort((a, b) => b.createdAt.localeCompare(a.createdAt)).map((item) => (
               <li key={item.id} ref={item.id === event.id ? currentRef : undefined}>
                 <Link
-                  href={`/admin/health/events/${item.id}`}
+                  href={`/admin/health/events/${item.id}${currentSearch(["event"])}`}
                   onClick={(e) => {
                     // In the pane another occurrence replaces this one; a new-tab click still opens its page.
                     if (!onOpen || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button !== 0) return;

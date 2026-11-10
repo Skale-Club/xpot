@@ -64,7 +64,7 @@ export function InlineStateSelect({ label, value, onSave, placeholder }: { label
         />
       ) : (
         <button type="button" onClick={() => setEditing(true)} aria-label={label} className="block min-h-8 w-full text-left text-sm text-white/80">
-          {findUsStateCode(value) || value || <span className="italic text-white/20">—</span>}
+          {findUsStateCode(value) || value || <span className="italic text-white/20">-</span>}
         </button>
       )}
     </div>

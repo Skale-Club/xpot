@@ -302,7 +302,7 @@ function SaleDetailBody({ row, onDone }: { row: SaleWithItems; onDone: () => voi
                   options={statusOptions} />
               </Field>
               <Field label={t("method")}>
-                <Select value={paymentMethod} onChange={(v) => setPaymentMethod(v as PaymentMethod)} placeholder="—" options={methodOptions} />
+                <Select value={paymentMethod} onChange={(v) => setPaymentMethod(v as PaymentMethod)} placeholder="-" options={methodOptions} />
               </Field>
             </div>
             {paymentStatus === "partial" && (

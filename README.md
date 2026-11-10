@@ -41,13 +41,12 @@ New here? Read [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) first.
 
 - **Frontend:** React 18 + Vite + Wouter + TanStack Query + Tailwind + shadcn/ui primitives. EN/PT/ES.
 - **Backend:** Express + Drizzle ORM, sessions in Postgres (`connect-pg-simple`).
-- **Sign-in:** phone number + a 6-digit SMS code (Twilio). See "Auth model".
+- **Sign-in:** SMS through Google Identity Platform (primary), or Google. No passwords. See "Auth model" and [Google auth setup](docs/auth/google-identity.md).
 - **DB:** PostgreSQL. Production runs on a Coolify database on the Hetzner host
-  (see "Database on the Hetzner host"). Xpot's own Supabase project
-  (`Xpot`, ref `swqxxeivetzakglaphil`) keeps public Storage (avatars, the
-  branding icon) and the Auth accounts behind the legacy email sign-in and the
-  password change. Business photos and voice notes are private, on Cloudflare
-  R2 (see "Files"). Nothing is shared with Skale Club.
+  (see "Database on the Hetzner host"). Development uses a separately configured
+  Supabase PostgreSQL database. Production uses R2 for public avatars/branding
+  and private business files; Supabase Auth/Storage are disabled there.
+  See [the migration record](docs/supabase-production-exit.md) for rollout evidence.
 - **Integrations:**
   - Xphere CRM: prospects in, companies, sales and visit outcomes out. One
     connection per person, set up by the Xpot admin only: Platform › Integrations ›
@@ -55,7 +54,7 @@ New here? Read [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) first.
     are masked and can be rotated; reps have nothing to configure.
   - GoHighLevel: **Legacy** pipeline sync. It still works for accounts that use
     it, and is folded under "Legacy" in the Integrations CRM section.
-  - Twilio: SMS for sign-in codes (its card is marked "Required").
+  - Twilio: optional team notifications; sign-in SMS now comes from Google.
   - Stuscle: the store where approved reps buy kits at wholesale with a personal code.
   - Google Places: business search at check-in and address autocomplete.
   - AI: Groq Whisper transcribes visit audio (OpenAI Whisper as fallback);
@@ -79,9 +78,13 @@ npm run migrate      # Apply pending SQL migrations to the database
 
 **Integration tests** need a real Postgres, so they skip unless
 `TAGS_INTEGRATION=1` is set. Point `DATABASE_URL` at a **disposable** database:
-the tests write to it. This is what CI does (`.github/workflows/ci.yml`):
+the tests write to it. This is what CI does (`.github/workflows/ci.yml`). On a machine whose `.env` says
+`NODE_ENV=development`, set `NODE_ENV=test` too: development always migrates `DEV_DATABASE_URL`, and
+`npm run migrate` refuses a `DATABASE_URL` typed in the shell that it would ignore. Every run prints the
+database it migrates.
 
 ```bash
+export NODE_ENV=test
 export DATABASE_URL="postgresql://postgres@localhost:5432/xpot_ci?sslmode=disable"
 export TAGS_INTEGRATION=1
 npm run migrate
@@ -100,8 +103,9 @@ inside `npm test`.
 
 ## Setup
 
-1. Copy `.env.example` to `.env` and fill in at least the database URL, the
-   Supabase keys and `SESSION_SECRET` (the server refuses to boot without them).
+1. Copy `.env.example` to `.env` and configure the development database,
+   Google identity and `SESSION_SECRET`. Supabase Storage keys are optional for
+   legacy development files; production requires private and public R2 instead.
    Integrations (Xphere, GoHighLevel, Twilio, Google Places, the AI providers)
    are set in the app by the Xpot admin, under Platform › Integrations
    (`/admin/integrations`); Xphere is one connection per person. The matching env
@@ -109,10 +113,21 @@ inside `npm test`.
    panel; each card says when the server environment is the one in force
    ("Set by server environment").
 2. `npm install`
-3. `npm run migrate`. Locally you run it whenever new files appear in
-   `migrations/`; in production the container runs it on every start (see "Deploy").
-4. `npm run dev`. Without Twilio configured, development prints the sign-in
-   code in the server log.
+3. Set `DEV_DATABASE_URL` and `DEV_SUPABASE_PROJECT_REF` for the approved Supabase
+   development database. `npm run migrate:dev` applies its pending migrations;
+   `npm run migrate` remains the production/explicit database command.
+   Inspect first with `npm run migrate:dev:plan`: it uses a read-only transaction
+   and does not create a ledger or apply SQL. Review migrations that change shared
+   settings or grant access before running them on a shared development database.
+4. `npm run dev` migrates that development database, then starts the app.
+   Development reads and writes stay in Supabase, even when production URL aliases
+   exist in the environment. A missing or mismatched target fails before connecting.
+   `npm run dev:server` has the same database protection. Login uses Google phone/SMS
+   or Google when enabled; see [the identity setup](docs/auth/google-identity.md).
+   Neither `npm run dev` nor `npm run local` copies production data by default.
+   `npm run db:pull` is an explicit snapshot operation; the local shortcut refreshes
+   it only with `XPOT_REFRESH_DEV_SNAPSHOT=true`. Review sensitive data and external
+   side effects before enabling that operation.
 
 ## Routes
 
@@ -162,8 +177,7 @@ Tags module:
   reseller's own wholesale code (see "Wholesale (Stuscle)").
 
 Settings (everyone): `/settings` with the tabs Profile (name, photo, contact
-phone), Sign-in (the sign-in phone, read only; a password only for email
-logins), Language and Memberships (`?tab=memberships`: role, modules,
+phone), Sign-in (the sign-in phone and contact email, read only; no passwords), Language and Memberships (`?tab=memberships`: role, modules,
 organizations with their role, the wholesale code). For a manager, Memberships
 also holds the management mode switch and the links to Administration (and
 Platform, for the Xpot admin); that is how management mode is turned on from a phone.
@@ -287,8 +301,7 @@ partner margins are in `docs/TAG_SALES_EXECUTION_PLAN.md`.
 
 ## Auth model
 
-Everyone signs in with their **phone**: a 6-digit code goes out by SMS
-(Twilio, `server/auth/phoneAuth.ts`), no email and no password.
+Sign in with **phone SMS** (primary) or **Google**, using Google Identity Platform in the shared `skaleclub` project. Xpot has its own OAuth client. There are no passwords. `GOOGLE_AUTH_ENABLED=true` activates this flow; setup is documented in `docs/auth/google-identity.md`.
 - `users.phone` (E.164) is the sign-in identity; `salesReps.userId` → `users.id`
   links it to the rep profile. Sessions live in the `sessions` table.
 - **Approval:** a new number asks for a name and becomes a *pending* rep. It
@@ -298,10 +311,8 @@ Everyone signs in with their **phone**: a 6-digit code goes out by SMS
   Admins can also create someone's access directly (active right away).
 - **Blocking:** People → Block turns the rep off and deletes their sessions,
   so they're out immediately; their sign-in screen says access is off.
-- Codes: 10 minutes, 5 tries, one resend per 30 s, 5 per number and 20 per
-  network per hour, stored hashed in `auth_phone_codes`.
-- Settings also has a password change. It changes the Supabase Auth password
-  behind the legacy email sign-in (below) and needs an email on file.
+- Google verifies the SMS challenge; the backend verifies the signed Firebase token before linking the stable Xpot user ID. `auth_google_identities` stores those links. Legacy Twilio challenges retain only their original expiry during rollout.
+- Supabase token exchange and password changes are retired. Google identities without an existing link require verified-phone ownership before association; pending and blocked users remain restricted.
 - Role hierarchy: `rep` < `manager` < `admin`. The `admin` role is the
   **Xpot admin**: saving it also sets `users.is_admin` (and signs the person out
   so the new access takes effect), and People warns and asks before doing so.
@@ -330,8 +341,7 @@ each rep's profile phone into `users.phone` when it is a full, unique number.
 People flags anyone left without a sign-in phone; set it with the phone
 button on their row (an admin can set their own, while still signed in). In an
 emergency: `UPDATE users SET phone = '+1XXXXXXXXXX' WHERE email = 'you@…';`.
-The old Supabase email sign-in endpoint (`POST /api/auth/login`) still exists
-but has no screen; new accounts it creates wait for approval like any sign-up.
+The old Supabase email sign-in endpoint (`POST /api/auth/login`) returns HTTP 410. Existing application sessions remain valid; new sign-ins use Google Identity Platform.
 
 ## Wholesale (Stuscle)
 
@@ -394,10 +404,15 @@ valid for 5 minutes. A key that no lead or visit holds is never signed.
   the private Supabase bucket `private-uploads` (created private at boot).
   R2 setup: a dedicated bucket with no public access and no r2.dev URL, and an
   R2 API token with Object Read & Write on that bucket only.
-- **Avatars and branding logos stay public** in the Supabase bucket `uploads`:
-  they show all over the app chrome and on public pages, and a profile picture
-  is something the person chose to show. A replaced avatar's file is deleted;
-  avatars go with the account.
+- **Avatars and branding logos stay public.** New uploads use the separate R2
+  bucket when `R2_PUBLIC_BUCKET` and `R2_PUBLIC_BASE_URL` are configured together,
+  alongside the R2 credentials above. Use a public media domain and grant the
+  token access to both buckets. The public bucket must differ from the private
+  `R2_BUCKET`; never expose the private photo/audio/print bucket. Without those
+  public settings, the existing Supabase `uploads` path remains available only
+  in development. Production requires both R2 stores. A partial or invalid configuration fails instead of silently writing
+  somewhere else. Existing Supabase links remain readable until migrated.
+  Replaced avatars are deleted from their original bucket; avatars go with the account.
 - **Cleanup:** removing a photo, deleting a lead or a visit, and re-recording a
   voice note delete the stored files after the DB change, best-effort; a storage
   error is logged as `[files] …` and does not fail the request.
@@ -428,7 +443,7 @@ Administration › People › a blocked person › Access › **Delete account**
 (the Xpot admin only, after typing the confirmation word;
 `DELETE /api/xpot/admin/reps/:id` with `{ "confirm": "DELETE" }`,
 `server/accountDeletion.ts`). It deletes the sign-in identity (users row,
-sessions, sign-in codes, Supabase Auth user, MCP OAuth grants, Xphere
+sessions, sign-in codes, Google identity bindings, MCP OAuth grants, Xphere
 connection), the rep's visits, notes, voice notes, opportunities, tasks and
 suggested actions, the businesses they own, and every file they uploaded
 (including their photos on other reps' businesses and anything left under
@@ -516,7 +531,7 @@ Environment:
 The Xpot admin's own screens (the Platform group; managers get a 403).
 
 - **Integrations** (`/admin/integrations`) is organised by job, one section
-  each: Sign-in by SMS (Twilio, required), Maps & places (Google Places, plus a
+  each: Sign-in and messages (Google Identity Platform; optional Twilio notifications), Maps & places (Google Places, plus a
   read-only route-optimisation line), Voice transcription (Groq, then OpenAI),
   AI writing (OpenRouter, then Gemini), CRM (an Xphere summary, with
   GoHighLevel folded under Legacy), AI assistants (MCP) and Infrastructure
@@ -596,10 +611,12 @@ comment on each, plus the client's optional `VITE_GOOGLE_MAPS_API_KEY` (see
 
 | Variable | Needed | What for |
 |---|---|---|
-| `DATABASE_URL` or `POSTGRES_URL` | yes | Postgres. If both are set, `DATABASE_URL` wins |
+| `DEV_DATABASE_URL`, `DEV_SUPABASE_PROJECT_REF` | development | Explicit approved Supabase development DB; development never falls back to production aliases |
+| `DATABASE_URL` or `POSTGRES_URL` | production / explicit scripts | Postgres. If both are set, `DATABASE_URL` wins |
 | `SESSION_SECRET` | yes | Signs the session cookie |
-| `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY` | yes | Storage and the legacy email Auth; the server won't boot without them |
-| `R2_ACCOUNT_ID` (or `R2_ENDPOINT`), `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET` | no | Private storage for photos and voice notes (see "Files"); unset, they go to the private Supabase bucket |
+| `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` | optional development | Legacy development Storage only; disabled in production. Supabase Auth is retired |
+| `R2_ACCOUNT_ID` (or `R2_ENDPOINT`), `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET` | production | Private storage for business/print files; Supabase fallback is development-only |
+| `R2_PUBLIC_BUCKET`, `R2_PUBLIC_BASE_URL` | production | Separate public avatar/branding bucket and HTTPS media domain |
 | `PGSSLMODE`, `POSTGRES_SSL` | no | Force TLS on (`require` / `true`) or off (`PGSSLMODE=disable`); by default it follows the URL |
 | `PORT` | no | Listen port (2110 by default; the Docker image sets 8888) |
 | `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_FROM_NUMBER` or `TWILIO_MESSAGING_SERVICE_SID` | no | SMS fallback when Platform › Integrations has no Twilio |

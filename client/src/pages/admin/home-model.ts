@@ -1,11 +1,10 @@
 // Panel home ("Today"): the rows of what needs the person, each a count, a one-line description and the list behind
 // it, by profile (shared/profiles.ts). Rows at zero are left out, so an empty list means "Nothing waiting". Pure,
 // unit-tested (tests/admin-home.test.ts).
-//   platform  three blocks by what the work is: People and orders (approvals, Stuscle orders to separate), Production
-//             (plates to print, files stuck, failed prints, batches awaiting pieces) and Pieces (the Tags queues of
-//             every organization: a count here is what the list it opens shows, and that list holds every organization's
-//             pieces too).
-//   partner   the same as My company, for their organization.
+//   platform  one block, People and orders (approvals, Stuscle orders to separate): Today is Admin's, and the platform's
+//             production rows (plates, files, failed prints, batches awaiting pieces) and the Tags queues belong to
+//             Production, not here.
+//   partner   production and the Tags queues of their organization (the data of Production's board).
 //   owner     team purchases still to arrive, then chips to write, scanned but not live, no product.
 
 import type { PrintRequestItem } from "@shared/printProduction";
@@ -32,8 +31,8 @@ export interface TodayRow {
   urgent?: boolean;
 }
 
-/** The platform's home has three blocks, with headings; everyone else's is a single list. */
-export type TodayBlockId = "people" | "production" | "pieces" | "organization";
+/** The platform's home is the People and orders block, with its heading; everyone else's is a single list. */
+export type TodayBlockId = "people" | "organization";
 export interface TodayBlock {
   id: TodayBlockId;
   rows: TodayRow[];
@@ -125,15 +124,11 @@ export function todayBlocks(input: TodayInput): TodayBlock[] {
   const { profile } = input;
   const blocks: TodayBlock[] = [];
   if (profile === "platform") {
-    const queues = queueRows(profile, input.queues, ["stuscleOrders"]);
     blocks.push({ id: "people", rows: [
       { id: "peopleWaiting", count: input.pendingPeople ?? 0, href: "/admin/reps?status=pending", label: home("todayPeopleWaiting"), hint: home("todayPeopleWaitingHint") },
       // The wholesale orders come from their own list, so the overview's identical queue is not counted twice.
       { id: "stuscleOrders", count: input.pendingOrders ?? 0, href: `${TAGS}/kits?view=orders`, label: { dict: "flow", key: "queueStuscleOrders" }, hint: { dict: "flow", key: "queueStuscleOrdersHint" } },
     ] });
-    // Batches waiting for their pieces are production's, next to the plates; the other queues are about the pieces themselves.
-    blocks.push({ id: "production", rows: [...plateRows(input), ...queues.filter((row) => row.id === "batchesNotReceived")] });
-    blocks.push({ id: "pieces", rows: queues.filter((row) => row.id !== "batchesNotReceived") });
   } else if (profile === "partner") {
     blocks.push({ id: "organization", rows: productionRows(input) });
   } else if (profile === "owner") {

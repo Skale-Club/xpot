@@ -34,6 +34,7 @@ export interface OrderLine {
   producerOrganizationId: number;
   modelId: string | null;
   modelSlug: string | null;
+  plateCapacity?: number;
   versionId: string | null;
   custom: string;
   delivered: number;
