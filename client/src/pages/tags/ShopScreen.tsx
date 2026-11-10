@@ -3,11 +3,17 @@ import { useQuery } from "@tanstack/react-query";
 import { ExternalLink, ImageOff, ShoppingBag, ShoppingCart } from "lucide-react";
 import {
   TAG_SHOWCASE_MAX_QUANTITY,
+  isShopOptionShown,
+  shopDefaultVariant,
   shopLinkWithQuantity,
+  shopPickOption,
   shopPictureFor,
+  shopRelated,
+  shopSectionOf,
   shopStartQuantity,
   shopTotals,
   showcaseAddsToCart,
+  type ShopSectionKey,
   type TagShopCatalog,
   type TagShopProduct,
   type TagShopVariant,
@@ -166,9 +172,10 @@ function Gallery({ images, title }: { images: string[]; title: string }) {
  */
 function ProductDetail({ product, currency }: { product: TagShopProduct; currency: string }) {
   const t = useT(tagsMessages);
-  const [variantId, setVariantId] = useState(product.variants[0].id);
-  const [quantity, setQuantity] = useState(shopStartQuantity(product.variants[0]));
-  const [quantityText, setQuantityText] = useState(String(shopStartQuantity(product.variants[0])));
+  const first = shopDefaultVariant(product);
+  const [variantId, setVariantId] = useState(first.id);
+  const [quantity, setQuantity] = useState(shopStartQuantity(first));
+  const [quantityText, setQuantityText] = useState(String(shopStartQuantity(first)));
   const variant = product.variants.find((v) => v.id === variantId) ?? product.variants[0];
   const sold = variant.packs.length > 0;
   const totals = shopTotals(variant, quantity);
@@ -176,6 +183,8 @@ function ProductDetail({ product, currency }: { product: TagShopProduct; currenc
   const shown = shopPictureFor(product, variant);
   const pictures = variant.images.length > 0 ? variant.images : product.images.length > 0 ? product.images : shown ? [shown] : [];
   const money = (cents: number) => formatMoney(cents, currency);
+  // Only the choices a reader makes: the NFC chip is left out, and a value no priced variant has is never offered.
+  const shownOptions = product.options.filter((o) => isShopOptionShown(o.title) && o.values.length > 1);
   const link = shopLinkWithQuantity(variant, totals.quantity, t.lang);
   const setQty = (value: number) => {
     const next = Math.min(TAG_SHOWCASE_MAX_QUANTITY, Math.max(1, Math.floor(value) || 1));
@@ -207,7 +216,30 @@ function ProductDetail({ product, currency }: { product: TagShopProduct; currenc
       <div className="flex min-w-0 flex-col gap-y-6">
         <h2 className="text-2xl font-medium leading-8 text-white lg:text-3xl lg:leading-10">{product.title}</h2>
         <div className="flex flex-col gap-y-4">
-          {product.variants.length > 1 && (
+          {product.variants.length > 1 && (shownOptions.length > 0 ? (
+            shownOptions.map((option) => (
+              <div key={option.title} className="flex flex-col gap-y-2" data-testid="shop-option">
+                <span className="text-sm text-white">{option.title}</span>
+                <div className="grid grid-cols-2 gap-2 min-[512px]:grid-cols-3" role="radiogroup" aria-label={option.title}>
+                  {option.values.map((value) => {
+                    const on = variant.options[option.title] === value;
+                    return (
+                      <button
+                        key={value}
+                        type="button"
+                        role="radio"
+                        aria-checked={on}
+                        onClick={() => { const next = shopPickOption(product, variant, option.title, value); if (next) pick(next.id); }}
+                        className={`min-h-12 rounded-md border px-3 py-2 text-base text-white transition-colors ${on ? "border-white ring-1 ring-white" : "border-white/15 hover:border-white"}`}
+                      >
+                        {value}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            ))
+          ) : (
             <div className="grid grid-cols-2 gap-2 min-[512px]:grid-cols-3" role="radiogroup" aria-label={t("shopVariant")} data-testid="shop-variant">
               {product.variants.map((v) => (
                 <button
@@ -222,14 +254,14 @@ function ProductDetail({ product, currency }: { product: TagShopProduct; currenc
                 </button>
               ))}
             </div>
-          )}
+          ))}
 
           <div className="flex flex-col gap-y-4">
             {sold ? (
               <>
                 <div className="flex flex-col gap-y-3">
                   <span className="text-sm text-white">{t("shopPacksTitle")}</span>
-                  <div className="grid grid-cols-3 gap-2" role="radiogroup" aria-label={t("shopPacksTitle")}>
+                  <div className={`grid gap-2 ${variant.packs.length === 3 ? "grid-cols-3" : "grid-cols-2"}`} role="radiogroup" aria-label={t("shopPacksTitle")}>
                     {variant.packs.map((pack) => {
                       const percent = percentOff(pack.unitPriceCents, pack.retailUnitPriceCents ?? variant.retailPriceCents);
                       const picked = quantity === pack.quantity;
@@ -300,6 +332,7 @@ function ProductDetail({ product, currency }: { product: TagShopProduct; currenc
             {addButton("h-14 rounded-full text-base")}
           </div>
         </div>
+        {product.description && <p className="whitespace-pre-line text-base leading-7 text-white/85" data-testid="shop-description">{product.description}</p>}
       </div>
     </section>
   );
@@ -331,6 +364,10 @@ function ProductTile({ product, currency, onOpen }: { product: TagShopProduct; c
     </li>
   );
 }
+
+/** Stuscle's catalogue page size, so a page holds the same number of cards. */
+const PAGE_SIZE = 12;
+type Sort = "default" | "low" | "high";
 
 function ShopCard({ item }: { item: TagShowcaseView }) {
   const t = useT(tagsMessages);
@@ -380,6 +417,9 @@ function ShopCard({ item }: { item: TagShowcaseView }) {
 export default function ShopScreen() {
   const t = useT(tagsMessages);
   const [featuredId, setFeaturedId] = useState<string | null>(null);
+  const [section, setSection] = useState<ShopSectionKey | "all">("all");
+  const [sort, setSort] = useState<Sort>("default");
+  const [page, setPage] = useState(1);
   const tc = useT(commonMessages);
   const { data: me } = useQuery<XpotMeResponse>({ queryKey: ["/api/xpot/me"], retry: false });
   // A partner makes its own pieces: no buying for it (shared/profiles.ts, "buyPieces"). Until /me loads, the shop stays.
@@ -419,7 +459,16 @@ export default function ShopScreen() {
   const currency = catalog.data?.currency ?? "USD";
   // All products first; one opens in full, with the others to pick from below. A lone product with nothing beside it opens straight away.
   const featured = products.find((p) => p.id === featuredId) ?? (products.length === 1 && kits.length === 0 ? products[0] : null);
-  const others = products.filter((p) => p !== featured).slice(0, 4);
+  const others = featured ? shopRelated(products, featured, 4) : [];
+  // The catalogue in Stuscle's sections (stands, then plates), the side menu offering only the ones that hold a product.
+  const sectionKeys = ((["stands", "plates", "other"] as const).filter((key) => products.some((p) => shopSectionOf(p) === key)));
+  const sectionLabel = (key: ShopSectionKey) => (key === "stands" ? t("shopSectionStands") : key === "plates" ? t("shopSectionPlates") : t("shopCatalogTitle"));
+  const reach = (p: TagShopProduct) => Math.min(...p.variants.map((v) => lowestPriceOf(v).cents));
+  const shown = products.filter((p) => section === "all" || shopSectionOf(p) === section);
+  const sorted = sort === "low" ? [...shown].sort((a, b) => reach(a) - reach(b)) : sort === "high" ? [...shown].sort((a, b) => reach(b) - reach(a)) : shown;
+  const totalPages = Math.max(1, Math.ceil(sorted.length / PAGE_SIZE));
+  const current = Math.min(page, totalPages);
+  const pageItems = sorted.slice((current - 1) * PAGE_SIZE, current * PAGE_SIZE);
   const open = (id: string | null) => {
     setFeaturedId(id);
     window.scrollTo({ top: 0, behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" });
@@ -465,12 +514,44 @@ export default function ShopScreen() {
           <div className="mx-auto flex w-full max-w-[1080px] flex-col gap-y-6" data-testid="shop-all">
             {products.length > 0 && (
               <>
-                <h2 className="text-2xl text-white">{t("shopCatalogTitle")}</h2>
-                <ul className="grid grid-cols-2 gap-x-6 gap-y-8 lg:grid-cols-3 min-[1440px]:grid-cols-4">
-                  {products.map((product) => (
-                    <ProductTile key={product.id} product={product} currency={currency} onOpen={() => open(product.id)} />
-                  ))}
-                </ul>
+                <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-3">
+                  <h2 className="text-2xl text-white" data-testid="shop-catalog-title">{section === "all" ? t("shopCatalogTitle") : sectionLabel(section)}</h2>
+                  <label className="flex items-center gap-2 text-sm text-white/55">
+                    {t("shopSort")}
+                    <select value={sort} onChange={(e) => { setSort(e.target.value as Sort); setPage(1); }} className="h-10 rounded-md border border-white/15 bg-[#141416] px-3 text-white" data-testid="shop-sort">
+                      <option value="default">{t("shopSortDefault")}</option>
+                      <option value="low">{t("shopSortLow")}</option>
+                      <option value="high">{t("shopSortHigh")}</option>
+                    </select>
+                  </label>
+                </div>
+                <div className="flex flex-col gap-y-6 lg:flex-row lg:gap-x-12">
+                  {sectionKeys.length > 0 && (
+                    <nav aria-label={t("shopCatalogTitle")} className="lg:w-44 lg:shrink-0" data-testid="shop-sidebar">
+                      <ul className="flex flex-wrap gap-x-5 gap-y-2 lg:flex-col">
+                        {([["all", t("shopAllProducts")], ...sectionKeys.map((key) => [key, sectionLabel(key)] as const)] as Array<readonly [ShopSectionKey | "all", string]>).map(([key, label]) => (
+                          <li key={key}>
+                            <button type="button" onClick={() => { setSection(key); setPage(1); }} aria-current={section === key ? "page" : undefined} className={`text-base transition-colors ${section === key ? "font-medium text-white" : "text-white/55 hover:text-white"}`}>{label}</button>
+                          </li>
+                        ))}
+                      </ul>
+                    </nav>
+                  )}
+                  <div className="min-w-0 flex-1">
+                    <ul className="grid grid-cols-2 gap-x-4 gap-y-10 lg:grid-cols-3 lg:gap-x-6" data-testid="shop-grid">
+                      {pageItems.map((product) => (
+                        <ProductTile key={product.id} product={product} currency={currency} onOpen={() => open(product.id)} />
+                      ))}
+                    </ul>
+                    {totalPages > 1 && (
+                      <div className="mt-10 flex items-center justify-center gap-x-6 text-sm text-white" data-testid="shop-pagination">
+                        <button type="button" disabled={current === 1} onClick={() => setPage(current - 1)} className="disabled:opacity-40">{t("shopPrev")}</button>
+                        <span className="text-white/55">{t("shopPageOf", { page: current, total: totalPages })}</span>
+                        <button type="button" disabled={current === totalPages} onClick={() => setPage(current + 1)} className="disabled:opacity-40">{t("shopNext")}</button>
+                      </div>
+                    )}
+                  </div>
+                </div>
               </>
             )}
             {kits.length > 0 && (

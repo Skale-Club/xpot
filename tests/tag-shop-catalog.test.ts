@@ -1,7 +1,7 @@
 // Tags › Shop, the Stuscle half: what Xpot makes of Stuscle's wholesale catalogue, and the links its cards open. The
 // links are the contract with Stuscle's /wholesale/kit: the reader's own code and SKU:quantity, never a price.
 import { describe, expect, it } from "vitest";
-import { shopLinkWithQuantity, shopPictureFor, shopStartQuantity, shopTotals, stuscleLang, toShopProducts } from "../shared/tagShowcase";
+import { shopDefaultVariant, shopLinkWithQuantity, shopPickOption, shopPictureFor, shopRelated, shopSectionOf, shopStartQuantity, shopTotals, stuscleLang, toShopProducts } from "../shared/tagShowcase";
 import { stuscleKitUrl } from "../shared/wholesale";
 
 const CODE = "XPABCD1234";
@@ -181,5 +181,39 @@ describe("stuscleLang and the language of a link", () => {
     expect(new URL(shopLinkWithQuantity(variant, 25, "pt")).searchParams.get("lang")).toBe("pt-BR");
     expect(new URL(shopLinkWithQuantity(variant, 25, "fr")).searchParams.has("lang")).toBe(false);
     expect(new URL(shopLinkWithQuantity(variant, 25)).searchParams.has("lang")).toBe(false);
+  });
+});
+
+// The new catalogue shape: one product per design, its variants Color x Size x NFC chip, the chip never a choice.
+describe("options, sections and related products", () => {
+  const v = (id: string, sku: string, options: Record<string, string>) => ({ id, title: id, sku, wholesale_price: 15, retail_price: 25, options, packs: [{ quantity: 10, unit_price: 15, retail_unit_price: 25 }] });
+  const stand = {
+    id: "p1", title: "Google Stand", handle: "google-stand", description: "A stand.",
+    options: [{ title: "Color", values: ["White", "Black"] }, { title: "NFC", values: ["Rigid disc", "Round sticker"] }],
+    variants: [
+      v("a", "NFC-STAND-GOOGLE-WHITE-S-R25", { Color: "White", NFC: "Round sticker" }),
+      v("b", "NFC-STAND-GOOGLE-WHITE-S", { Color: "White", NFC: "Rigid disc" }),
+      v("c", "NFC-STAND-GOOGLE-BLACK-S", { Color: "Black", NFC: "Rigid disc" }),
+    ],
+  };
+  const plate2 = { id: "p2", title: "Google Plate", handle: "google-plate", variants: [v("d", "NFC-PLATE-GOOGLE-WHITE-S", { Color: "White" })] };
+  const { products } = toShopProducts({ currency_code: "usd", products: [stand, plate2] }, BASE, CODE);
+
+  it("keeps the description, the options and each variant's own choices", () => {
+    expect(products[0].description).toBe("A stand.");
+    expect(products[0].options[0]).toEqual({ title: "Color", values: ["White", "Black"] });
+    expect(products[0].variants[1].options).toEqual({ Color: "White", NFC: "Rigid disc" });
+    expect(products[1].description).toBeNull();
+    expect(products[1].options).toEqual([]);
+  });
+  it("opens on the rigid disc, and picking a colour keeps it", () => {
+    const first = shopDefaultVariant(products[0]);
+    expect(first.sku).toBe("NFC-STAND-GOOGLE-WHITE-S");
+    expect(shopPickOption(products[0], first, "Color", "Black")?.sku).toBe("NFC-STAND-GOOGLE-BLACK-S");
+  });
+  it("sorts a product into stands or plates by its SKUs, and lists the same kind first as related", () => {
+    expect(shopSectionOf(products[0])).toBe("stands");
+    expect(shopSectionOf(products[1])).toBe("plates");
+    expect(shopRelated(products, products[0], 4).map((p) => p.id)).toEqual(["p2"]);
   });
 });

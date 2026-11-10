@@ -131,6 +131,8 @@ export type TagShopVariant = {
   /** Per piece. On a variant sold in packs, the price at its smallest pack. */
   wholesalePriceCents: number;
   retailPriceCents: number | null;
+  /** Option title → value, such as { Color: "Black", Size: "Small" }; empty when Stuscle sent none. */
+  options: Record<string, string>;
   /** This variant's own photos; empty means the product's. */
   images: string[];
   /** Empty when the variant is priced flat and sold by the piece. */
@@ -144,7 +146,10 @@ export type TagShopProduct = {
   title: string;
   handle: string;
   thumbnail: string | null;
+  description: string | null;
   images: string[];
+  /** The choices a reader makes (Color, Size…), only values some priced variant has. */
+  options: Array<{ title: string; values: string[] }>;
   variants: TagShopVariant[];
 };
 
@@ -160,13 +165,16 @@ type StuscleCatalogBody = {
     title?: unknown;
     handle?: unknown;
     thumbnail?: unknown;
+    description?: unknown;
     images?: unknown;
+    options?: Array<{ title?: unknown; values?: unknown }>;
     variants?: Array<{
       id?: unknown;
       title?: unknown;
       sku?: unknown;
       wholesale_price?: unknown;
       retail_price?: unknown;
+      options?: unknown;
       images?: unknown;
       packs?: Array<{ quantity?: unknown; unit_price?: unknown; retail_unit_price?: unknown }>;
     }>;
@@ -176,6 +184,13 @@ type StuscleCatalogBody = {
 const toCents = (amount: unknown): number | null => (typeof amount === "number" && Number.isFinite(amount) ? Math.round(amount * 100) : null);
 const str = (value: unknown): string | null => (typeof value === "string" && value.trim() ? value : null);
 const strings = (value: unknown): string[] => (Array.isArray(value) ? value.map(str).filter((v): v is string => v !== null) : []);
+
+/** Stuscle's { Color: "Black" } map, keeping only text values. */
+function toOptions(raw: unknown): Record<string, string> {
+  const out: Record<string, string> = {};
+  if (raw && typeof raw === "object" && !Array.isArray(raw)) for (const [key, value] of Object.entries(raw)) { const v = str(value); if (v) out[key] = v; }
+  return out;
+}
 
 /** Stuscle's packs, smallest first. A pack it cannot price is dropped, and a repeated size keeps its first price. */
 function toPacks(raw: unknown): TagShopPack[] {
@@ -217,12 +232,14 @@ export function toShopProducts(body: unknown, storeBaseUrl: string, code: string
         sku,
         wholesalePriceCents: wholesale,
         retailPriceCents: packs[0] ? packs[0].retailUnitPriceCents ?? toCents(v.retail_price) : toCents(v.retail_price),
+        options: toOptions(v.options),
         images: strings(v.images),
         packs,
         url: stuscleKitUrl(storeBaseUrl, code, [{ sku, quantity: 1 }]),
       });
     }
-    if (variants.length) products.push({ id, title, handle, thumbnail: str(raw.thumbnail), images: strings(raw.images), variants });
+    const options = (Array.isArray(raw.options) ? raw.options : []).flatMap((o) => { const title = str(o?.title); const values = strings(o?.values); return title && values.length ? [{ title, values }] : []; });
+    if (variants.length) products.push({ id, title, handle, thumbnail: str(raw.thumbnail), description: str(raw.description), images: strings(raw.images), options, variants });
   }
   return { currency, products };
 }
@@ -270,4 +287,41 @@ export function shopLinkWithQuantity(variant: Pick<TagShopVariant, "url" | "sku"
   const language = stuscleLang(lang);
   if (language) url.searchParams.set("lang", language);
   return url.toString();
+}
+
+/** The sections of Stuscle's wholesale catalogue (its lib/util/wholesale-sections.ts): stands, plates, then anything else, by SKU. */
+export type ShopSectionKey = "stands" | "plates" | "other";
+
+export function shopSectionOf(product: Pick<TagShopProduct, "variants">): ShopSectionKey {
+  const skus = product.variants.map((v) => v.sku.toUpperCase());
+  if (skus.some((s) => s.startsWith("NFC-STAND-"))) return "stands";
+  if (skus.some((s) => s.startsWith("NFC-PLATE-"))) return "plates";
+  return "other";
+}
+
+/** The NFC chip is not a choice a reseller makes: its option is not shown, and a pack holds the rigid disc (a SKU with no -R25 / -RECT) unless a link names another. */
+const HIDDEN_OPTIONS = new Set(["nfc"]);
+export const isShopOptionShown = (title: string): boolean => !HIDDEN_OPTIONS.has(title.trim().toLowerCase());
+export const isDefaultChip = (sku: string): boolean => !/-(R25|RECT)(-|$)/i.test(sku);
+
+/** The variant to open on: the default chip, so the hidden NFC option never decides it. */
+export function shopDefaultVariant(product: Pick<TagShopProduct, "variants">): TagShopVariant {
+  return product.variants.find((v) => isDefaultChip(v.sku)) ?? product.variants[0];
+}
+
+/**
+ * The variant with this option value that keeps the most of the other shown choices, and among those the default chip
+ * (Stuscle's pickOption). Null when no variant has the value.
+ */
+export function shopPickOption(product: Pick<TagShopProduct, "options" | "variants">, current: TagShopVariant, title: string, value: string): TagShopVariant | null {
+  const shown = product.options.filter((o) => isShopOptionShown(o.title) && o.title !== title);
+  const score = (v: TagShopVariant) => shown.filter((o) => v.options[o.title] === current.options[o.title]).length * 2 + Number(isDefaultChip(v.sku));
+  return product.variants.filter((v) => v.options[title] === value).sort((a, b) => score(b) - score(a))[0] ?? null;
+}
+
+/** Other products of the same section first (other stands under a stand), then the rest: "You might also be interested in". */
+export function shopRelated(products: TagShopProduct[], current: TagShopProduct, max: number): TagShopProduct[] {
+  const section = shopSectionOf(current);
+  const others = products.filter((p) => p.id !== current.id);
+  return [...others.filter((p) => shopSectionOf(p) === section), ...others.filter((p) => shopSectionOf(p) !== section)].slice(0, max);
 }
