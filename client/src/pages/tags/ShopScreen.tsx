@@ -89,7 +89,7 @@ function ProductCard({ product, currency }: { product: TagShopProduct; currency:
   };
   const choice = (on: boolean) => `rounded-md border px-3 text-white transition-colors ${on ? "border-white ring-1 ring-white" : "border-white/15 hover:border-white"}`;
   return (
-    <li className="flex w-[82%] shrink-0 snap-start flex-col gap-4 md:w-[calc(50%-0.5rem)] lg:w-[calc(33.333%-0.667rem)]" data-testid="shop-tile">
+    <li className="flex w-[72%] shrink-0 snap-start flex-col gap-3 min-[512px]:w-[calc(50%-0.5rem)] md:w-[calc(33.333%-0.667rem)] lg:w-[calc(25%-0.75rem)]" data-testid="shop-tile">
       <div className={PHOTO}>
         {product.thumbnail ?? product.images[0] ? <img src={(product.thumbnail ?? product.images[0]) as string} alt="" loading="lazy" draggable={false} className="h-full w-full object-contain" /> : <ImageOff className="absolute left-1/2 top-1/2 h-8 w-8 -translate-x-1/2 -translate-y-1/2 text-zinc-500" aria-hidden="true" />}
       </div>
@@ -165,7 +165,7 @@ function ProductCard({ product, currency }: { product: TagShopProduct; currency:
 
       <div className="flex flex-col gap-y-1 text-white" data-testid="shop-total">
         <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-          <span className="text-3xl font-semibold" data-testid="shop-wholesale-price">{money(totals.wholesaleCents)}</span>
+          <span className="text-2xl font-semibold" data-testid="shop-wholesale-price">{money(totals.wholesaleCents)}</span>
           {totals.retailCents !== null && <span className="text-lg text-white/55 line-through">{money(totals.retailCents)}</span>}
           {totals.percentOff !== null && <span className={GREEN_PILL}>{t("shopSave", { percent: totals.percentOff })}</span>}
         </div>
