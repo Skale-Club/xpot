@@ -2,7 +2,6 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { ChevronLeft, ChevronRight, ExternalLink, ImageOff, ShoppingBag, ShoppingCart } from "lucide-react";
 import {
-  shopPictureFor,
   shopProductLink,
   shopSectionOf,
   shopStartingOffer,
@@ -62,7 +61,8 @@ function ProductTile({ product, currency }: { product: TagShopProduct; currency:
   const t = useT(tagsMessages);
   const cheapest = shopStartingVariant(product);
   const offer = shopStartingOffer(cheapest);
-  const picture = shopPictureFor(product, cheapest);
+  // The product's own thumbnail, as Stuscle's card shows it: a variant's photos can be shared with other designs.
+  const picture = product.thumbnail ?? product.images[0] ?? null;
   const link = shopProductLink(product, t.lang);
   return (
     <li className="flex w-[calc(50%-0.5rem)] shrink-0 snap-start flex-col gap-3 md:w-[calc(33.333%-0.667rem)] lg:w-[calc(25%-0.75rem)]" data-testid="shop-tile">
