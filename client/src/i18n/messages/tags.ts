@@ -491,7 +491,7 @@ const en = {
   shopStoreDown: "The Stuscle store can't be reached right now. Try again in a few minutes.",
   shopEach: "{price} each",
   shopBulkTitle: "{title} Bulk",
-  shopSectionStands: "NFC signs",
+  shopSectionStands: "NFC stands",
   shopSectionPlates: "NFC plates",
   shopSectionOther: "More products",
   shopViewProduct: "View product",

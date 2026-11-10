@@ -31,7 +31,7 @@ import { partnerLine, useWholesale, WholesaleCard } from "./WholesaleCard";
 // Tags › Shop: a showcase of what Skale Club sells. The pieces a reseller already has live in My pieces, not here. First
 // the Stuscle wholesale catalogue, read from Stuscle (the same products and prices as its /wholesale page), then the
 // ready-made kits the Xpot admin keeps (Manage › Shop). Xpot sells nothing itself: every product is shown, in one
-// carousel for the signs and one for the plates, and "View product" opens that product on Stuscle's wholesale page with
+// carousel for the stands and one for the plates, and "View product" opens that product on Stuscle's wholesale page with
 // the reader's own wholesale code (the session opens, nothing goes in the cart). The packs, the options and the cart are
 // Stuscle's. A reseller whose partner handles its own distribution does not buy here at all: the screen says whose
 // pieces they are and to ask them (no catalogue, no price, no code).
