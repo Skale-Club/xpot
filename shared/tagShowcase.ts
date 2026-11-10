@@ -4,7 +4,7 @@
 // Pure, no I/O: the server validates with these schemas and the app types its form from them.
 
 import { z } from "zod";
-import { stuscleKitUrl, stuscleProductUrl, wholesaleUrl } from "./wholesale.js";
+import { stuscleKitUrl, stuscleProductUrl, wholesaleUrl, withOpenParams } from "./wholesale.js";
 
 export const TAG_SHOWCASE_KINDS = ["model", "kit"] as const;
 export type TagShowcaseKind = (typeof TAG_SHOWCASE_KINDS)[number];
@@ -67,7 +67,7 @@ export const tagShowcasePatchSchema = tagShowcaseInputSchema.innerType().partial
 export type TagShowcaseInput = z.infer<typeof tagShowcaseInputSchema>;
 export type TagShowcaseTranslations = TagShowcaseInput["translations"];
 
-/** A showcase entry as the app reads it. `url` is where its button goes, with the reader's own wholesale code. */
+/** A showcase entry as the app reads it. `url` is where its button goes: Xpot's open route, never a store link with a code. */
 export type TagShowcaseItem = {
   id: string;
   kind: TagShowcaseKind;
@@ -107,9 +107,9 @@ export function showcaseAddsToCart(item: Pick<TagShowcaseItem, "items">): boolea
   return item.items.length > 0;
 }
 
-/** Where an entry's button goes for the reseller holding `code`: its SKUs into the cart, or else the wholesale store. */
-export function showcaseUrl(item: Pick<TagShowcaseItem, "items">, storeBaseUrl: string, code: string): string {
-  return showcaseAddsToCart(item) ? stuscleKitUrl(storeBaseUrl, code, item.items) : wholesaleUrl(storeBaseUrl, code);
+/** Where an entry's button goes: its SKUs into the cart, or else the wholesale store (the open route signs the reader's own code). */
+export function showcaseUrl(item: Pick<TagShowcaseItem, "items">): string {
+  return showcaseAddsToCart(item) ? stuscleKitUrl(item.items) : wholesaleUrl();
 }
 
 // The Stuscle wholesale catalogue, as the Shop shows it. Xpot reads it from Stuscle (server to server) so the Shop
@@ -208,10 +208,11 @@ function toPacks(raw: unknown): TagShopPack[] {
 
 /**
  * Stuscle's `GET /xpot/wholesale-catalog` answer → the Shop's products, each variant with the link that puts it in
- * the cart of the reseller holding `code`. Anything malformed is dropped rather than shown wrong: a variant with no
- * SKU the link can carry, or no wholesale price, and a product left with no variant.
+ * the reader's cart (the same for every reader: the open route signs whoever is signed in, and no link carries a
+ * code). Anything malformed is dropped rather than shown wrong: a variant with no SKU the link can carry, or no
+ * wholesale price, and a product left with no variant.
  */
-export function toShopProducts(body: unknown, storeBaseUrl: string, code: string): { currency: string; products: TagShopProduct[] } {
+export function toShopProducts(body: unknown): { currency: string; products: TagShopProduct[] } {
   const data = (body ?? {}) as StuscleCatalogBody;
   const currency = (str(data.currency_code) ?? "usd").toUpperCase();
   const products: TagShopProduct[] = [];
@@ -237,11 +238,11 @@ export function toShopProducts(body: unknown, storeBaseUrl: string, code: string
         options: toOptions(v.options),
         images: strings(v.images),
         packs,
-        url: stuscleKitUrl(storeBaseUrl, code, [{ sku, quantity: 1 }]),
+        url: stuscleKitUrl([{ sku, quantity: 1 }]),
       });
     }
     const options = (Array.isArray(raw.options) ? raw.options : []).flatMap((o) => { const title = str(o?.title); const values = strings(o?.values); return title && values.length ? [{ title, values }] : []; });
-    if (variants.length) products.push({ id, title, handle, thumbnail: str(raw.thumbnail), description: str(raw.description), productUrl: stuscleProductUrl(storeBaseUrl, code, handle), images: strings(raw.images), options, variants });
+    if (variants.length) products.push({ id, title, handle, thumbnail: str(raw.thumbnail), description: str(raw.description), productUrl: stuscleProductUrl(handle), images: strings(raw.images), options, variants });
   }
   return { currency, products };
 }
@@ -284,11 +285,8 @@ export function stuscleLang(lang: string | null | undefined): string | null {
 /** A variant's cart link for `quantity` pieces instead of one, in the reseller's language (the reseller picks the pack in the Shop). */
 export function shopLinkWithQuantity(variant: Pick<TagShopVariant, "url" | "sku">, quantity: number, lang?: string | null): string {
   const qty = Math.min(TAG_SHOWCASE_MAX_QUANTITY, Math.max(1, Math.floor(quantity) || 1));
-  const url = new URL(variant.url);
-  url.searchParams.set("items", `${variant.sku}:${qty}`);
   const language = stuscleLang(lang);
-  if (language) url.searchParams.set("lang", language);
-  return url.toString();
+  return withOpenParams(variant.url, { items: `${variant.sku}:${qty}`, ...(language ? { lang: language } : {}) });
 }
 
 /** The sections of Stuscle's wholesale catalogue (its lib/util/wholesale-sections.ts): stands, plates, then anything else, by SKU. */
@@ -318,8 +316,5 @@ export function shopStartingVariant(product: Pick<TagShopProduct, "variants">): 
 /** A product's link to its wholesale page, in the reseller's language (the same `lang` the cart links carry). */
 export function shopProductLink(product: Pick<TagShopProduct, "productUrl">, lang?: string | null): string {
   const language = stuscleLang(lang);
-  if (!language) return product.productUrl;
-  const url = new URL(product.productUrl);
-  url.searchParams.set("lang", language);
-  return url.toString();
+  return language ? withOpenParams(product.productUrl, { lang: language }) : product.productUrl;
 }

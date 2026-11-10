@@ -1,36 +1,29 @@
 // Tags › Shop: the showcase entries the Xpot admin keeps and the links their buttons open. Xpot sells nothing, so
-// the links are the contract with Stuscle: the reseller's own wholesale code, and for a kit the SKUs to put in the
-// cart (never a price).
+// the links go to Xpot's open route, which signs a ticket for the reader's own code: for a kit the SKUs to put in the
+// cart (never a price, never the code).
 import { describe, expect, it } from "vitest";
 import { showcaseAddsToCart, showcaseInLanguage, showcaseUrl, tagShowcaseInputSchema, tagShowcasePatchSchema } from "../shared/tagShowcase";
-import { stuscleKitUrl, wholesaleUrl } from "../shared/wholesale";
-
-const CODE = "XPABCD1234";
-const BASE = "https://stuscle.com";
+import { stuscleKitUrl, WHOLESALE_OPEN_PATH, wholesaleUrl } from "../shared/wholesale";
 
 describe("stuscleKitUrl", () => {
-  it("carries the formatted code and the SKUs, and no price", () => {
-    const url = new URL(stuscleKitUrl(BASE, CODE, [{ sku: "KIT-POKEMON-48-STARTER", quantity: 1 }, { sku: "KEYCHAIN-NFC", quantity: 24 }]));
-    expect(url.origin + url.pathname).toBe("https://stuscle.com/wholesale/kit");
-    expect(url.searchParams.get("code")).toBe("XP-ABCD-1234");
+  it("carries the SKUs to Xpot's open route, and no code or price", () => {
+    const url = new URL(stuscleKitUrl([{ sku: "KIT-POKEMON-48-STARTER", quantity: 1 }, { sku: "KEYCHAIN-NFC", quantity: 24 }]), "https://xpot.test");
+    expect(url.pathname).toBe(WHOLESALE_OPEN_PATH);
     expect(url.searchParams.get("items")).toBe("KIT-POKEMON-48-STARTER:1,KEYCHAIN-NFC:24");
-    expect([...url.searchParams.keys()].sort()).toEqual(["code", "items"]);
-  });
-  it("tolerates a trailing slash on the store address", () => {
-    expect(stuscleKitUrl("https://stuscle.com/", CODE, [{ sku: "A", quantity: 2 }]).startsWith("https://stuscle.com/wholesale/kit?")).toBe(true);
+    expect([...url.searchParams.keys()]).toEqual(["items"]);
   });
 });
 
 describe("showcaseUrl", () => {
   it("puts an entry's SKUs in the cart, a kit's and a model's alike", () => {
     const kit = { items: [{ sku: "KIT-SOCCER-24-STARTER", quantity: 1 }] };
-    expect(showcaseUrl(kit, BASE, CODE)).toBe(stuscleKitUrl(BASE, CODE, kit.items));
+    expect(showcaseUrl(kit)).toBe(stuscleKitUrl(kit.items));
     const model = { items: [{ sku: "PLATE-GOOGLE-SMALL-BLACK", quantity: 1 }] };
-    expect(showcaseUrl(model, BASE, CODE)).toBe(stuscleKitUrl(BASE, CODE, model.items));
+    expect(showcaseUrl(model)).toBe(stuscleKitUrl(model.items));
     expect(showcaseAddsToCart(model)).toBe(true);
   });
   it("opens the wholesale page for an entry with no SKU", () => {
-    expect(showcaseUrl({ items: [] }, BASE, CODE)).toBe(wholesaleUrl(BASE, CODE));
+    expect(showcaseUrl({ items: [] })).toBe(wholesaleUrl());
     expect(showcaseAddsToCart({ items: [] })).toBe(false);
   });
 });

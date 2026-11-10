@@ -1,12 +1,11 @@
 import type { Express } from "express";
 import { toShopProducts, type TagShopCatalog } from "#shared/tagShowcase.js";
-import { actorOf, requireTagUser } from "./access.js";
-import { ensureWholesaleCode, storeBaseUrl } from "../wholesale/index.js";
+import { requireTagUser } from "./access.js";
 
 // Tags › Shop, the Stuscle half: the wholesale catalogue read from Stuscle (`GET /xpot/wholesale-catalog`, the same
 // products and prices its /wholesale page shows), so the Shop lists exactly what can be bought without anyone typing
 // it in here. Server to server with the shared XPOT_WHOLESALE_SECRET; Stuscle's answer is kept a minute, since every
-// reseller sees the same catalogue and only the links (their own code) differ. When Stuscle cannot be read the Shop
+// reseller sees the same catalogue and the same links (Xpot's open route, which signs the reader's own code on the click). When Stuscle cannot be read the Shop
 // still opens, with the entries the Xpot admin keeps.
 //
 //   STUSCLE_API_URL  the Stuscle backend (default https://api.stuscle.com)
@@ -33,7 +32,7 @@ async function fetchCatalog(secret: string): Promise<unknown> {
   return body;
 }
 
-export async function shopCatalogForRep(repId: number): Promise<TagShopCatalog> {
+export async function shopCatalog(): Promise<TagShopCatalog> {
   const secret = process.env.XPOT_WHOLESALE_SECRET;
   if (!secret) return { status: "not_configured", currency: "USD", products: [] };
   let body: unknown;
@@ -43,16 +42,15 @@ export async function shopCatalogForRep(repId: number): Promise<TagShopCatalog> 
     console.warn("[tags] Stuscle wholesale catalogue unavailable:", (err as Error).message);
     return { status: "unavailable", currency: "USD", products: [] };
   }
-  const code = await ensureWholesaleCode(repId);
-  return { status: "ok", ...toShopProducts(body, storeBaseUrl(), code) };
+  return { status: "ok", ...toShopProducts(body) };
 }
 
 export function registerShopCatalogRoutes(app: Express) {
-  // Any signed-in Tags user: the catalogue, each variant with the link that carries their own wholesale code.
-  app.get("/api/xpot/tags/shop-catalog", requireTagUser, async (req, res) => {
+  // Any signed-in Tags user: the catalogue, each variant with its link to Xpot's open route (no code in it).
+  app.get("/api/xpot/tags/shop-catalog", requireTagUser, async (_req, res) => {
     try {
       res.set("Cache-Control", "no-store");
-      res.json(await shopCatalogForRep(actorOf(req).repId));
+      res.json(await shopCatalog());
     } catch (err) {
       console.error("[tags] Failed to load the shop catalogue:", err);
       res.status(500).json({ message: "Failed to load the shop" });
