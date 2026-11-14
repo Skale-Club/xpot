@@ -6,6 +6,8 @@ import { tagsMessages } from "@/i18n/messages/tags";
 import { profileOfMe } from "@/lib/adminMode";
 import type { XpotMeResponse } from "@/pages/xpot/types";
 import { can } from "@shared/profiles";
+import { stuscleLang } from "@shared/tagShowcase";
+import { wholesaleStoreUrl } from "@shared/wholesale";
 import { tagsGet } from "./lib";
 import { Button } from "@/components/ui/button";
 import { CopyButton, EYEBROW_MUTED } from "./ui";
@@ -13,8 +15,9 @@ import { CopyButton, EYEBROW_MUTED } from "./ui";
 export type Wholesale = { code: string | null; url: string | null; partner?: string | null };
 
 /**
- * The reseller's wholesale answer: a code and the Stuscle link, or (when their partner handles its own distribution,
- * organizations.distribution = own) no store at all and the partner's name. A person with no store asks the partner.
+ * The reseller's wholesale answer: a code and the store link (Xpot's open route, which carries no code), or (when
+ * their partner handles its own distribution, organizations.distribution = own) no store at all and the partner's
+ * name. A person with no store asks the partner.
  */
 export function useWholesale(enabled = true) {
   return useQuery({
@@ -31,7 +34,11 @@ export function partnerLine(text: string): string {
   return text.replace(/\.\.(\s|$)/g, ".$1");
 }
 
-/** "Buy kits at wholesale": the rep's own code and the Stuscle store link that carries it. */
+/**
+ * "Buy kits at wholesale": the rep's own code, to read and copy, and the button that opens the store. The button goes
+ * to Xpot's open route in a new tab, which signs a one-time ticket for this rep and redirects to Stuscle: the code is
+ * never part of the link, so a copied link opens nothing for anyone else.
+ */
 export function WholesaleCard() {
   const t = useT(tagsMessages);
   const tc = useT(commonMessages);
@@ -69,7 +76,7 @@ export function WholesaleCard() {
           <CopyButton text={data.code} label={tc("copy")} />
         </div>
         <Button asChild variant="brand" accent="tags" size="lg" className="w-full sm:w-auto">
-          <a href={data.url} target="_blank" rel="noopener noreferrer" data-testid="wholesale-open">
+          <a href={wholesaleStoreUrl(data.url, stuscleLang(t.lang))} target="_blank" rel="noopener noreferrer" data-testid="wholesale-open">
             {t("wholesaleOpen")}
             <ExternalLink />
           </a>

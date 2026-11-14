@@ -12,13 +12,12 @@ import {
   type TagShowcaseItem,
   type TagShowcaseView,
 } from "#shared/tagShowcase.js";
-import { actorOf, requireTagAdmin, requireTagUser } from "./access.js";
-import { ensureWholesaleCode, storeBaseUrl } from "../wholesale/index.js";
+import { requireTagAdmin, requireTagUser } from "./access.js";
 
 // Tags › Shop. Xpot sells nothing: the Stuscle store is the sales engine, so a showcase entry only describes a piece
 // model or a ready-made kit and sends the reseller there. The Xpot admin keeps the entries; every signed-in Tags user
-// reads the published ones, each with a link that carries their own wholesale code (an entry with SKUs fills the cart,
-// one without opens the wholesale page). The price that counts is Stuscle's; `referencePriceCents` is only typed-in information.
+// reads the published ones, each with a link to Xpot's open route, which signs the reader's own wholesale code on the
+// click (an entry with SKUs fills the cart, one without opens the wholesale page). No link carries the code itself. The price that counts is Stuscle's; `referencePriceCents` is only typed-in information.
 
 function toItem(row: TagShowcaseRow): TagShowcaseItem {
   return {
@@ -47,12 +46,9 @@ export async function listShowcase(opts: { publishedOnly: boolean }): Promise<Ta
   return rows.map(toItem);
 }
 
-export async function listShowcaseForRep(repId: number, lang?: string | null): Promise<TagShowcaseView[]> {
+export async function listShowcaseForReader(lang?: string | null): Promise<TagShowcaseView[]> {
   const items = await listShowcase({ publishedOnly: true });
-  if (!items.length) return [];
-  const code = await ensureWholesaleCode(repId);
-  const base = storeBaseUrl();
-  return items.map((item) => ({ ...showcaseInLanguage(item, lang), url: showcaseUrl(item, base, code) }));
+  return items.map((item) => ({ ...showcaseInLanguage(item, lang), url: showcaseUrl(item) }));
 }
 
 function values(input: TagShowcaseInput) {
@@ -120,12 +116,12 @@ function idParam(req: Request, res: Response): string | null {
 }
 
 export function registerShowcaseRoutes(app: Express) {
-  // Any signed-in Tags user: the published entries, each with the link that carries their own wholesale code.
+  // Any signed-in Tags user: the published entries, each with its link to Xpot's open route (no code in it).
   app.get("/api/xpot/tags/showcase", requireTagUser, async (req, res) => {
     try {
       res.set("Cache-Control", "no-store");
       // ?lang= is the reader's language in the app (pt, es); anything else reads the main text.
-      res.json(await listShowcaseForRep(actorOf(req).repId, typeof req.query.lang === "string" ? req.query.lang : null));
+      res.json(await listShowcaseForReader(typeof req.query.lang === "string" ? req.query.lang : null));
     } catch (err) {
       fail(res, err, "Failed to load the shop");
     }

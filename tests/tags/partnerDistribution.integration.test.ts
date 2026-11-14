@@ -227,7 +227,7 @@ test.skipIf(!enabled)("partner distribution: own hands kits to linked organizati
     assert.deepEqual((await api("GET", "/api/xpot/wholesale", "pd-own-member")).json, { code: null, url: null, partner: "PD Brasil" });
     const normalCard = await api("GET", "/api/xpot/wholesale", "pd-unlinked-buyer");
     assert.match(normalCard.json.code, /^XP-/);
-    assert.match(normalCard.json.url, /^https?:\/\//);
+    assert.equal(normalCard.json.url, "/api/xpot/wholesale/open"); // Xpot's open route: the code is never in the link
     assert.equal((await api("GET", "/api/xpot/wholesale", "pd-usa-buyer")).json.partner, undefined);
 
     // ── Unlinking: Stuscle takes them again, and nothing more is handed to them. Pieces already given stay. ──

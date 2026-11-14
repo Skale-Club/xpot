@@ -349,9 +349,23 @@ Kits and other products are sold through the **Stuscle** store, not inside
 Xpot. Approved reps buy at wholesale with a personal code:
 - Every rep gets a code (`XP-XXXX-XXXX`, `salesReps.wholesaleCode`) when they're
   approved or created by an admin. The wholesale card at the bottom of Tags ›
-  My pieces shows it with a link to `{STUSCLE_PUBLIC_URL}/wholesale?code=…`, and
-  Settings › Memberships shows it too. The Tags section of the person's page in
+  My pieces shows it (to read, never inside a link) with a button that opens the
+  store, and Settings › Memberships shows it too. The Tags section of the person's page in
   People shows it and can issue a new one (the old one stops working).
+- **Opening the store: a hand-off ticket, never the code in a link.** Every
+  button that goes to Stuscle points at Xpot's own
+  `GET /api/xpot/wholesale/open?items=SKU:qty,…&product=<handle>&lang=en|pt-BR|es`
+  (all optional). It answers only a signed-in rep allowed to buy at wholesale
+  (401, or sign-in and back for a browser tab), signs a ticket for *their own*
+  code (a `code` in the query is ignored) and 303s to
+  `{STUSCLE_PUBLIC_URL}/wholesale/kit?ticket=…` with `Cache-Control: no-store`
+  and `Referrer-Policy: no-referrer`. The ticket is
+  `h1.<base64url payload>.<base64url HMAC-SHA256>` with `XPOT_WHOLESALE_SECRET`,
+  payload `{code, items?, product?, lang?, iat, exp, jti}`, valid 120 s; Stuscle
+  takes each `jti` once and no longer accepts `?code=` links, so a copied or
+  forwarded link opens nothing for anyone else. Code in
+  `server/wholesale/handoff.ts` (signer, test vector in
+  `tests/wholesale-handoff.test.ts`) and `WHOLESALE_OPEN_PATH` in `shared/wholesale.ts`.
 - Stuscle asks `POST /api/integrations/stuscle/wholesale/verify`
   (`Authorization: Bearer $XPOT_WHOLESALE_SECRET`, body `{code}`) when the code
   is entered and again at checkout. Answer: `{valid:true, reseller:{id,name}}`
@@ -367,11 +381,12 @@ Xpot. Approved reps buy at wholesale with a personal code:
 - **Shop (Tags › Shop).** Stuscle is the sales engine, so Xpot only shows what is
   for sale. The Xpot admin keeps the entries in Tags › Manage › Shop
   (`tag_showcase_items`, `/api/xpot/admin/tag-showcase`); every Tags user reads the
-  published ones (`GET /api/xpot/tags/showcase`), each with a link that carries
-  their own code. A *model* opens `/wholesale?code=…`. A *kit* lists Stuscle SKUs
-  and quantities and opens `{STUSCLE_PUBLIC_URL}/wholesale/kit?code=…&items=SKU:qty,SKU:qty`,
-  which opens the wholesale session and fills the cart at the wholesale price (the
-  link carries no price; see Stuscle's `docs/WHOLESALE.md`). A reference price may
+  published ones (`GET /api/xpot/tags/showcase`), each with a link to the open
+  route above. A *model* opens the wholesale catalogue. A *kit* lists Stuscle SKUs
+  and quantities and opens the route with `items=SKU:qty,SKU:qty`, which Stuscle
+  turns into the wholesale session and a cart filled at the wholesale price (the
+  link carries no price and no code; see Stuscle's `docs/WHOLESALE.md`). A
+  Stuscle catalogue product opens with `product=<handle>`. A reference price may
   be typed by hand; the price that counts is Stuscle's. Code in
   `server/tags/showcase.ts`, `shared/tagShowcase.ts`, `stuscleKitUrl` in `shared/wholesale.ts`.
 - Without `XPOT_WHOLESALE_SECRET` the endpoint answers 503 and the store sells

@@ -1,5 +1,5 @@
 // Tags › Shop (the showcase that sends resellers to Stuscle): only the Xpot admin keeps the entries, every
-// signed-in Tags user reads the published ones, and each link carries that reader's own wholesale code.
+// signed-in Tags user reads the published ones, and each link goes to Xpot's open route, never carrying a code.
 //
 // Skipped unless TAGS_INTEGRATION=1 and DATABASE_URL points at a disposable, migrated database. It empties
 // tag_showcase_items and replaces the sc-* users.
@@ -10,7 +10,7 @@ import type { AddressInfo } from "net";
 
 const enabled = process.env.TAGS_INTEGRATION === "1";
 
-test.skipIf(!enabled)("showcase: the admin keeps it, resellers read the published entries with their own code", async () => {
+test.skipIf(!enabled)("showcase: the admin keeps it, resellers read the published entries, linked through the open route", async () => {
   const { registerTagRoutes } = await import("../../server/tags/routes.js");
   const { db, pool } = await import("../../server/db.js");
   const { sql } = await import("drizzle-orm");
@@ -83,18 +83,15 @@ test.skipIf(!enabled)("showcase: the admin keeps it, resellers read the publishe
     assert.equal(ana.status, 200, ana.text);
     assert.deepEqual(ana.json.map((item: any) => item.title), ["Starter kit", "Large stand"]);
 
-    // Each link carries the reader's own code; a kit fills the cart, a model opens the wholesale store.
-    const codeOf = (url: string) => new URL(url).searchParams.get("code");
-    const anaCode = codeOf(ana.json[0].url);
-    assert.match(anaCode ?? "", /^XP-[0-9A-Z]{4}-[0-9A-Z]{4}$/);
-    assert.equal(new URL(ana.json[0].url).pathname, "/wholesale/kit");
-    assert.equal(new URL(ana.json[0].url).searchParams.get("items"), "KIT-POKEMON-48-STARTER:1");
-    assert.equal(new URL(ana.json[1].url).pathname, "/wholesale");
-    assert.equal(codeOf(ana.json[1].url), anaCode);
+    // Each link goes to Xpot's open route (it signs the reader's own code on the click) and carries no code: a kit
+    // fills the cart, a model opens the wholesale store. Every reader gets the same links.
+    const link = (url: string) => new URL(url, "https://xpot.test");
+    assert.equal(link(ana.json[0].url).pathname, "/api/xpot/wholesale/open");
+    assert.equal(link(ana.json[0].url).searchParams.get("items"), "KIT-POKEMON-48-STARTER:1");
+    assert.equal(ana.json[1].url, "/api/xpot/wholesale/open");
+    for (const item of ana.json) assert.equal(link(item.url).searchParams.has("code"), false);
     const bia = await api("sc-bia", "GET", "/api/xpot/tags/showcase");
-    assert.notEqual(codeOf(bia.json[0].url), anaCode);
-    // Reading again gives the same code (it is issued once).
-    assert.equal(codeOf((await api("sc-ana", "GET", "/api/xpot/tags/showcase")).json[0].url), anaCode);
+    assert.equal(bia.json[0].url, ana.json[0].url);
 
     // A rep without the Tags module is refused, like the rest of Tags.
     assert.equal((await api("sc-visits", "GET", "/api/xpot/tags/showcase")).status, 403);
@@ -108,8 +105,8 @@ test.skipIf(!enabled)("showcase: the admin keeps it, resellers read the publishe
     // A model that gets its SKU (in a pack quantity) goes into the cart too.
     const packed = await api("sc-admin", "PATCH", `/api/xpot/admin/tag-showcase/${model.json.id}`, { items: [{ sku: "STAND-LARGE-BLACK", quantity: 10 }] });
     assert.equal(packed.status, 200, packed.text);
-    const standUrl = new URL((await api("sc-ana", "GET", "/api/xpot/tags/showcase")).json[1].url);
-    assert.deepEqual([standUrl.pathname, standUrl.searchParams.get("items")], ["/wholesale/kit", "STAND-LARGE-BLACK:10"]);
+    const standUrl = link((await api("sc-ana", "GET", "/api/xpot/tags/showcase")).json[1].url);
+    assert.deepEqual([standUrl.pathname, standUrl.searchParams.get("items")], ["/api/xpot/wholesale/open", "STAND-LARGE-BLACK:10"]);
     assert.equal((await api("sc-admin", "PATCH", `/api/xpot/admin/tag-showcase/${draft.json.id}`, { isPublished: true })).status, 200);
     assert.equal((await api("sc-ana", "GET", "/api/xpot/tags/showcase")).json.length, 3);
 

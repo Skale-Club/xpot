@@ -4,7 +4,7 @@ import { and, eq, isNull } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "../db.js";
 import { salesReps } from "#shared/schema.js";
-import { formatWholesaleCode, generateWholesaleCode, normalizeWholesaleCode, wholesaleUrl } from "#shared/wholesale.js";
+import { formatWholesaleCode, generateWholesaleCode, normalizeWholesaleCode, WHOLESALE_OPEN_PATH, wholesaleUrl } from "#shared/wholesale.js";
 import { normalizeIpKey, rateLimit } from "../tags/rateLimit.js";
 import { accessDenial, ensureXpotRep, isPlatformAdmin, requirePlatformAdmin } from "../routes/xpot/middleware.js";
 import { repModules } from "#shared/modules.js";
@@ -13,11 +13,16 @@ import { recordStuscleOrder } from "../tags/acquisitions.js";
 import { TagSaleError } from "../tags/sales.js";
 import { ordersReachXpot } from "../tags/distribution.js";
 import { distributionForRep } from "../organizations/links.js";
+import { parseHandoffQuery, signWholesaleHandoff, wholesaleHandoffSecret } from "./handoff.js";
 
 // Wholesale prices live in the Stuscle store; Xpot decides who gets them.
 // Every approved rep has a personal code. Stuscle asks Xpot whether a code is
 // good (server to server, shared secret) when the reseller enters it and again
 // at checkout, so blocking someone here closes wholesale there at once.
+//
+// The code never travels in a link. A click in the Shop goes to Xpot's own
+// open route, which signs a two-minute, single-use ticket for the signed-in
+// rep's code and redirects to the store (handoff.ts); Stuscle accepts only that.
 //
 //   XPOT_WHOLESALE_SECRET  shared with Stuscle (its XPOT_WHOLESALE_SECRET)
 //   STUSCLE_PUBLIC_URL     the store, for the "Buy kits" link (default https://stuscle.com)
@@ -86,6 +91,35 @@ function secretMatches(req: Request): boolean {
 
 const verifySchema = z.object({ code: z.string().max(40) }).strict();
 
+type StoreAccess =
+  | { ok: true; repId: number; storeOpen: true }
+  | { ok: true; repId: number; storeOpen: false; partner: string | null }
+  | { ok: false; status: 401 | 403; body: unknown };
+
+/**
+ * Whether the signed-in person may buy at wholesale, the one check behind the card and the open route: an active rep
+ * with Tags (managers always have it), and a store only when their partner does not handle its own distribution.
+ */
+async function storeAccess(req: Request): Promise<StoreAccess> {
+  const actor = await ensureXpotRep(req);
+  if (!actor) return { ok: false, status: 401, body: { message: "Authentication required" } };
+  const denial = accessDenial(actor.rep);
+  if (denial) return { ok: false, status: 403, body: denial };
+  // The code buys Tags kits at wholesale: only for reps who sell Tags (managers always do).
+  if (!isPlatformAdmin(actor) && !repModules(actor.rep).includes("tags")) {
+    return { ok: false, status: 403, body: { message: "Tags are not enabled for your account." } };
+  }
+  // People whose partner handles its own distribution have no store: their pieces come from the partner.
+  const distribution = await distributionForRep(actor.rep.id);
+  if (!ordersReachXpot(distribution.path)) return { ok: true, repId: actor.rep.id, storeOpen: false, partner: distribution.partner?.name ?? null };
+  return { ok: true, repId: actor.rep.id, storeOpen: true };
+}
+
+/** A browser navigating here (the button opened a tab), rather than the app's fetch: it gets pages, not JSON. */
+function isNavigation(req: Request): boolean {
+  return req.get("sec-fetch-mode") === "navigate" || req.accepts(["json", "html"]) === "html";
+}
+
 export function registerWholesaleRoutes(app: Express) {
   // Stuscle → Xpot: is this code good for wholesale?
   app.post("/api/integrations/stuscle/wholesale/verify", async (req: Request, res: Response) => {
@@ -124,25 +158,52 @@ export function registerWholesaleRoutes(app: Express) {
     }
   });
 
-  // The signed-in rep's own code and store link (Tags home → "Buy kits").
+  // The signed-in rep's own code (shown, never in a link) and the store link: Xpot's open route (Tags home → "Buy kits").
   app.get("/api/xpot/wholesale", async (req: Request, res: Response) => {
     try {
-      const actor = await ensureXpotRep(req);
-      if (!actor) return res.status(401).json({ message: "Authentication required" });
-      const denial = accessDenial(actor.rep);
-      if (denial) return res.status(403).json(denial);
-      // The code buys Tags kits at wholesale: only for reps who sell Tags (managers always do).
-      if (!isPlatformAdmin(actor) && !repModules(actor.rep).includes("tags")) {
-        return res.status(403).json({ message: "Tags are not enabled for your account." });
-      }
-      // People whose partner handles its own distribution have no store link: their pieces come from the partner.
-      const distribution = await distributionForRep(actor.rep.id);
-      if (!ordersReachXpot(distribution.path)) return res.json({ code: null, url: null, partner: distribution.partner?.name ?? null });
-      const code = await ensureWholesaleCode(actor.rep.id);
-      res.json({ code: formatWholesaleCode(code), url: wholesaleUrl(storeBaseUrl(), code) });
+      const access = await storeAccess(req);
+      if (!access.ok) return res.status(access.status).json(access.body);
+      if (!access.storeOpen) return res.json({ code: null, url: null, partner: access.partner });
+      const code = await ensureWholesaleCode(access.repId);
+      res.json({ code: formatWholesaleCode(code), url: wholesaleUrl() });
     } catch (err) {
       console.error("[wholesale] code", err);
       res.status(500).json({ message: "Failed to load your wholesale code" });
+    }
+  });
+
+  // A click in the Shop → the store, signed in as this rep. Mints a two-minute, single-use ticket for the signed-in
+  // rep's own code (never one from the query) and 303s to Stuscle's /wholesale/kit with it. ?items=SKU:qty,…
+  // fills the cart, ?product=<handle> lands on that product, ?lang= is Stuscle's language name. A link copied out of
+  // the app is worth nothing to anyone else: they are asked to sign in, and then it opens their own code or nothing.
+  app.get(WHOLESALE_OPEN_PATH, async (req: Request, res: Response) => {
+    res.set("Cache-Control", "no-store");
+    res.set("Referrer-Policy", "no-referrer");
+    if (rateLimit(`wholesale-open:ip:${normalizeIpKey(req.ip)}`, { limit: 120, windowMs: 60_000 })) {
+      return res.status(429).json({ message: "Too many requests" });
+    }
+    // Another site bouncing a signed-in rep through here: the click must come from Xpot (or be typed in).
+    if (req.get("sec-fetch-site") === "cross-site") return res.status(403).json({ message: "Open the store from Xpot's Shop" });
+    const secret = wholesaleHandoffSecret();
+    if (!secret) return res.status(503).json({ message: "Wholesale is not configured" });
+    const target = parseHandoffQuery(req.query as Record<string, unknown>);
+    if (!target) return res.status(400).json({ message: "Invalid input" });
+    try {
+      const access = await storeAccess(req);
+      if (!access.ok) {
+        // The tab the button opened, signed out: through sign-in and back here, as /oauth/authorize does.
+        if (access.status === 401 && isNavigation(req)) return res.redirect(303, `/?signin=1&next=${encodeURIComponent(req.originalUrl)}`);
+        return res.status(access.status).json(access.body);
+      }
+      if (!access.storeOpen) return res.status(403).json({ code: "own_distribution", message: "Your pieces come from your partner", partner: access.partner });
+      if (rateLimit(`wholesale-open:rep:${access.repId}`, { limit: 30, windowMs: 60_000 })) {
+        return res.status(429).json({ message: "Too many requests" });
+      }
+      const ticket = signWholesaleHandoff({ code: await ensureWholesaleCode(access.repId), ...target }, secret);
+      res.redirect(303, `${storeBaseUrl().replace(/\/+$/, "")}/wholesale/kit?ticket=${encodeURIComponent(ticket)}`);
+    } catch (err) {
+      console.error("[wholesale] open", err);
+      res.status(500).json({ message: "Could not open the store" });
     }
   });
 
