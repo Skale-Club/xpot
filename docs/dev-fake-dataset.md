@@ -13,7 +13,7 @@ Safety (`scripts/seed-dev-guard.ts`):
 - refuses `NODE_ENV=production`;
 - refuses any Supabase project except Xpot's development project `swqxxeivetzakglaphil`;
 - never reads `DATABASE_URL` / `POSTGRES_URL`;
-- saves a JSON backup to `../xpot-db-backups/` before writing; everything runs in one transaction.
+- saves a JSON backup to `.cache/db-backups/` (git-ignored; only the newest 5 are kept) before writing; everything runs in one transaction.
 
 ## What it keeps and what it changes
 

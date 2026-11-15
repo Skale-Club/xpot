@@ -18,17 +18,15 @@
 // code is shown on screen (devCode), no SMS is sent.
 
 import "dotenv/config";
-import { mkdirSync, writeFileSync } from "fs";
-import { join, resolve } from "path";
 import pg from "pg";
 import { describeDatabaseTarget } from "../server/lib/database-target.js";
 import { isXpotDataTable } from "./db-pull-schema.js";
 import { seedDatabaseUrl } from "./seed-dev-guard.js";
+import { writeDbBackup } from "./db-backup.js";
 
 type Row = Record<string, unknown>;
 
 const DRY_RUN = process.argv.includes("--dry-run");
-const BACKUP_DIR = resolve(process.cwd(), "..", "xpot-db-backups");
 
 /** Kept as they are: configuration and catalogs, not business data. */
 const KEEP = new Set([
@@ -131,9 +129,7 @@ async function tableNames(c: pg.Client) {
 async function backup(c: pg.Client) {
   const dump: Record<string, unknown[]> = {};
   for (const t of await tableNames(c)) dump[t] = (await c.query(`select * from "${t}"`)).rows;
-  mkdirSync(BACKUP_DIR, { recursive: true });
-  const file = join(BACKUP_DIR, `dev-before-seed-${NOW.toISOString().replace(/[:.]/g, "-")}.json`);
-  writeFileSync(file, JSON.stringify({ takenAt: NOW.toISOString(), tables: dump }));
+  const file = writeDbBackup("dev-before-seed", NOW, dump);
   console.log(`✓ backup of the development database: ${file}`);
 }
 

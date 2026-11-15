@@ -4,7 +4,7 @@
 // 1. Over SSH, find the xpot-db container's address and credentials. They stay
 //    in memory; the database is never exposed to the internet.
 // 2. Open a temporary SSH tunnel to it.
-// 3. Save a JSON backup of the local database (../xpot-db-backups/).
+// 3. Save a JSON backup of the local database (.cache/db-backups/, newest 5 kept).
 // 4. Read production in one READ ONLY snapshot and replace the local data in
 //    ONE transaction: any error leaves the local database untouched. Login
 //    sessions, phone codes and the migration log stay local, so you stay signed in.
@@ -18,16 +18,16 @@ import "dotenv/config";
 import { spawn, spawnSync } from "child_process";
 import { mkdirSync, writeFileSync } from "fs";
 import { createConnection } from "net";
-import { join, resolve } from "path";
+import { resolve } from "path";
 import pg from "pg";
 import { isXpotDataTable, missingRequiredColumns, type DatabaseColumn } from "./db-pull-schema.js";
+import { writeDbBackup } from "./db-backup.js";
 import { resolveDatabaseUrl } from "../server/lib/database-target.js";
 
 const PROD_SSH = process.env.XPOT_PROD_SSH;
 const PROD_CONTAINER = process.env.XPOT_PROD_DB_CONTAINER || "7l8mjbkk16mk0ss9dviw9lzj";
 const LOCAL_URL = resolveDatabaseUrl({ ...process.env, NODE_ENV: "development" });
 const TUNNEL_PORT = 55432;
-const BACKUP_DIR = resolve(process.cwd(), "..", "xpot-db-backups");
 /** When the last pull succeeded; `npm run local` reads it to pull at most every few hours. */
 const PULL_STAMP = resolve(process.cwd(), ".cache", "db-pull.json");
 
@@ -84,9 +84,7 @@ async function tableNames(c: pg.Client) {
 async function backupLocal(local: pg.Client) {
   const dump: Record<string, unknown[]> = {};
   for (const t of await tableNames(local)) dump[t] = (await local.query(`select * from "${t}"`)).rows;
-  mkdirSync(BACKUP_DIR, { recursive: true });
-  const file = join(BACKUP_DIR, `local-${new Date().toISOString().replace(/[:.]/g, "-")}.json`);
-  writeFileSync(file, JSON.stringify({ takenAt: new Date().toISOString(), tables: dump }));
+  const file = writeDbBackup("local", new Date(), dump);
   console.log(`✓ local backup ${file}`);
 }
 
