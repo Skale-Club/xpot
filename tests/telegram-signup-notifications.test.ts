@@ -1,15 +1,29 @@
-import { afterEach, test, vi } from "vitest";
+import { afterEach, beforeEach, test, vi } from "vitest";
 import assert from "node:assert/strict";
 
 const originalToken = process.env.XPOT_TELEGRAM_BOT_TOKEN;
 const originalChat = process.env.XPOT_TELEGRAM_CHAT_ID;
 
+beforeEach(() => vi.stubEnv("NODE_ENV", "production"));
+
 afterEach(() => {
   vi.unstubAllGlobals();
+  vi.unstubAllEnvs();
   if (originalToken === undefined) delete process.env.XPOT_TELEGRAM_BOT_TOKEN;
   else process.env.XPOT_TELEGRAM_BOT_TOKEN = originalToken;
   if (originalChat === undefined) delete process.env.XPOT_TELEGRAM_CHAT_ID;
   else process.env.XPOT_TELEGRAM_CHAT_ID = originalChat;
+});
+
+test("development cannot send even when credentials are present", async () => {
+  vi.stubEnv("NODE_ENV", "development");
+  process.env.XPOT_TELEGRAM_BOT_TOKEN = "secret-token";
+  process.env.XPOT_TELEGRAM_CHAT_ID = "-123";
+  const fetchMock = vi.fn();
+  vi.stubGlobal("fetch", fetchMock);
+  const { sendSignupTelegram } = await import("../server/auth/telegram.js");
+  assert.equal(await sendSignupTelegram("lead"), false);
+  assert.equal(fetchMock.mock.calls.length, 0);
 });
 
 test("Telegram sign-up notices stay disabled until both settings exist", async () => {
@@ -47,6 +61,7 @@ test("completed lead formatting is structured and escapes user content", async (
     workCity: "Worcester & Co", workRegion: "MA", hasVehicle: true, test: true,
   });
   assert.match(text, /LEAD DE TESTE/);
+  assert.match(text, /🔵 Informação/);
   assert.match(text, /Maria &lt;Teste&gt;/);
   assert.match(text, /Worcester &amp; Co, MA/);
   assert.match(text, /<b>Área de atuação<\/b>/);

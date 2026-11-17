@@ -1,0 +1,41 @@
+name: Production uptime
+
+on:
+  schedule:
+    - cron: "*/10 * * * *"
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+concurrency:
+  group: production-uptime
+  cancel-in-progress: false
+
+jobs:
+  probe:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+      - name: Restore uptime state
+        uses: actions/cache/restore@v5
+        with:
+          path: .ops-state
+          key: xpot-uptime-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: xpot-uptime-
+      - name: Probe canonical production origin
+        env:
+          OPS_TELEGRAM_ENABLED: ${{ vars.OPS_TELEGRAM_ENABLED }}
+          OPS_ENVIRONMENT: production
+          OPS_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          XPOT_TELEGRAM_BOT_TOKEN: ${{ secrets.XPOT_TELEGRAM_BOT_TOKEN }}
+          XPOT_TELEGRAM_CHAT_ID: ${{ secrets.XPOT_TELEGRAM_CHAT_ID }}
+        run: python3 scripts/ops/telegram-ops.py probe
+      - name: Save observed and acknowledged state
+        if: always()
+        uses: actions/cache/save@v5
+        with:
+          path: .ops-state
+          key: xpot-uptime-${{ github.run_id }}-${{ github.run_attempt }}

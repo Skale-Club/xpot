@@ -38,14 +38,25 @@ permissions:
 
 jobs:
   deploy:
-    if: github.event_name == 'workflow_dispatch' || (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push')
+    if: github.ref == 'refs/heads/main' && (github.event_name == 'workflow_dispatch' || (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push'))
     runs-on: ubuntu-latest
     timeout-minutes: 20
     env:
       COOLIFY_BASE: https://coolify.skale.club
       APP_UUID: ${{ vars.COOLIFY_APP_UUID }}
       PUBLIC_URL: ${{ vars.XPOT_PUBLIC_URL }}
+      OPS_TELEGRAM_ENABLED: ${{ vars.OPS_TELEGRAM_ENABLED }}
+      OPS_ENVIRONMENT: production
+      XPOT_TELEGRAM_BOT_TOKEN: ${{ secrets.XPOT_TELEGRAM_BOT_TOKEN }}
+      XPOT_TELEGRAM_CHAT_ID: ${{ secrets.XPOT_TELEGRAM_CHAT_ID }}
+      OPS_SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
+      OPS_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
     steps:
+      - name: Checkout validated source
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+
       - name: Skip if not configured, or if main moved past the CI-validated commit
         id: guard
         env:
@@ -70,9 +81,16 @@ jobs:
           echo "skip=false" >> "$GITHUB_OUTPUT"
           echo "sha=${main_sha}" >> "$GITHUB_OUTPUT"
 
+      - name: Notify deployment started
+        if: steps.guard.outputs.skip == 'false'
+        continue-on-error: true
+        env:
+          OPS_EVENT: build-started
+        run: python3 scripts/ops/telegram-ops.py notify
+
       - name: Trigger Coolify deployment
         id: trigger
-        if: steps.guard.outputs.skip != 'true'
+        if: steps.guard.outputs.skip == 'false'
         env:
           COOLIFY_TOKEN: ${{ secrets.COOLIFY_TOKEN }}
         run: |
@@ -93,7 +111,8 @@ jobs:
           echo "deployment_uuid=${deployment_uuid}" >> "$GITHUB_OUTPUT"
 
       - name: Wait for Coolify deployment to finish
-        if: steps.guard.outputs.skip != 'true'
+        id: wait
+        if: steps.guard.outputs.skip == 'false'
         env:
           COOLIFY_TOKEN: ${{ secrets.COOLIFY_TOKEN }}
           DEPLOYMENT_UUID: ${{ steps.trigger.outputs.deployment_uuid }}
@@ -106,42 +125,50 @@ jobs:
             echo "[${i}/60] deployment ${DEPLOYMENT_UUID}: ${status}"
             case "${status}" in
               finished) exit 0 ;;
-              failed|cancelled*|error) echo "::error::Coolify deployment ended as '${status}'"; exit 1 ;;
+              cancelled*) echo "cancelled=true" >> "$GITHUB_OUTPUT"; echo "::error::Coolify deployment cancelled"; exit 1 ;;
+              failed|error) echo "::error::Coolify deployment ended as '${status}'"; exit 1 ;;
             esac
             sleep 10
           done
           echo "::error::Coolify deployment did not finish within 10 minutes"
           exit 1
 
-      - name: Verify production health
-        if: steps.guard.outputs.skip != 'true'
-        run: |
-          # Traefik can take a few seconds to switch over to the new container.
-          for i in $(seq 1 12); do
-            code=$(curl -sS -o /dev/null -w "%{http_code}" --max-time 10 "${PUBLIC_URL}/api/health" || echo 000)
-            echo "[${i}/12] ${PUBLIC_URL}/api/health -> ${code}"
-            if [ "${code}" = "200" ]; then exit 0; fi
-            sleep 10
-          done
-          echo "::error::${PUBLIC_URL}/api/health did not return 200 after deploy"
-          exit 1
-
-      - name: Verify the deployed commit
-        if: steps.guard.outputs.skip != 'true'
+      - name: Verify production readiness and exact deployed commit
+        if: steps.guard.outputs.skip == 'false'
         env:
           EXPECTED_SHA: ${{ steps.guard.outputs.sha }}
+        run: python3 scripts/ops/telegram-ops.py verify
+
+      - name: Notify deployment outcome
+        if: always() && steps.guard.outputs.skip != 'true'
+        continue-on-error: true
+        env:
+          RESULT: ${{ steps.wait.outputs.cancelled == 'true' && 'cancelled' || job.status }}
         run: |
-          # /api/version reports SOURCE_COMMIT (injected by Coolify). When it is
-          # not available (null) there is nothing to compare, so only warn.
-          for i in $(seq 1 12); do
-            commit=$(curl -sS --max-time 10 "${PUBLIC_URL}/api/version" | jq -r '.commit // empty' || true)
-            echo "[${i}/12] deployed commit: ${commit:-<unavailable>} (expected ${EXPECTED_SHA})"
-            if [ -z "${commit}" ]; then
-              echo "::warning::SOURCE_COMMIT is not available; skipping commit comparison"
-              exit 0
-            fi
-            if [ "${commit}" = "${EXPECTED_SHA}" ]; then exit 0; fi
-            sleep 10
-          done
-          echo "::error::Deployed commit does not match ${EXPECTED_SHA}"
-          exit 1
+          case "$RESULT" in
+            success) export OPS_EVENT=deploy-succeeded ;;
+            cancelled) export OPS_EVENT=build-deploy-cancelled ;;
+            *) export OPS_EVENT=build-deploy-failed ;;
+          esac
+          python3 scripts/ops/telegram-ops.py notify
+
+  notify-ci-failure:
+    if: github.event_name == 'workflow_run' && github.event.workflow_run.event == 'push' && github.event.workflow_run.head_branch == 'main' && (github.event.workflow_run.conclusion == 'failure' || github.event.workflow_run.conclusion == 'cancelled' || github.event.workflow_run.conclusion == 'timed_out')
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+      - name: Notify CI gate failure
+        continue-on-error: true
+        env:
+          OPS_TELEGRAM_ENABLED: ${{ vars.OPS_TELEGRAM_ENABLED }}
+          OPS_ENVIRONMENT: production
+          XPOT_TELEGRAM_BOT_TOKEN: ${{ secrets.XPOT_TELEGRAM_BOT_TOKEN }}
+          XPOT_TELEGRAM_CHAT_ID: ${{ secrets.XPOT_TELEGRAM_CHAT_ID }}
+          OPS_EVENT: ${{ github.event.workflow_run.conclusion == 'cancelled' && 'build-deploy-cancelled' || 'ci-failed' }}
+          OPS_DETAIL: Validation failed; production publication did not start. Check the failed jobs in this run.
+          OPS_SHA: ${{ github.event.workflow_run.head_sha }}
+          OPS_RUN_URL: ${{ github.event.workflow_run.html_url }}
+        run: python3 scripts/ops/telegram-ops.py notify

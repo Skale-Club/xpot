@@ -31,7 +31,21 @@ export async function registerRoutes(app: Express) {
 
   // Health check
   app.get("/api/health", (_req, res) => {
+    res.set("Cache-Control", "no-store");
     res.json({ ok: true, ts: new Date().toISOString() });
+  });
+
+  // Lazy loading keeps ordinary route tests and business requests independent
+  // of the dedicated read-only probe connection.
+  app.get("/api/health/ready", async (_req, res) => {
+    res.set("Cache-Control", "no-store");
+    try {
+      const { getReadiness } = await import("./observability/readinessRuntime.js");
+      const readiness = await getReadiness();
+      res.status(readiness.ok ? 200 : 503).json(readiness);
+    } catch {
+      res.status(503).json({ ok: false, status: "down", checks: { database: { ok: false, latency_ms: 0 } }, commit: process.env.SOURCE_COMMIT ?? null });
+    }
   });
 
   // Deployed commit (Coolify injects SOURCE_COMMIT); the deploy workflow checks it.

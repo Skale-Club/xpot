@@ -14,7 +14,7 @@ export function escapeTelegramHtml(value: string): string {
 
 export function formatSignupLeadTelegram(lead: SignupLeadTelegram): string {
   return [
-    lead.test ? "<b>LEAD DE TESTE · XPOT</b>" : "<b>NOVO LEAD · XPOT</b>",
+    lead.test ? "🔵 Informação — <b>LEAD DE TESTE · XPOT</b>" : "🔵 Informação — <b>NOVO LEAD · XPOT</b>",
     "Formulário concluído",
     "",
     "<b>Contato</b>",
@@ -39,6 +39,7 @@ interface TelegramOptions {
 
 /** Send one formatted notification without ever exposing the bot token in logs. */
 export async function sendSignupTelegram(text: string, options: TelegramOptions = {}): Promise<boolean> {
+  if (process.env.NODE_ENV !== "production") return false;
   const token = process.env.XPOT_TELEGRAM_BOT_TOKEN?.trim();
   const chatId = process.env.XPOT_TELEGRAM_CHAT_ID?.trim();
   if (!token || !chatId) return false;

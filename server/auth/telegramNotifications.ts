@@ -7,6 +7,7 @@ const ABANDONED_AFTER_MS = 30 * 60 * 1000;
 const CHECK_EVERY_MS = 5 * 60 * 1000;
 
 export function startAbandonedSignupNotifier(): () => void {
+  if (process.env.NODE_ENV !== "production") return () => {};
   if (!process.env.XPOT_TELEGRAM_BOT_TOKEN?.trim() || !process.env.XPOT_TELEGRAM_CHAT_ID?.trim()) {
     console.warn("[signup-telegram] XPOT_TELEGRAM_BOT_TOKEN or XPOT_TELEGRAM_CHAT_ID is unset: sign-ups will not be announced");
   }
@@ -28,7 +29,7 @@ export function startAbandonedSignupNotifier(): () => void {
       const name = [row.firstName, row.lastName].filter(Boolean).join(" ") || "Name not provided";
       const place = [row.request.workCity, row.request.workRegion].filter(Boolean).join(", ") || "location not provided";
       const sent = await sendSignupTelegram(
-        `<b>RASCUNHO ABANDONADO · XPOT</b>\n\nNome: ${escapeTelegramHtml(name)}\nTelefone: ${escapeTelegramHtml(row.phone ?? "Indisponível")}\nLocal: ${escapeTelegramHtml(place)}\n\nParou na pergunta ${row.request.draftStep + 1}.`,
+        `🟠 Atenção — <b>RASCUNHO ABANDONADO · XPOT</b>\n\nNome: ${escapeTelegramHtml(name)}\nTelefone: ${escapeTelegramHtml(row.phone ?? "Indisponível")}\nLocal: ${escapeTelegramHtml(place)}\n\nParou na pergunta ${row.request.draftStep + 1}.`,
         {
           whatsappPhone: row.phone,
           whatsappText: `Olá, ${name.split(/\s+/)[0]}! Vimos que você começou seu cadastro no Xpot. Posso ajudar?`,
