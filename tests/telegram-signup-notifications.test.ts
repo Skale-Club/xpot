@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 
 const originalToken = process.env.XPOT_TELEGRAM_BOT_TOKEN;
 const originalChat = process.env.XPOT_TELEGRAM_CHAT_ID;
+const originalLeads = process.env.XPOT_LEADS_TELEGRAM_CHAT_ID;
 
 beforeEach(() => vi.stubEnv("NODE_ENV", "production"));
 
@@ -13,12 +14,14 @@ afterEach(() => {
   else process.env.XPOT_TELEGRAM_BOT_TOKEN = originalToken;
   if (originalChat === undefined) delete process.env.XPOT_TELEGRAM_CHAT_ID;
   else process.env.XPOT_TELEGRAM_CHAT_ID = originalChat;
+  if (originalLeads === undefined) delete process.env.XPOT_LEADS_TELEGRAM_CHAT_ID;
+  else process.env.XPOT_LEADS_TELEGRAM_CHAT_ID = originalLeads;
 });
 
 test("development cannot send even when credentials are present", async () => {
   vi.stubEnv("NODE_ENV", "development");
   process.env.XPOT_TELEGRAM_BOT_TOKEN = "secret-token";
-  process.env.XPOT_TELEGRAM_CHAT_ID = "-123";
+  process.env.XPOT_LEADS_TELEGRAM_CHAT_ID = "-123";
   const fetchMock = vi.fn();
   vi.stubGlobal("fetch", fetchMock);
   const { sendSignupTelegram } = await import("../server/auth/telegram.js");
@@ -28,7 +31,7 @@ test("development cannot send even when credentials are present", async () => {
 
 test("Telegram sign-up notices stay disabled until both settings exist", async () => {
   delete process.env.XPOT_TELEGRAM_BOT_TOKEN;
-  delete process.env.XPOT_TELEGRAM_CHAT_ID;
+  delete process.env.XPOT_LEADS_TELEGRAM_CHAT_ID;
   const fetchMock = vi.fn();
   vi.stubGlobal("fetch", fetchMock);
   const { sendSignupTelegram } = await import("../server/auth/telegram.js");
@@ -36,9 +39,9 @@ test("Telegram sign-up notices stay disabled until both settings exist", async (
   assert.equal(fetchMock.mock.calls.length, 0);
 });
 
-test("Telegram sign-up notices post to the configured chat", async () => {
+test("Telegram sign-up notices post to the dedicated Leads chat", async () => {
   process.env.XPOT_TELEGRAM_BOT_TOKEN = "test-token";
-  process.env.XPOT_TELEGRAM_CHAT_ID = "-123";
+  process.env.XPOT_LEADS_TELEGRAM_CHAT_ID = "-123";
   const fetchMock = vi.fn().mockResolvedValue({ ok: true });
   vi.stubGlobal("fetch", fetchMock);
   const { sendSignupTelegram } = await import("../server/auth/telegram.js");
@@ -69,7 +72,7 @@ test("completed lead formatting is structured and escapes user content", async (
 
 test("a refused Telegram notice logs Telegram's reason without the token", async () => {
   process.env.XPOT_TELEGRAM_BOT_TOKEN = "secret-token";
-  process.env.XPOT_TELEGRAM_CHAT_ID = "-123";
+  process.env.XPOT_LEADS_TELEGRAM_CHAT_ID = "-123";
   vi.stubGlobal("fetch", vi.fn().mockResolvedValue({
     ok: false,
     status: 400,
@@ -81,6 +84,26 @@ test("a refused Telegram notice logs Telegram's reason without the token", async
   const logged = errorSpy.mock.calls.flat().join(" ");
   errorSpy.mockRestore();
   assert.match(logged, /upgraded to a supergroup/);
-  assert.match(logged, /XPOT_TELEGRAM_CHAT_ID to -100123/);
+  assert.match(logged, /XPOT_LEADS_TELEGRAM_CHAT_ID to -100123/);
   assert.doesNotMatch(logged, /secret-token/);
+});
+
+test("sign-up notices never fall back to the Ops chat", async () => {
+  process.env.XPOT_TELEGRAM_BOT_TOKEN = "test-token";
+  process.env.XPOT_TELEGRAM_CHAT_ID = "-555";
+  delete process.env.XPOT_LEADS_TELEGRAM_CHAT_ID;
+  const fetchMock = vi.fn().mockResolvedValue({ ok: true });
+  vi.stubGlobal("fetch", fetchMock);
+  const { sendSignupTelegram, isSignupTelegramConfigured } = await import("../server/auth/telegram.js");
+  assert.equal(isSignupTelegramConfigured(), false);
+  assert.equal(await sendSignupTelegram("lead"), false);
+  assert.equal(fetchMock.mock.calls.length, 0);
+});
+
+test("a Leads chat equal to Ops, or not a group id, is refused", async () => {
+  const { signupLeadsChatId } = await import("../server/auth/telegram.js");
+  assert.equal(signupLeadsChatId({ XPOT_TELEGRAM_CHAT_ID: "-555", XPOT_LEADS_TELEGRAM_CHAT_ID: "-555" }), null);
+  assert.equal(signupLeadsChatId({ XPOT_LEADS_TELEGRAM_CHAT_ID: "12345" }), null);
+  assert.equal(signupLeadsChatId({ XPOT_LEADS_TELEGRAM_CHAT_ID: "@xpotleads" }), null);
+  assert.equal(signupLeadsChatId({ XPOT_TELEGRAM_CHAT_ID: "-555", XPOT_LEADS_TELEGRAM_CHAT_ID: " -1009 " }), "-1009");
 });

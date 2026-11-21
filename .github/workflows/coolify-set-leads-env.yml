@@ -1,0 +1,63 @@
+name: Coolify — Set Leads Telegram destination
+
+# Ops utility (manual only): writes XPOT_LEADS_TELEGRAM_CHAT_ID, the dedicated
+# Xpot | Leads group for sign-up notices, into the Coolify app's runtime env.
+# It touches no other key. Before writing it checks that the value is a group
+# id, differs from the technical Ops group and that the shared bot can post
+# there. See docs/telegram-ops.md.
+#
+# Inputs come from repository secrets: XPOT_LEADS_TELEGRAM_CHAT_ID (new),
+# XPOT_TELEGRAM_BOT_TOKEN and XPOT_TELEGRAM_CHAT_ID (existing, Ops).
+
+on:
+  workflow_dispatch:
+    inputs:
+      redeploy:
+        description: Restart the app so the value takes effect now
+        type: boolean
+        default: true
+
+concurrency:
+  group: coolify-deploy
+  cancel-in-progress: false
+
+jobs:
+  set-leads-env:
+    runs-on: ubuntu-latest
+    env:
+      COOLIFY_BASE: https://coolify.skale.club
+      APP_UUID: ${{ vars.COOLIFY_APP_UUID }}
+      COOLIFY_TOKEN: ${{ secrets.COOLIFY_TOKEN }}
+      BOT_TOKEN: ${{ secrets.XPOT_TELEGRAM_BOT_TOKEN }}
+      OPS_CHAT: ${{ secrets.XPOT_TELEGRAM_CHAT_ID }}
+      LEADS_CHAT: ${{ secrets.XPOT_LEADS_TELEGRAM_CHAT_ID }}
+      REDEPLOY: ${{ inputs.redeploy }}
+    steps:
+      - name: Check and write the Leads destination
+        run: |
+          set -euo pipefail
+          for v in APP_UUID COOLIFY_TOKEN BOT_TOKEN LEADS_CHAT; do
+            [ -n "${!v}" ] || { echo "::error::$v is not set"; exit 1; }
+          done
+          [[ "$LEADS_CHAT" =~ ^-[1-9][0-9]*$ ]] || { echo "::error::Leads chat must be a negative numeric group id"; exit 1; }
+          [ "$LEADS_CHAT" != "$OPS_CHAT" ] || { echo "::error::Leads chat must differ from the Ops chat"; exit 1; }
+
+          status=$(curl -s "https://api.telegram.org/bot${BOT_TOKEN}/getChatMember?chat_id=${LEADS_CHAT}&user_id=${BOT_TOKEN%%:*}" | jq -r '.result.status // .description')
+          echo "==> bot status in Leads group: $status"
+          case "$status" in member|administrator|creator) ;; *) echo "::error::the bot cannot post to the Leads group"; exit 1 ;; esac
+
+          API="${COOLIFY_BASE}/api/v1/applications/${APP_UUID}/envs"
+          body=$(jq -nc --arg v "$LEADS_CHAT" '{key:"XPOT_LEADS_TELEGRAM_CHAT_ID",value:$v,is_preview:false,is_literal:true}')
+          code=$(curl -s -o /tmp/out -w "%{http_code}" -X PATCH "$API" -H "Authorization: Bearer ${COOLIFY_TOKEN}" -H "Content-Type: application/json" -d "$body")
+          if [ "$code" -lt 200 ] || [ "$code" -ge 300 ]; then
+            code=$(curl -s -o /tmp/out -w "%{http_code}" -X POST "$API" -H "Authorization: Bearer ${COOLIFY_TOKEN}" -H "Content-Type: application/json" -d "$body")
+            [ "$code" -ge 200 ] && [ "$code" -lt 300 ] || { echo "::error::Coolify refused ($code)"; exit 1; }
+            echo "==> XPOT_LEADS_TELEGRAM_CHAT_ID created ($code)"
+          else
+            echo "==> XPOT_LEADS_TELEGRAM_CHAT_ID updated ($code)"
+          fi
+
+          if [ "$REDEPLOY" = "true" ]; then
+            curl --fail-with-body -sS --retry 3 --retry-all-errors -X POST "${COOLIFY_BASE}/api/v1/deploy?uuid=${APP_UUID}" -H "Authorization: Bearer ${COOLIFY_TOKEN}" >/dev/null
+            echo "==> redeploy requested"
+          fi

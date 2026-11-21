@@ -37,11 +37,27 @@ interface TelegramOptions {
   whatsappText?: string;
 }
 
+/**
+ * The dedicated Xpot | Leads group. Sign-up notices never go to the technical
+ * Ops group (XPOT_TELEGRAM_CHAT_ID): a missing, malformed or Ops-equal value
+ * disables them instead of falling back.
+ */
+export function signupLeadsChatId(env: Record<string, string | undefined> = process.env): string | null {
+  const chatId = env.XPOT_LEADS_TELEGRAM_CHAT_ID?.trim() ?? "";
+  if (!/^-[1-9]\d*$/.test(chatId)) return null;
+  if (chatId === env.XPOT_TELEGRAM_CHAT_ID?.trim()) return null;
+  return chatId;
+}
+
+export function isSignupTelegramConfigured(env: Record<string, string | undefined> = process.env): boolean {
+  return Boolean(env.XPOT_TELEGRAM_BOT_TOKEN?.trim()) && signupLeadsChatId(env) !== null;
+}
+
 /** Send one formatted notification without ever exposing the bot token in logs. */
 export async function sendSignupTelegram(text: string, options: TelegramOptions = {}): Promise<boolean> {
   if (process.env.NODE_ENV !== "production") return false;
   const token = process.env.XPOT_TELEGRAM_BOT_TOKEN?.trim();
-  const chatId = process.env.XPOT_TELEGRAM_CHAT_ID?.trim();
+  const chatId = signupLeadsChatId();
   if (!token || !chatId) return false;
   try {
     const phone = options.whatsappPhone?.replace(/\D/g, "") ?? "";
@@ -61,7 +77,7 @@ export async function sendSignupTelegram(text: string, options: TelegramOptions 
       // Telegram's own reason ("chat not found", a group upgraded to a supergroup...); it never echoes the token.
       const answer = await response.json().catch(() => null) as { description?: string; parameters?: { migrate_to_chat_id?: number } } | null;
       const migrated = answer?.parameters?.migrate_to_chat_id;
-      console.error(`[signup-telegram] Telegram refused (${response.status}): ${answer?.description ?? "no reason given"}${migrated ? `; set XPOT_TELEGRAM_CHAT_ID to ${migrated}` : ""}`);
+      console.error(`[signup-telegram] Telegram refused (${response.status}): ${answer?.description ?? "no reason given"}${migrated ? `; set XPOT_LEADS_TELEGRAM_CHAT_ID to ${migrated}` : ""}`);
       return false;
     }
     return true;
