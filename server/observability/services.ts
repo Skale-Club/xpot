@@ -1,5 +1,6 @@
 import { and, desc, eq, gt, inArray, isNull, max, sql } from "drizzle-orm";
 import { db } from "../db.js";
+import { isSignupTelegramConfigured } from "../auth/telegram.js";
 import {
   integrationChecks,
   mcpOauthTokens,
@@ -199,7 +200,7 @@ export function infraFromEnv(env: Env = process.env): ServicesInput["infra"] {
     routeOptimization: isGoogleRouteOptimizationConfigured(),
     push: has("VAPID_PUBLIC_KEY", "VAPID_PRIVATE_KEY"),
     wholesale: has("XPOT_WHOLESALE_SECRET"),
-    telegram: has("XPOT_TELEGRAM_BOT_TOKEN", "XPOT_TELEGRAM_CHAT_ID"),
+    telegram: isSignupTelegramConfigured(env),
   };
 }
 

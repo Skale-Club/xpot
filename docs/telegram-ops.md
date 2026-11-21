@@ -4,7 +4,7 @@ Xpot uses the shared `@skaleclubbot` for outbound notifications to its own group
 
 ## Configuration
 
-GitHub repository secrets: `XPOT_TELEGRAM_BOT_TOKEN`, `XPOT_TELEGRAM_CHAT_ID` (numeric group ID). Repository variable `OPS_TELEGRAM_ENABLED=true` explicitly enables operations delivery. The helper additionally requires `OPS_ENVIRONMENT=production`, `GITHUB_ACTIONS=true`, and `GITHUB_REF=refs/heads/main`. Development never sends operations messages. Runtime signup transport continues using its existing environment configuration.
+GitHub repository secrets: `XPOT_TELEGRAM_BOT_TOKEN`, `XPOT_TELEGRAM_CHAT_ID` (numeric group ID). Repository variable `OPS_TELEGRAM_ENABLED=true` explicitly enables operations delivery. The helper additionally requires `OPS_ENVIRONMENT=production`, `GITHUB_ACTIONS=true`, and `GITHUB_REF=refs/heads/main`. Development never sends operations messages. Runtime signup notices (completed applications and abandoned drafts) are sales leads, not operations: they go only to the **Xpot | Leads** group in `XPOT_LEADS_TELEGRAM_CHAT_ID` (negative group ID, different from `XPOT_TELEGRAM_CHAT_ID`), with the same shared bot token. A missing, malformed or Ops-equal value disables them; they never fall back to the Ops group.
 
 The stdlib-only helper bounds network timeouts and response reads, refuses redirects, validates credentials, and never prints transport exception strings or Telegram response bodies. Messages use plain text. Delivery is best effort and never converts a failed health probe or deployment into success. Runtime signup delivery and abandoned-draft scanning are production-only, even if credentials are accidentally present in development.
 

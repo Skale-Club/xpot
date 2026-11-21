@@ -1,18 +1,18 @@
 import { and, eq, isNull, lt } from "drizzle-orm";
 import { db } from "../db.js";
 import { authAccessRequests, users } from "#shared/schema.js";
-import { escapeTelegramHtml, sendSignupTelegram } from "./telegram.js";
+import { escapeTelegramHtml, isSignupTelegramConfigured, sendSignupTelegram } from "./telegram.js";
 
 const ABANDONED_AFTER_MS = 30 * 60 * 1000;
 const CHECK_EVERY_MS = 5 * 60 * 1000;
 
 export function startAbandonedSignupNotifier(): () => void {
   if (process.env.NODE_ENV !== "production") return () => {};
-  if (!process.env.XPOT_TELEGRAM_BOT_TOKEN?.trim() || !process.env.XPOT_TELEGRAM_CHAT_ID?.trim()) {
-    console.warn("[signup-telegram] XPOT_TELEGRAM_BOT_TOKEN or XPOT_TELEGRAM_CHAT_ID is unset: sign-ups will not be announced");
+  if (!isSignupTelegramConfigured()) {
+    console.warn("[signup-telegram] XPOT_TELEGRAM_BOT_TOKEN or a valid XPOT_LEADS_TELEGRAM_CHAT_ID (distinct from Ops) is unset: sign-ups will not be announced");
   }
   const check = async () => {
-    if (!process.env.XPOT_TELEGRAM_BOT_TOKEN || !process.env.XPOT_TELEGRAM_CHAT_ID) return;
+    if (!isSignupTelegramConfigured()) return;
     const cutoff = new Date(Date.now() - ABANDONED_AFTER_MS);
     const drafts = await db
       .select({ request: authAccessRequests, phone: users.phone, firstName: users.firstName, lastName: users.lastName })
